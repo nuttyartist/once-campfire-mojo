@@ -1,0 +1,8 @@
+{{ links|safe }}
+
+    {%- if has_recents %}
+      <form class="button_to" method="post" action="{{ clear_path }}"><input type="hidden" name="_method" value="delete" /><button class="btn searches__btn" data-turbo-confirm="Are you sure you want to clear your recent searches?" type="submit">
+        <img aria-hidden="true" src="{{ asset:broom.svg }}" />
+        <span class="for-screen-reader">Clear recent searches</span>
+</button></form>
+    {%- endif %}

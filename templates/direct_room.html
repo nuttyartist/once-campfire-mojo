@@ -1,0 +1,15 @@
+<a class="{{ classes }}" id="{{ dom_id }}" data-sorted-list-number="{{ epoch }}" data-rooms-list-target="room" data-badge-dot-target="unread" data-sorted-list-target="item" data-room-id="{{ room_id }}" href="/rooms/{{ room_id }}">
+{% if group %}      <div class="avatar__group">
+{{ avatars|safe }}      </div>
+{% else %}      <span class="avatar">
+        <img aria-hidden="true" src="{{ avatar }}" width="48" height="48" />
+      </span>
+{% endif %}
+    <span class="direct__author flex align-center gap max-width min-width border-radius txt-small">
+      <span class="txt-nowrap overflow-ellipsis">
+        <span class="for-screen-reader">Ping with</span>
+{% if group %}          {{ initials }}
+{% else %}          {{ first_name }}
+{% endif %}      </span>
+    </span>
+</a>

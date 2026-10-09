@@ -106,7 +106,7 @@ def server(app, destination, server_cpus="0-3", cache=True):
             "DISABLE_SSL": "1", "RUST_LOG": "warn", "CAMPFIRE_LOG": "warn", "LOG_REQUESTS": "0",
             "VAPID_SUBJECT": "mailto:benchmark@example.invalid",
             "RAILS_MAX_THREADS": "5", "JOB_CONCURRENCY": "3", "CF_LOOPS": "4",
-            "CF_READERS": "5", "MOJO_WORKERS": "4", "DATABASE_PATH": str(db),
+            "CF_READERS": "5", "MOJO_WORKERS": "4", "MOJO_BENCH_DIAGNOSTICS": "1", "DATABASE_PATH": str(db),
             "CAMPFIRE_DATABASE_PATH": str(db), "STORAGE_PATH": str(runtime / "files"),
             "CAMPFIRE_STORAGE_PATH": str(runtime), "CAMPFIRE_FILES_PATH": str(runtime / "files"),
             "CAMPFIRE_RESPONSE_CACHE_MB": "64" if cache else "0",
@@ -242,6 +242,25 @@ def run_one(app, round_no, options, labels):
                 if phase == "timed":
                     samples.append(value | {"route":name})
                     print(f"{app} round {round_no}: {name}: {value['rps']:,.0f} req/s", flush=True)
+        job_stats = None
+        if app == "mojo":
+            deadline = time.monotonic() + 30
+            while True:
+                status, _, raw, _ = request("/_bench/stats")
+                assert status == 200
+                job_stats = json.loads(raw)
+                if job_stats["queued"] == job_stats["completed"]:
+                    break
+                assert time.monotonic() < deadline, job_stats
+                time.sleep(0.02)
+            assert job_stats["queued"] == acknowledged, (job_stats, acknowledged)
+            assert job_stats["errors"] == job_stats["queue_full"] == job_stats["unsupported_deliveries"] == 0, job_stats
+            with connection(db) as conn:
+                member_count = conn.execute("SELECT count(*) FROM memberships WHERE room_id=?", (write_room,)).fetchone()[0]
+                subscription_count = conn.execute("SELECT count(*) FROM push_subscriptions ps JOIN memberships mm ON mm.user_id=ps.user_id WHERE mm.room_id=? AND mm.user_id<>? AND mm.involvement='everything' AND (mm.connected_at IS NULL OR mm.connected_at<datetime('now','-60 seconds'))", (write_room, labels["users.david"])).fetchone()[0]
+            assert job_stats["broadcasts"] == acknowledged, job_stats
+            assert job_stats["unread_broadcasts"] == acknowledged * member_count, job_stats
+            assert job_stats["notifications"] == job_stats["rejected_endpoints"] == acknowledged * subscription_count, job_stats
         audit = json.loads(command(["ruby",VERIFICATION/"bench/validate_acks.rb",db,write_room,acknowledged,*audit_files]))
         with connection(db) as conn:
             actual = conn.execute("SELECT count(*) FROM messages WHERE room_id=?",(write_room,)).fetchone()[0] - initial_count
@@ -249,7 +268,7 @@ def run_one(app, round_no, options, labels):
             assert conn.execute("PRAGMA integrity_check").fetchone() == ("ok",)
             assert conn.execute("SELECT count(*) FROM messages WHERE id NOT IN (SELECT rowid FROM message_search_index)").fetchone() == (0,)
         result = {"app":app,"round":round_no,"http":samples,"preflight":preflight,"post_write_audit":audit,
-                  "persisted_writes":actual,"binary_sha256":hashlib.sha256(binary.read_bytes()).hexdigest()}
+                  "persisted_writes":actual,"background_jobs":job_stats,"binary_sha256":hashlib.sha256(binary.read_bytes()).hexdigest()}
         write_json(dest / "result.json", result)
         return result
 
@@ -270,6 +289,12 @@ def main():
     assert args.rounds>0 and args.duration>0 and args.warmup>0
     assert not args.output.exists(), "Use a fresh results directory"
     args.output.mkdir(parents=True)
+    # Every comparison is gated by fresh differential responses, shared sessions,
+    # persisted side effects and audited background work, before timing begins.
+    gate_output = command(["python3", MOJO / "tests/parity.py"], env=os.environ | {"PARITY_RESULTS": str(args.output.resolve()/"parity")})
+    print(gate_output.strip(), flush=True)
+    parity = json.loads((args.output/"parity/comparison.json").read_text())
+    assert parity["passed"]
     labels = json.loads((SEED / "labels.json").read_text())
     original_hash = hashlib.sha256((SEED/"db/production.sqlite3").read_bytes()).hexdigest()
     metadata = {"started_at_utc":time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime()),"platform":os.uname()._asdict() if hasattr(os.uname(),"_asdict") else list(os.uname()),
@@ -278,9 +303,9 @@ def main():
                 "seed_sha256":original_hash,"gzip":True,"response_cache_mib":0 if args.no_cache else 64,
                 "database_filesystem":"Linux VM native /tmp; identical fixture copies", "complete":False,
                 "mojo_source_sha256":{str(p.relative_to(MOJO)):hashlib.sha256(p.read_bytes()).hexdigest() for folder,pattern in [("src","*.mojo"),("native","*.c"),("bench","*.py")] for p in (MOJO/folder).glob(pattern)},
-                "scope":"Mojo implements text-focused benchmark routes, not full application parity",
-                "log_requests":False,"rust_log_filter":"warn",
-                "topology":{"rust":{"processes":1,"readers":5,"job_workers":3},"c":{"processes":1,"loops":4,"readers":5},"mojo":{"processes":4,"sqlite_connections_per_process":1}},
+                "scope":"Five matched HTTP workloads: full normalized DOM, signed sessions, text persistence/unread effects, notification preparation and guarded local endpoint rejection; zero Cable subscribers",
+                "parity_gate":parity,"log_requests":False,"rust_log_filter":"warn",
+                "topology":{"rust":{"processes":1,"readers":5,"job_workers":3},"c":{"processes":1,"loops":4,"readers":5},"mojo":{"http_processes":4,"job_processes":3,"sqlite_connections_per_process":1}},
                 "loadgen_sha256":hashlib.sha256(LOADGEN.read_bytes()).hexdigest(),"revisions":{}}
     for name in ["once-campfire","once-campfire-c","once-campfire-rust","once-campfire-verification"]:
         metadata["revisions"][name] = command(["git","-C",WORKSPACE/name,"rev-parse","HEAD"]).strip()

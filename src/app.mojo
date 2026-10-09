@@ -3,6 +3,10 @@ from database import Database
 from http import Request, Response, html
 from text import params, positive, token, plain_text, escape
 import views
+import jobs
+import richtext
+from crypto import Signer, session_token
+from std.os import getenv
 
 comptime MESSAGE_COLUMNS = (
     "SELECT"
@@ -17,6 +21,7 @@ comptime MESSAGE_COLUMNS = (
 
 struct App(Movable):
     var db: Database
+    var signer: Signer
     var cache: Dict[String, String]
     var cache_bytes: Int
     var cache_limit: Int
@@ -27,6 +32,7 @@ struct App(Movable):
 
     def __init__(out self, path: String, cache_limit: Int) raises:
         self.db = Database(path)
+        self.signer = Signer()
         self.cache = Dict[String, String]()
         self.cache_bytes = 0
         self.cache_limit = cache_limit
@@ -34,11 +40,6 @@ struct App(Movable):
         self.expires = 0
         self.login_attempts = 0
         self.login_window = 0
-        _ = self.db.rows(
-            "CREATE TABLE IF NOT EXISTS mojo_sessions (token TEXT PRIMARY KEY,"
-            " user_id INTEGER NOT NULL REFERENCES users(id), expires_at INTEGER"
-            " NOT NULL)"
-        )
         _ = self.db.rows(
             "CREATE INDEX IF NOT EXISTS"
             " index_messages_on_room_id_and_created_at ON"
@@ -64,7 +65,11 @@ struct App(Movable):
         self.cache_bytes = 0
 
     def handle(mut self, req: Request) raises -> String:
-        if req.method != "GET" and req.method != "POST":
+        if (
+            req.method != "GET"
+            and req.method != "HEAD"
+            and req.method != "POST"
+        ):
             return html("Method not supported", 400).pack(False)
         if req.method == "POST":
             var site = req.header("sec-fetch-site")
@@ -79,6 +84,13 @@ struct App(Movable):
                 return html(
                     "Only form-encoded text messages are supported", 422
                 ).pack(False)
+        if (
+            req.path == "/_bench/stats"
+            and getenv("MOJO_BENCH_DIAGNOSTICS", "") == "1"
+        ):
+            return Response(200, jobs.stats(), "application/json", "").pack(
+                False
+            )
         if req.path == "/up":
             return html(
                 '<html><body style="background-color: green"></body></html>'
@@ -113,18 +125,38 @@ struct App(Movable):
             raise e^
 
     def user(mut self, req: Request) raises -> String:
-        var tok = req.cookie("session_token")
-        if tok.byte_length() != 64:
+        var tok = self.signer.verify_cookie(
+            self.db, req.cookie("session_token")
+        )
+        if tok == "":
             return ""
-        return self.db.scalar(
+        var rows = self.db.rows(
             (
-                "SELECT u.id FROM mojo_sessions s JOIN users u ON"
-                " u.id=s.user_id WHERE s.token=? AND s.expires_at>unixepoch()"
-                " AND u.status=0 AND NOT EXISTS(SELECT 1 FROM bans b WHERE"
-                " b.user_id=u.id)"
+                "SELECT u.id,s.id,s.last_active_at FROM sessions s JOIN users u"
+                " ON u.id=s.user_id WHERE s.token=? AND u.status=0 AND NOT"
+                " EXISTS(SELECT 1 FROM bans b WHERE b.user_id=u.id)"
             ),
             [tok],
         )
+        if len(rows) == 0:
+            return ""
+        # Same one-hour activity refresh as the upstream ports.
+        if (
+            self.db.scalar(
+                "SELECT julianday(?)<julianday('now','-1 hour')", [rows[0][2]]
+            )
+            == "1"
+        ):
+            _ = self.db.rows(
+                (
+                    "UPDATE sessions SET last_active_at=strftime('%Y-%m-%d"
+                    " %H:%M:%f','now'),updated_at=strftime('%Y-%m-%d"
+                    " %H:%M:%f','now'),user_agent=?,ip_address='127.0.0.1'"
+                    " WHERE id=?"
+                ),
+                [req.header("user-agent"), rows[0][1]],
+            )
+        return rows[0][0]
 
     def login(mut self, req: Request) raises -> Response:
         var now = external_call["os_now_ms", Int]()
@@ -154,21 +186,26 @@ struct App(Movable):
         )
         if valid != 1 or len(rows) == 0:
             return html(views.login(), 401)
-        var tok = token()
+        var tok = session_token()
+        var stamp = self.db.scalar("SELECT strftime('%Y-%m-%d %H:%M:%f','now')")
         _ = self.db.rows(
             (
-                "INSERT INTO mojo_sessions(token,user_id,expires_at)"
-                " VALUES(?,?,unixepoch()+86400)"
+                "INSERT INTO"
+                " sessions(token,user_id,last_active_at,created_at,updated_at,ip_address,user_agent)"
+                " VALUES(?,?,?,?,?,'127.0.0.1',?)"
             ),
-            [tok, rows[0][0]],
+            [tok, rows[0][0], stamp, stamp, stamp, req.header("user-agent")],
+        )
+        var expiry = self.db.scalar(
+            "SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now','+20 years')"
         )
         self.invalidate()
         return html(
             "",
             302,
             "Location: /\r\nSet-Cookie: session_token="
-            + tok
-            + "; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400\r\n",
+            + self.signer.cookie(tok, expiry)
+            + "; Path=/; HttpOnly; SameSite=Lax; Max-Age=631152000\r\n",
         )
 
     def read(mut self, req: Request) raises -> String:
@@ -205,21 +242,26 @@ struct App(Movable):
             self.invalidate()
             self.version = generation
             self.expires = now + 15000
-        var key = uid + ":" + req.target + ":" + String(req.gzip())
+        var key = (
+            uid
+            + ":"
+            + req.target
+            + ":"
+            + String(req.gzip())
+            + ":"
+            + req.header("host")
+            + ":"
+            + req.header("user-agent")
+            + ":"
+            + req.header("turbo-frame")
+            + ":"
+            + req.cookie("last_room_visited")
+        )
         if key in self.cache:
             return self.cache[key]
         var result: Response
         if req.path == "/users/me/sidebar":
-            var rooms = self.db.rows(
-                (
-                    "SELECT r.id,coalesce(r.name,'Direct"
-                    " message'),coalesce(mm.unread_at,'') FROM rooms r JOIN"
-                    " memberships mm ON mm.room_id=r.id WHERE mm.user_id=? AND"
-                    " mm.involvement<>'invisible' ORDER BY r.name,r.id"
-                ),
-                [uid],
-            )
-            result = html(views.sidebar(rooms))
+            result = html(views.sidebar(self.db, self.signer, uid, req))
         elif req.path == "/searches":
             var fields = params(req.query)
             var query = String(fields.get("q", "").strip())
@@ -239,14 +281,7 @@ struct App(Movable):
                     [uid, literal],
                 )
             result = html(
-                views.page(
-                    "Search",
-                    "<h1>Search: "
-                    + escape(query)
-                    + "</h1><section>"
-                    + views.messages(matches)
-                    + "</section>",
-                )
+                views.search(self.db, self.signer, uid, req, query, matches)
             )
         elif rid != "" and (
             len(segments) == 3
@@ -288,10 +323,28 @@ struct App(Movable):
                 args,
             )
             if len(segments) == 4:
-                result = html(views.messages(rows))
+                result = html(
+                    views.messages(self.db, self.signer, rows),
+                    204 if len(rows) == 0 else 200,
+                )
             else:
                 var kind = room_info[0][1].replace("::", "_").lower()
-                result = html(views.room(room_info[0][0], rid, kind, rows))
+                result = html(
+                    views.room(
+                        self.db,
+                        self.signer,
+                        uid,
+                        req,
+                        room_info[0][0],
+                        rid,
+                        kind,
+                        rows,
+                    ),
+                    200,
+                    "Set-Cookie: last_room_visited="
+                    + rid
+                    + "; Path=/; SameSite=Lax\r\n",
+                )
         else:
             return html("Not found", 404).pack(False)
         var wire = result.pack(req.gzip())
@@ -318,7 +371,9 @@ struct App(Movable):
             return html("Not found", 404)
         var rid = String(positive(String(segments[2])))
         var fields = params(req.body)
-        var text = plain_text(fields.get("message[body]", ""))
+        var raw_body = fields.get("message[body]", "")
+        var text = richtext.convert(raw_body, True)
+        var canonical = richtext.convert(raw_body)
         if text.strip() == "" or text.byte_length() > 65536:
             return html("Text message must contain 1–65536 bytes", 422)
         var client_id = fields.get("message[client_message_id]", "")
@@ -360,7 +415,7 @@ struct App(Movable):
                     " action_text_rich_texts(name,body,record_type,record_id,created_at,updated_at)"
                     " VALUES('body',?,'Message',?,?,?)"
                 ),
-                ["<div>" + escape(text) + "</div>", mid, now, now],
+                [canonical, mid, now, now],
             )
             _ = self.db.rows(
                 "INSERT INTO message_search_index(rowid,body) VALUES(?,?)",
@@ -375,12 +430,17 @@ struct App(Movable):
             )
             _ = self.db.rows(
                 (
-                    "UPDATE memberships SET"
-                    " unread_at=coalesce(unread_at,?),updated_at=? WHERE"
-                    " room_id=? AND user_id<>? AND involvement='everything'"
+                    "UPDATE memberships SET unread_at=?,updated_at=? WHERE"
+                    " room_id=? AND user_id<>? AND involvement<>'invisible' AND"
+                    " (connected_at IS NULL OR connected_at <"
+                    " datetime('now','-60 seconds'))"
                 ),
                 [now, now, rid, uid],
             )
+            _ = self.db.rows("COMMIT")
+            if external_call["work_push", Int](Int(mid)) != 0:
+                jobs.count(7)
+                raise Error("Background queue full")
             var rows = self.db.rows(MESSAGE_COLUMNS + "WHERE m.id=?", [mid])
             var body = (
                 '<turbo-stream action="append" target="messages_'
@@ -388,14 +448,20 @@ struct App(Movable):
                 + "_"
                 + rid
                 + '"><template>'
-                + views.message(rows[0])
+                + views.message(self.db, self.signer, rows[0])
                 + "</template></turbo-stream>"
             )
-            _ = self.db.rows("COMMIT")
+            jobs.broadcast(self.db, rid, rooms[0][0], mid, body)
+            jobs.webhook_candidates(
+                self.db, rid, uid, rooms[0][0] == "Rooms::Direct"
+            )
             self.invalidate()
             return Response(
                 200, body, "text/vnd.turbo-stream.html; charset=utf-8", ""
             )
         except e:
-            _ = self.db.rows("ROLLBACK")
+            try:
+                _ = self.db.rows("ROLLBACK")
+            except:
+                pass
             raise e^

@@ -81,7 +81,9 @@ struct Response(Copyable, Movable):
             )
             encoding = "Content-Encoding: gzip\r\n"
         var reason = String("OK")
-        if self.status == 302:
+        if self.status == 204:
+            reason = "No Content"
+        elif self.status == 302:
             reason = "Found"
         elif self.status == 400:
             reason = "Bad Request"

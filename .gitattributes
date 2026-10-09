@@ -1,0 +1,2 @@
+# Template whitespace is literal output retained for DOM/byte comparisons.
+templates/*.html whitespace=-blank-at-eol

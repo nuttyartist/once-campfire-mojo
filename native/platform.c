@@ -137,3 +137,96 @@ const char *sql_column(long s, long i) {
 long sql_last_id(long db) {
   return sqlite3_last_insert_rowid((sqlite3 *)(intptr_t)db);
 }
+
+/* Generic OpenSSL and encoding ABI, with all Rails policy in Mojo. */
+#include <openssl/evp.h>
+#include <openssl/hmac.h>
+static void hex_bytes(const unsigned char *p, int n, char *out) {
+  static const char digits[] = "0123456789abcdef";
+  for (int i=0;i<n;i++) { out[2*i]=digits[p[i]>>4]; out[2*i+1]=digits[p[i]&15]; }
+  out[2*n]=0;
+}
+static int unhex(const char *p, unsigned char *out, int capacity) {
+  int n=(int)strlen(p); if (n%2 || n/2>capacity) return -1;
+  for (int i=0;i<n/2;i++) {
+    unsigned v; if (sscanf(p+2*i,"%2x",&v)!=1) return -1; out[i]=(unsigned char)v;
+  }
+  return n/2;
+}
+long crypto_derive(const char *secret, const char *salt, char *out) {
+  unsigned char key[64];
+  if (!PKCS5_PBKDF2_HMAC(secret,(int)strlen(secret),(const unsigned char*)salt,(int)strlen(salt),1000,EVP_sha256(),64,key)) return -1;
+  hex_bytes(key,64,out); OPENSSL_cleanse(key,64); return 0;
+}
+long crypto_hmac(const char *keyhex, const void *data, long n, long sha256, char *out) {
+  unsigned char key[64], digest[EVP_MAX_MD_SIZE]; unsigned len=0;
+  int k=unhex(keyhex,key,64); if(k<0)return -1;
+  if(!HMAC(sha256?EVP_sha256():EVP_sha1(),key,k,data,(size_t)n,digest,&len))return -1;
+  hex_bytes(digest,(int)len,out); OPENSSL_cleanse(key,64);return 0;
+}
+long crypto_equal(const char *a, const char *b) {
+  size_t n=strlen(a);return n==strlen(b) && CRYPTO_memcmp(a,b,n)==0;
+}
+long base64_encode(const void *p,long n,void *out) { return EVP_EncodeBlock(out,p,(int)n); }
+long base64_decode(const unsigned char *p,long n,void *out) {
+  int size=EVP_DecodeBlock(out,p,(int)n); if(size<0)return -1;
+  if(n && p[n-1]=='=')size--; if(n>1 && p[n-2]=='=')size--;return size;
+}
+
+/* Read-only libxml2 DOM traversal. Sanitizing/rendering policy lives in Mojo. */
+#include <libxml/HTMLparser.h>
+long dom_parse(const char *html, long n) {
+  return (long)(intptr_t)htmlReadMemory(html,(int)n,NULL,"UTF-8",HTML_PARSE_RECOVER|HTML_PARSE_NONET|HTML_PARSE_NOERROR|HTML_PARSE_NOWARNING);
+}
+void dom_free(long doc) { xmlFreeDoc((xmlDocPtr)(intptr_t)doc); }
+long dom_root(long doc) { return (long)(intptr_t)xmlDocGetRootElement((xmlDocPtr)(intptr_t)doc); }
+long dom_child(long node) { return (long)(intptr_t)((xmlNodePtr)(intptr_t)node)->children; }
+long dom_next(long node) { return (long)(intptr_t)((xmlNodePtr)(intptr_t)node)->next; }
+long dom_type(long node) { return ((xmlNodePtr)(intptr_t)node)->type; }
+const char *dom_name(long node) { const char *p=(const char*)((xmlNodePtr)(intptr_t)node)->name;return p?p:""; }
+const char *dom_text(long node) { const char *p=(const char*)((xmlNodePtr)(intptr_t)node)->content;return p?p:""; }
+long dom_attrs(long node) { return (long)(intptr_t)((xmlNodePtr)(intptr_t)node)->properties; }
+long dom_attr_next(long attr) { return (long)(intptr_t)((xmlAttrPtr)(intptr_t)attr)->next; }
+const char *dom_attr_name(long attr) { return (const char*)((xmlAttrPtr)(intptr_t)attr)->name; }
+const char *dom_attr_text(long attr) { xmlNodePtr n=((xmlAttrPtr)(intptr_t)attr)->children;return n&&n->content?(const char*)n->content:""; }
+
+/* A process-shared bounded integer queue and counters; payload policy is Mojo. */
+#include <sys/mman.h>
+#include <pthread.h>
+#include <semaphore.h>
+#include <stdatomic.h>
+#define QUEUE_CAP 65536
+struct shared_queue {
+  pthread_mutex_t lock;
+  sem_t ready;
+  long head, tail, count, items[QUEUE_CAP];
+  _Atomic long metrics[16];
+};
+static struct shared_queue *queue;
+long work_init(void) {
+  queue=mmap(NULL,sizeof(*queue),PROT_READ|PROT_WRITE,MAP_SHARED|MAP_ANONYMOUS,-1,0);
+  if(queue==MAP_FAILED)return -1;
+  pthread_mutexattr_t attr;pthread_mutexattr_init(&attr);
+  pthread_mutexattr_setpshared(&attr,PTHREAD_PROCESS_SHARED);
+  if(pthread_mutex_init(&queue->lock,&attr) || sem_init(&queue->ready,1,0))return -1;
+  pthread_mutexattr_destroy(&attr);return 0;
+}
+long work_push(long value) {
+  pthread_mutex_lock(&queue->lock);
+  if(queue->count==QUEUE_CAP){pthread_mutex_unlock(&queue->lock);return -1;}
+  queue->items[queue->tail]=value;queue->tail=(queue->tail+1)%QUEUE_CAP;queue->count++;
+  atomic_fetch_add(&queue->metrics[0],1);
+  pthread_mutex_unlock(&queue->lock);sem_post(&queue->ready);return 0;
+}
+long work_pop(void) {
+  while(sem_wait(&queue->ready)<0){if(errno!=EINTR)return -1;}
+  pthread_mutex_lock(&queue->lock);long value=queue->items[queue->head];
+  queue->head=(queue->head+1)%QUEUE_CAP;queue->count--;
+  pthread_mutex_unlock(&queue->lock);return value;
+}
+long metric_add(long index,long delta) { return atomic_fetch_add(&queue->metrics[index],delta); }
+long metric_get(long index) { return atomic_load(&queue->metrics[index]); }
+long file_append(const char *path,const void *value,long length) {
+  int fd=open(path,O_WRONLY|O_CREAT|O_APPEND|O_CLOEXEC,0600);if(fd<0)return -1;
+  long n=write(fd,value,(size_t)length);close(fd);return n==length?0:-1;
+}

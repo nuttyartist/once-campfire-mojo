@@ -1,0 +1,246 @@
+from std.ffi import external_call
+from std.os import getenv
+from text import decode
+from database import Database
+
+
+def json_string(s: String) -> String:
+    var out = String('"')
+    for ch in s.codepoints():
+        var c = String(ch)
+        if c == '"':
+            out += '\\"'
+        elif c == "\\":
+            out += "\\\\"
+        elif c == "\n":
+            out += "\\n"
+        elif c == "\r":
+            out += "\\r"
+        elif c == "\t":
+            out += "\\t"
+        elif c == "<":
+            out += "\\u003c"
+        elif c == ">":
+            out += "\\u003e"
+        elif c == "&":
+            out += "\\u0026"
+        else:
+            out += c
+    return out + '"'
+
+
+def base64(s: String, url: Bool = False, padding: Bool = True) raises -> String:
+    var buf = List[UInt8](length=(s.byte_length() + 2) // 3 * 4 + 1, fill=0)
+    var n = external_call["base64_encode", Int](
+        s.as_bytes().unsafe_ptr(), s.byte_length(), buf.unsafe_ptr()
+    )
+    if n < 0:
+        raise Error("Base64 encoding failed")
+    var out = String(from_utf8=Span(unsafe_ptr=buf.unsafe_ptr(), length=n))
+    if url:
+        out = out.replace("+", "-").replace("/", "_")
+    if not padding:
+        out = out.replace("=", "")
+    return out^
+
+
+def unbase64(var s: String) raises -> String:
+    s = s.replace("-", "+").replace("_", "/")
+    while s.byte_length() % 4:
+        s += "="
+    for c in s.as_bytes():
+        if not (
+            (c >= 65 and c <= 90)
+            or (c >= 97 and c <= 122)
+            or (c >= 48 and c <= 57)
+            or c == 43
+            or c == 47
+            or c == 61
+        ):
+            raise Error("Invalid base64")
+    var buf = List[UInt8](length=s.byte_length() + 1, fill=0)
+    var n = external_call["base64_decode", Int](
+        s.as_bytes().unsafe_ptr(), s.byte_length(), buf.unsafe_ptr()
+    )
+    if n < 0:
+        raise Error("Invalid base64")
+    return String(from_utf8=Span(unsafe_ptr=buf.unsafe_ptr(), length=n))
+
+
+def url_encode(s: String) -> String:
+    var out = String()
+    var digits = String("0123456789ABCDEF")
+    for c in s.as_bytes():
+        if (
+            (c >= 65 and c <= 90)
+            or (c >= 97 and c <= 122)
+            or (c >= 48 and c <= 57)
+            or c == 45
+            or c == 46
+            or c == 95
+            or c == 42
+        ):
+            out += String(
+                unsafe_from_utf8=Span(unsafe_ptr=Pointer(to=c), length=1)
+            )
+        elif c == 32:
+            out += "+"
+        else:
+            out += (
+                "%"
+                + String(digits[byte = Int(c) // 16 : Int(c) // 16 + 1])
+                + String(digits[byte = Int(c) % 16 : Int(c) % 16 + 1])
+            )
+    return out^
+
+
+def secure_equal(var a: String, var b: String) -> Bool:
+    return (
+        external_call["crypto_equal", Int](
+            a.as_c_string_span(), b.as_c_string_span()
+        )
+        == 1
+    )
+
+
+struct Signer(Movable):
+    var keys: Dict[String, String]
+    var secret: String
+
+    def __init__(out self) raises:
+        self.keys = Dict[String, String]()
+        self.secret = getenv("SECRET_KEY_BASE", "")
+        if self.secret.byte_length() < 32:
+            raise Error("SECRET_KEY_BASE must contain at least 32 bytes")
+
+    def key(mut self, var salt: String) raises -> String:
+        if salt not in self.keys:
+            var buf = List[UInt8](length=129, fill=0)
+            if (
+                external_call["crypto_derive", Int](
+                    self.secret.as_c_string_span(),
+                    salt.as_c_string_span(),
+                    buf.unsafe_ptr(),
+                )
+                != 0
+            ):
+                raise Error("PBKDF2 failed")
+            self.keys[salt] = String(unsafe_from_utf8_ptr=buf.unsafe_ptr())
+        return self.keys[salt]
+
+    def mac(
+        mut self, salt: String, data: String, sha256: Bool
+    ) raises -> String:
+        var key = self.key(salt)
+        var buf = List[UInt8](length=65, fill=0)
+        if (
+            external_call["crypto_hmac", Int](
+                key.as_c_string_span(),
+                data.as_bytes().unsafe_ptr(),
+                data.byte_length(),
+                Int(sha256),
+                buf.unsafe_ptr(),
+            )
+            != 0
+        ):
+            raise Error("HMAC failed")
+        return String(unsafe_from_utf8_ptr=buf.unsafe_ptr())
+
+    def sign(
+        mut self,
+        salt: String,
+        payload: String,
+        sha256: Bool = True,
+        url: Bool = False,
+    ) raises -> String:
+        var encoded = base64(payload, url, not url)
+        return encoded + "--" + self.mac(salt, encoded, sha256)
+
+    def stream(mut self, name: String) raises -> String:
+        return self.sign("turbo/signed_stream_verifier_key", json_string(name))
+
+    def avatar(mut self, uid: String, version: String) raises -> String:
+        var value = self.sign(
+            "active_record/signed_id",
+            '{"_rails":{"data":' + uid + ',"pur":"user/avatar"}}',
+            True,
+            True,
+        )
+        return "/users/" + value + "/avatar?v=" + version
+
+    def cookie(mut self, token: String, expiry: String) raises -> String:
+        var payload = (
+            '{"_rails":{"message":'
+            + json_string(base64(json_string(token)))
+            + ',"exp":'
+            + json_string(expiry)
+            + ',"pur":"cookie.session_token"}}'
+        )
+        return url_encode(self.sign("signed cookie", payload, False))
+
+    def verify_cookie(
+        mut self, mut db: Database, wire: String
+    ) raises -> String:
+        if wire.byte_length() > 4096:
+            return ""
+        try:
+            var raw = decode(wire)
+            var pos = raw.byte_length() - 42
+            if pos <= 0 or String(raw[byte = pos : pos + 2]) != "--":
+                return ""
+            var encoded = String(raw[byte=:pos])
+            if not secure_equal(
+                self.mac("signed cookie", encoded, False),
+                String(raw[byte = pos + 2 :]),
+            ):
+                return ""
+            var payload = unbase64(encoded)
+            if db.scalar("SELECT json_valid(?)", [payload]) != "1":
+                return ""
+            var purpose = db.scalar(
+                "SELECT coalesce(json_extract(?,'$._rails.pur'),'')", [payload]
+            )
+            var dumped = payload
+            if purpose != "" and purpose != "cookie.session_token":
+                return ""
+            if db.scalar("SELECT json_type(?,'$._rails')", [payload]) != "":
+                var expired = db.scalar(
+                    (
+                        "SELECT CASE WHEN json_extract(?,'$._rails.exp') IS NOT"
+                        " NULL AND (julianday(json_extract(?,'$._rails.exp'))"
+                        " IS NULL OR"
+                        " julianday(json_extract(?,'$._rails.exp'))<=julianday('now'))"
+                        " THEN 1 ELSE 0 END"
+                    ),
+                    [payload, payload, payload],
+                )
+                if expired == "1":
+                    return ""
+                dumped = unbase64(
+                    db.scalar(
+                        "SELECT json_extract(?,'$._rails.message')", [payload]
+                    )
+                )
+            if db.scalar("SELECT json_valid(?)", [dumped]) != "1":
+                return ""
+            if db.scalar("SELECT json_type(?)", [dumped]) != "text":
+                return ""
+            return db.scalar("SELECT json_extract(?,'$')", [dumped])
+        except:
+            return ""
+
+
+def session_token() raises -> String:
+    # has_secure_token uses 24 base58 characters; reject biased random draws.
+    var alphabet = String(
+        "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+    )
+    var out = List[UInt8]()
+    while len(out) < 24:
+        var random = List[UInt8](length=32, fill=0)
+        if external_call["crypto_random", Int](random.unsafe_ptr(), 32) != 0:
+            raise Error("Randomness failed")
+        for b in random:
+            if b < 232 and len(out) < 24:
+                out.append(alphabet.as_bytes()[Int(b) % 58])
+    return String(from_utf8=Span(unsafe_ptr=out.unsafe_ptr(), length=len(out)))

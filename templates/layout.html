@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    {{ title_tag|safe }}
+
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, interactive-widget=resizes-content">
+    <meta name="view-transition" content="same-origin">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    {{ user_meta|safe }}
+    {{ cable_meta|safe }}
+
+    {{ vapid_meta|safe }}
+    {{ prefetch_meta|safe }}
+
+    {{ manifest_tag|safe }}
+    {{ icon_tag|safe }}
+    {{ apple_icon_tag|safe }}
+
+    {{ stylesheets|safe }}
+    {{ custom_styles|safe }}
+
+    {{ importmap|safe }}
+
+{{ head|safe }}  </head>
+
+  <body class="{{ body_classes }}" data-controller="local-time lightbox">
+    <a href="#main-content" class="skip-navigation btn">Skip to main content</a>
+
+    <nav id="nav">
+{{ nav|safe }}    </nav>
+
+<main id="main-content">
+{{ content|safe }}
+      <footer id="footer">
+{{ footer|safe }}      </footer>
+    </main>
+
+    <aside id="sidebar" data-controller="toggle-class" data-toggle-class-toggle-class="open">
+{{ sidebar|safe }}    </aside>
+
+    {{ lightbox|safe }}
+
+    <a href="https://once.com" id="app-logo" target="_blank" aria-label="Once software from 37signals home page">
+      <img alt="Campfire logo" src="{{ asset:campfire-icon.png }}" width="256" height="216" />
+    </a>
+  </body>
+</html>

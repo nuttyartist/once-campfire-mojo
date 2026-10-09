@@ -1,6 +1,7 @@
 from std.ffi import external_call
 from std.os import getenv
 from app import App
+import jobs
 from http import parse_headers, html
 
 
@@ -51,6 +52,10 @@ struct Connection(Copyable, Movable):
         self.close_after = req.header("connection").lower() == "close"
         try:
             self.outgoing = app.handle(req)
+            if req.method == "HEAD":
+                var header_end = self.outgoing.find("\r\n\r\n")
+                var head = String(self.outgoing[byte = : header_end + 4])
+                self.outgoing = head^
         except e:
             print("Request failed:", e)
             self.outgoing = html("Request could not be processed", 400).pack(
@@ -173,6 +178,15 @@ def main() raises:
         raise Error("Invalid server configuration")
     # Complete schema setup before forking; connections are opened per worker.
     initialize_db(path)
+    if external_call["work_init", Int]() != 0:
+        raise Error("Cannot initialize background queue")
+    for _ in range(Int(getenv("JOB_CONCURRENCY", "3"))):
+        var job_pid = external_call["os_fork", Int]()
+        if job_pid == 0:
+            jobs.run(path)
+            return
+        if job_pid < 0:
+            raise Error("Cannot fork background worker")
     var listener = external_call["os_listen", Int](port)
     if listener < 0:
         raise Error("Cannot bind loopback listener")

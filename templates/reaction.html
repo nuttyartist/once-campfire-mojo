@@ -1,0 +1,6 @@
+<form data-turbo-frame="{{ boosting_dom }}" data-action="popup#close" action="{{ boosts_path }}" accept-charset="UTF-8" method="post">
+            <input type="hidden" name="boost[content]" id="boost_content" value="{{ character }}" />
+            <button name="button" type="submit" title="{{ title }}" class="btn message__action-btn" data-emoji="{{ character }}">
+              <figure class="margin-none boost-character">{{ character }}</figure>
+              <span class="for-screen-reader">{{ title }}</span>
+</button></form>
