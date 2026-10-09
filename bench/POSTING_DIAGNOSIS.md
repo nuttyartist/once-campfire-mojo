@@ -1,3 +1,5 @@
+> Historical profiling note. The listed large-upload, second-architecture and real-browser push gaps have since been implemented and validated. The current README contains the new equal-durability, completed-work comparison and supersedes earlier posting comparisons.
+
 # Campfire posting investigation — 2026-10-10
 
 The previous “all gaps closed” wording was too strong. The implementation has substantial application coverage, but specific deployment, upload and acceptance gaps remain. The earlier C posting comparison also failed to account for dropped background jobs. This report corrects that claim and records the investigation and fixes.

@@ -6,6 +6,29 @@ A local Mojo 1.1 application port of Basecamp Campfire. Application routing, per
 
 The original five-workload benchmark implementation is preserved in Git commit `41edc39`. Its historical measurements remain under `bench/results/2026-10-09-m4-matched/`. A fresh comparison of the expanded application is recorded below.
 
+## Durable completed-work results — 2026-10-10
+
+| Workload (completed requests/sec) | Rust* | C* | Mojo |
+|---|---:|---:|---:|
+| Room page | 64,171 | 75,605 | 112,941 |
+| Messages page | 61,043 | 78,479 | 126,717 |
+| Sidebar | 71,586 | 82,724 | 129,539 |
+| Search | 70,398 | 80,086 | 136,136 |
+| Post a message | 1,183 | 418 | 892 |
+| Backend KLOC | 30.9 | 94.8 | 7.1 |
+
+Median of three rotating-order rounds on this Apple M4. **Rust and C are local durability-patched builds**, not stock upstream results. All three use SQLite WAL `synchronous=FULL`, atomic message/outbox admission and per-recipient receipts. Posting includes final queue-drain time. Every response and acknowledged message/FTS row passed validation; **281,807 accepted messages and 845,421 recipient completions** were audited, including warmups, with no missing work, failed jobs, queue drops or pending jobs.
+
+Posting runs (completed messages/sec): Rust **1,183 / 1,497 / 718**; C **418 / 423 / 413**; Mojo **889 / 892 / 899**. The substantial Rust spread and read-rate variation are retained in the raw results; the medians are not an isolated language-speed ranking. Requests accept gzip, and each port retains its native compression and scheduling behavior. C retains per-kind worker pools; Rust/Mojo share their durable workers. All have three push workers and the same total server CPU allocation.
+
+The timed push endpoints are rejected by the same guard: canonical payloads, recipient selection and badges are prepared, but external network delivery and encryption are outside the timed workloads. Actual Chrome/FCM delivery and independent cryptography pass separate acceptance checks. Cable has no connected subscribers during timing.
+
+Two crash modes pass on all three implementations: 160 posts with workers paused, and 1,200 posts followed by a kill with active leases and already-recorded receipts. Every expected message and subscription receipt survives recovery; a second restart adds no receipts. These are process-crash checks, not physical power-cut tests. External delivery remains at-least-once.
+
+Measured revisions: Rust `ff8fe2e`, C `eb604c5`, Mojo `2e4edc0` (application source `19104f0`). Exact reference patches and their validation limits are in [bench/reference-patches](bench/reference-patches/README.md). Rust formatting/Clippy pass; the seeded Rust and C suites retain the same pinned-FFmpeg video golden-byte mismatch on ARM64, documented there without changing assertions.
+
+Raw rounds, hashes, exact write audits and server logs: `bench/results/2026-10-10-m4-durable-indexed/`. Backend source is 30,925 Rust, 94,787 C and 7,099 Mojo-port lines; the Mojo total includes 6,150 Mojo, 689 generic C adapter and 260 executable template lines. Source counting follows the same documented local convention for every implementation.
+
 ## Application coverage
 
 The application now supports first-run setup and invitations, account/profile/admin and room management, text messages and edits, boosts, search, live Action Cable delivery and presence, private-room authorization and revocation, static frontend assets, binary multipart/direct uploads and signed downloads, avatars and logos, verified mentions, sounds, link previews, bot API and webhook replies, and encrypted Web Push transport. The server supervises its workers and persists delivery jobs in SQLite. The status file records the independent tests, reference-version differences and validation scope.
