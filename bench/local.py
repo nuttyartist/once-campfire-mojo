@@ -257,7 +257,7 @@ def run_one(app, round_no, options, labels):
             assert job_stats["queued"] == acknowledged, (job_stats, acknowledged)
             assert job_stats["errors"] == job_stats["queue_full"] == job_stats["unsupported_deliveries"] == 0, job_stats
             with connection(db) as conn:
-                member_count = conn.execute("SELECT count(*) FROM memberships WHERE room_id=?", (write_room,)).fetchone()[0]
+                member_count = conn.execute("SELECT count(*) FROM memberships WHERE room_id=? AND (unread_at IS NOT NULL OR connected_at>datetime('now','-60 seconds'))", (write_room,)).fetchone()[0]
                 subscription_count = conn.execute("SELECT count(*) FROM push_subscriptions ps JOIN memberships mm ON mm.user_id=ps.user_id WHERE mm.room_id=? AND mm.user_id<>? AND mm.involvement='everything' AND (mm.connected_at IS NULL OR mm.connected_at<datetime('now','-60 seconds'))", (write_room, labels["users.david"])).fetchone()[0]
             assert job_stats["broadcasts"] == acknowledged, job_stats
             assert job_stats["unread_broadcasts"] == acknowledged * member_count, job_stats
