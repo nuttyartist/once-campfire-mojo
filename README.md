@@ -2,7 +2,7 @@
 
 A local Mojo 1.1 application port of Basecamp Campfire. Application routing, permissions, SQL, rendering, Action Cable, delivery and storage policy are written in Mojo. Generic C adapters connect POSIX, SQLite, OpenSSL, curl, Gumbo and libvips.
 
-**The application scope is implemented and the local acceptance gates pass.** See [PORT_STATUS.md](PORT_STATUS.md) for evidence, compatibility differences and deployment limits, and [DEPLOYMENT.md](DEPLOYMENT.md) to run or migrate an installation. Nothing has been published or pushed.
+**Core application workflows are implemented and extensively tested; full replacement parity is not yet established.** See [PORT_STATUS.md](PORT_STATUS.md) for evidence, compatibility differences and deployment limits, and [DEPLOYMENT.md](DEPLOYMENT.md) to run or migrate an installation. Nothing has been published or pushed.
 
 The original five-workload benchmark implementation is preserved in Git commit `41edc39`. Its historical measurements remain under `bench/results/2026-10-09-m4-matched/`. A fresh comparison of the expanded application is recorded below.
 
@@ -10,7 +10,7 @@ The original five-workload benchmark implementation is preserved in Git commit `
 
 The application now supports first-run setup and invitations, account/profile/admin and room management, text messages and edits, boosts, search, live Action Cable delivery and presence, private-room authorization and revocation, static frontend assets, binary multipart/direct uploads and signed downloads, avatars and logos, verified mentions, sounds, link previews, bot API and webhook replies, and encrypted Web Push transport. The server supervises its workers and persists delivery jobs in SQLite. The status file records the independent tests, reference-version differences and validation scope.
 
-## Matched benchmark contract
+## Benchmark workload and validation
 
 The first version emitted much smaller HTML and used a separate session mechanism.
 That version's performance numbers are superseded for comparisons of equal work.
@@ -25,11 +25,13 @@ That version's performance numbers are superseded for comparisons of equal work.
 - **Text writes:** canonical rich text, plain-text FTS entry, room timestamp/counter, and
   unread updates for visible, disconnected recipients (the upstream 60-second cutoff).
   The complete Turbo Stream response and room/unread broadcast payloads are prepared.
-- **Background work in this benchmark:** three workers build room notification payloads,
+- **Background work in this benchmark:** workers build room notification payloads,
   select recipients, count badges, and apply the upstream push endpoint guard. All three
   apps receive the same local endpoints, which the upstream guard rejects before network
   delivery or encryption. The harness checks that every queued Mojo job completes, without
-  errors, queue drops, or unsupported delivery branches.
+  errors, queue drops, or unsupported delivery branches. Mojo persists jobs/receipts;
+  Rust and C use memory queues. The 2026-10-10 audit found C job drops in the historical
+  results, invalidating the claim of equal completed background work for posting.
 - **Cache behavior:** bounded responses, data-version invalidation, authorization before
   cache hits, and keys varying by user, URL, gzip, host, browser, Turbo frame and return-room
   cookie. Foreign SQL edits and access revocation are tested.
@@ -90,7 +92,7 @@ source expressions are mapped in `tools/import_templates.py`; regular builds use
 
 Source counts can be reproduced in the toolchain container with `python3 bench/count_source.py bench/results/recount` (requires all three sibling checkouts and the shared verification repository).
 
-## Local matched-workload results
+## Historical local HTTP results (posting comparison withdrawn)
 
 | HTTP workload (requests/sec) | Rust | C | Mojo |
 |---|---:|---:|---:|
@@ -101,8 +103,16 @@ Source counts can be reproduced in the toolchain container with `python3 bench/c
 | Post a message | 5,805 | 3,669 | 1,869 |
 | Backend KLOC | 30.7 | 94.7 | 6.7 |
 
-Median of three rounds on Apple M4 (24 GiB RAM), native ARM64 Linux in Docker Desktop. All nine runs passed the parity/response gates; 341,625 writes were individually audited. Mojo completed 54,921 jobs without errors or drops.
+Median of three rounds on Apple M4 (24 GiB RAM), native ARM64 Linux in Docker Desktop. The HTTP/parity gates passed, but a later log audit found C dropped jobs and Mojo shutdown errors; 341,625 writes were individually audited. Mojo completed 54,921 jobs without errors or drops.
 
 Locally recounted backend source: 5,835 Mojo + 637 generic C adapters + 260 executable template lines = 6,732. Rust and C were recounted from the measured checkouts too; these supersede the source counts quoted from older upstream README revisions. See `source-count.json` for the common counting method and exclusions.
 
 Raw receipts, all rounds, compiler/image/source hashes and acceptance logs: `bench/results/2026-10-09-m4-full/`. This table measures five warm HTTP workloads, not every implemented feature.
+
+## Posting investigation — 2026-10-10
+
+The historical C runs dropped 26,824, 25,386 and 25,282 push jobs. Successful HTTP/SQL checks did not establish equal completed background work. Rust and C also have weaker job durability than Mojo. Do not use the old posting row as an equal-work language comparison. The runner now rejects job-drop and runtime-failure logs, including shutdown.
+
+Profiling and controlled variants are described in [bench/POSTING_DIAGNOSIS.md](bench/POSTING_DIAGNOSIS.md). The current implementation preserves durable jobs, copies UTF-8 spans during JSON encoding, reuses the encoded broadcast payload, skips disabled audit-payload construction, and exits forked workers after worker-local cleanup without tearing down the inherited parent runtime.
+
+Outstanding replacement work includes streaming large multipart uploads to disk (Rust permits up to 10 GiB by default), amd64 packaging/validation, and a real external browser push-subscription/delivery acceptance test. Local Disk support is shared by the references; C explicitly does not support migrating existing installations.

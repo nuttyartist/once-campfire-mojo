@@ -310,11 +310,16 @@ def main() raises:
     for i in range(len(children)):
         var pid = external_call["os_fork",Int]()
         if pid==0:
-            if i<workers:
-                serve(listener,path,cache_mb*1024*1024//workers)
-            else:
-                _ = external_call["os_close",Int](listener)
-                jobs.run(path)
+            try:
+                if i<workers:
+                    serve(listener,path,cache_mb*1024*1024//workers)
+                else:
+                    _ = external_call["os_close",Int](listener)
+                    jobs.run(path)
+            except e:
+                print("Worker failed:", e)
+                external_call["os_child_exit",NoneType](1)
+            external_call["os_child_exit",NoneType](0)
             return
         if pid<0:
             for child in children:
@@ -342,11 +347,16 @@ def main() raises:
                 children[i] = 0
                 var pid = external_call["os_fork",Int]()
                 if pid==0:
-                    if i<workers:
-                        serve(listener,path,cache_mb*1024*1024//workers)
-                    else:
-                        _ = external_call["os_close",Int](listener)
-                        jobs.run(path)
+                    try:
+                        if i<workers:
+                            serve(listener,path,cache_mb*1024*1024//workers)
+                        else:
+                            _ = external_call["os_close",Int](listener)
+                            jobs.run(path)
+                    except e:
+                        print("Worker failed:", e)
+                        external_call["os_child_exit",NoneType](1)
+                    external_call["os_child_exit",NoneType](0)
                     return
                 if pid<0:
                     failures = 6

@@ -242,18 +242,20 @@ def broadcast(
         base64("gid://campfire/" + kind + "/" + room_id, True, False)
         + ":messages"
     )
-    pubsub.publish(stream, json_string(body))
+    var payload = json_string(body)
+    pubsub.publish(stream, payload)
     count(4)
-    trace(
-        "broadcast",
-        '{"message_id":'
-        + mid
-        + ',"stream":'
-        + json_string(stream)
-        + ',"payload":'
-        + json_string(body)
-        + "}",
-    )
+    if getenv("MOJO_AUDIT_PATH", "") != "":
+        trace(
+            "broadcast",
+            '{"message_id":'
+            + mid
+            + ',"stream":'
+            + json_string(stream)
+            + ',"payload":'
+            + payload
+            + "}",
+        )
 
 
 def broadcast_unread(mut db: Database, mid: String, room_id: String) raises:

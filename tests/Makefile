@@ -20,3 +20,9 @@ build/richtext-corpus: tests/richtext_corpus.mojo $(wildcard src/*.mojo)
 richtext: build/richtext-corpus
 	SECRET_KEY_BASE=richtext-corpus-disposable-local-key-0000000000000000000000000000000 build/richtext-corpus > build/richtext-corpus.jsonl
 	python3 tests/richtext_check.py
+
+build/json-encoding: tests/json_encoding.mojo $(wildcard src/*.mojo native/*) build/platform.o
+	$(MOJO) build -O3 -I src $< -o $@ $(ABI)
+.PHONY: json-encoding
+json-encoding: build/json-encoding
+	python3 tests/json_encoding.py

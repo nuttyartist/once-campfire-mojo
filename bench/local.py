@@ -86,8 +86,24 @@ def fixture_env():
                 if line and not line.startswith("#"))
 
 
+def validate_server_log(path):
+    """Fail closed on dropped background work or runtime crashes, including shutdown."""
+    patterns = {
+        "dropped background work": r"dropping job|discarded [1-9][0-9]* queued jobs|queue full|queue is full",
+        "runtime/worker failure": r"KGEN_CompilerRT_DestroyGlobals|Worker (?:exited unexpectedly|failed:)|Background job failed:|Request failed:|panicked at|Segmentation fault",
+    }
+    failures = []
+    for line in path.read_text(errors="replace").splitlines():
+        for label, pattern in patterns.items():
+            if re.search(pattern, line, re.I):
+                failures.append(label)
+    if failures:
+        counts = {kind: failures.count(kind) for kind in sorted(set(failures))}
+        raise RuntimeError(f"Server log gate failed: {counts}; inspect {path}")
+
+
 @contextlib.contextmanager
-def server(app, destination, server_cpus="0-3", cache=True):
+def server(app, destination, server_cpus="0-3", cache=True, verify_log=False):
     """Each run receives an independent pristine seed and disposable process group."""
     destination.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=f"campfire-{app}-") as tmp:
@@ -156,6 +172,8 @@ def server(app, destination, server_cpus="0-3", cache=True):
                     proc.wait()
                 logfile.flush()
                 shutil.copy2(runtime / "server.log", destination / "server.log")
+                if verify_log:
+                    validate_server_log(destination / "server.log")
 
 
 def login(labels, client_cpus="4-7"):
@@ -213,7 +231,7 @@ def contracts(db, labels, cookie, directory):
 
 def run_one(app, round_no, options, labels):
     dest = options.output / f"{app}-{round_no}"
-    with server(app, dest, options.server_cpus, not options.no_cache) as (db, runtime, binary):
+    with server(app, dest, options.server_cpus, not options.no_cache, verify_log=True) as (db, runtime, binary):
         time.sleep(1)
         cookie = login(labels, options.client_cpus)
         files, paths, preflight = contracts(db, labels, cookie, dest / "contracts")
@@ -270,8 +288,9 @@ def run_one(app, round_no, options, labels):
             assert conn.execute("SELECT count(*) FROM messages WHERE id NOT IN (SELECT rowid FROM message_search_index)").fetchone() == (0,)
         result = {"app":app,"round":round_no,"http":samples,"preflight":preflight,"post_write_audit":audit,
                   "persisted_writes":actual,"background_jobs":job_stats,"binary_sha256":hashlib.sha256(binary.read_bytes()).hexdigest()}
-        write_json(dest / "result.json", result)
-        return result
+    result["server_log_gate"] = {"passed": True}
+    write_json(dest / "result.json", result)
+    return result
 
 
 def main():

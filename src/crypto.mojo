@@ -6,32 +6,39 @@ import marshal
 
 
 def json_string(s: String) -> String:
-    var out = String('"')
-    for ch in s.codepoints():
-        var c = String(ch)
-        if c == '"':
-            out += '\\"'
-        elif c == "\\":
-            out += "\\\\"
-        elif c == "\n":
-            out += "\\n"
-        elif c == "\r":
-            out += "\\r"
-        elif c == "\t":
-            out += "\\t"
-        elif c.byte_length()==1 and c.as_bytes()[0]<32:
-            var digits = String("0123456789abcdef")
-            var b = Int(c.as_bytes()[0])
-            out += "\\u00"+String(digits[byte=b//16:b//16+1])+String(digits[byte=b%16:b%16+1])
-        elif c == "<":
-            out += "\\u003c"
-        elif c == ">":
-            out += "\\u003e"
-        elif c == "&":
-            out += "\\u0026"
+    # Copy UTF-8 spans intact between ASCII escapes, avoiding a String per character.
+    var out = String("\"")
+    var start = 0
+    var bytes = s.as_bytes()
+    var digits = String("0123456789abcdef")
+    for i in range(len(bytes)):
+        var b = bytes[i]
+        var replacement: String
+        if b == 34:
+            replacement = "\\\""
+        elif b == 92:
+            replacement = "\\\\"
+        elif b == 10:
+            replacement = "\\n"
+        elif b == 13:
+            replacement = "\\r"
+        elif b == 9:
+            replacement = "\\t"
+        elif b < 32:
+            replacement = "\\u00" + String(digits[byte=Int(b)//16:Int(b)//16+1]) + String(digits[byte=Int(b)%16:Int(b)%16+1])
+        elif b == 60:
+            replacement = "\\u003c"
+        elif b == 62:
+            replacement = "\\u003e"
+        elif b == 38:
+            replacement = "\\u0026"
         else:
-            out += c
-    return out + '"'
+            continue
+        out += String(s[byte=start:i])
+        out += replacement
+        start = i + 1
+    out += String(s[byte=start:])
+    return out + "\""
 
 
 def base64(s: String, url: Bool = False, padding: Bool = True) raises -> String:

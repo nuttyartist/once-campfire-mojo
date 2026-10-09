@@ -1,6 +1,6 @@
 # Application replacement status
 
-The port now covers the complete Campfire application scope. It is a standalone compiled Mojo server with its own routing, authorization, SQL, rendering, Action Cable, storage and delivery policy. It does not embed or launch the Rust or C Campfire applications. Everything remains local; no repository has been published.
+The port covers core Campfire workflows, but full replacement parity is not yet established. Large multipart upload parity with Rust, amd64 packaging/validation, and external browser push acceptance remain unfinished. It is a standalone compiled Mojo server with its own routing, authorization, SQL, rendering, Action Cable, storage and delivery policy. It does not embed or launch the Rust or C Campfire applications. Everything remains local; no repository has been published.
 
 ## Implemented and verified
 
@@ -35,3 +35,7 @@ Ruby-generated variation digests, 70 Rails signature/purpose/expiry vectors, the
 Frontend assets are upstream MIT-licensed build outputs, with four Rust corrections required by the shared browser contract. Gumbo is Nokogiri 1.19.4's pinned dependency (`8cfb9daae9ee4a0837508eab43c40fbc8c4138c9`); QR Code generator and SQLite source/licenses are vendored. Server HTML is generated from templates and live records, never captured responses.
 
 The checked-out Rails app is `b52b244`; Rust is `6dae2fd` and embeds an older Rails reference (`90b3300`); C is `873a51f`. Current Rails preserves an existing non-direct unread timestamp, limits unread broadcasts to unread/connected memberships and removes rooms asynchronously. Mojo follows current Rails. These reference differences mean Rust, C and Mojo must not be presented as three identical full applications, even when the five measured HTTP contracts match.
+
+## Audit correction — 2026-10-10
+
+The earlier completeness wording overstated the evidence. The benchmarks checked HTTP/SQL effects, but C dropped 77,492 push jobs across its three historical rounds. Mojo also used durable SQLite job/receipt storage while both references used memory queues. The historical posting rates therefore do not establish equal completed work. The audit additionally found errors while forked Mojo workers tore down the inherited runtime at shutdown. That path is fixed and has a new graceful-shutdown regression check. See `bench/POSTING_DIAGNOSIS.md` for measurements, the JSON/broadcast fix, and exact remaining boundaries.

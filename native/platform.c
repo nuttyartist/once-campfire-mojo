@@ -69,6 +69,9 @@ long os_poll(const long *fds, const long *write_flags, long *ready, long n) {
   return rc;
 }
 long os_fork(void) { return fork(); }
+/* After Mojo worker-local cleanup, avoid tearing down the inherited parent
+   compiler runtime/thread pool in the forked child. */
+_Noreturn void os_child_exit(long status) { _exit((int)status); }
 long os_now_ms(void) {
   struct timespec t;
   clock_gettime(CLOCK_MONOTONIC, &t);
