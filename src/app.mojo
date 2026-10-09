@@ -578,7 +578,7 @@ struct App(Movable):
                     blob = self.signer.verify(self.db,"ActiveStorage",fields.get("message[attachment]",""),"blob_id",False)
                 if blob=="" or self.db.scalar("SELECT 1 FROM active_storage_blobs WHERE id=?",[blob])!="1":
                     raise Error("Invalid attachment")
-                _ = runtime.read_file(storage.root(),storage.relative(self.db.scalar("SELECT key FROM active_storage_blobs WHERE id=?",[blob])),134217728)
+                storage.verify_file(self.db,blob)
                 storage.attach(self.db,blob,"Message",mid,"attachment")
                 storage.prepare(self.db,blob)
                 if text.strip()=="":

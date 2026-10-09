@@ -2,7 +2,7 @@
 
 A local Mojo 1.1 application port of Basecamp Campfire. Application routing, permissions, SQL, rendering, Action Cable, delivery and storage policy are written in Mojo. Generic C adapters connect POSIX, SQLite, OpenSSL, curl, Gumbo and libvips.
 
-**Core application workflows are implemented and extensively tested; full replacement parity is not yet established.** See [PORT_STATUS.md](PORT_STATUS.md) for evidence, compatibility differences and deployment limits, and [DEPLOYMENT.md](DEPLOYMENT.md) to run or migrate an installation. Nothing has been published or pushed.
+**The previously listed large-upload, amd64 deployment and real-browser push gaps are closed and tested.** See [PORT_STATUS.md](PORT_STATUS.md) for evidence, compatibility differences and deployment limits, and [DEPLOYMENT.md](DEPLOYMENT.md) to run or migrate an installation. Nothing has been published or pushed.
 
 The original five-workload benchmark implementation is preserved in Git commit `41edc39`. Its historical measurements remain under `bench/results/2026-10-09-m4-matched/`. A fresh comparison of the expanded application is recorded below.
 
@@ -28,10 +28,11 @@ That version's performance numbers are superseded for comparisons of equal work.
 - **Background work in this benchmark:** workers build room notification payloads,
   select recipients, count badges, and apply the upstream push endpoint guard. All three
   apps receive the same local endpoints, which the upstream guard rejects before network
-  delivery or encryption. The harness checks that every queued Mojo job completes, without
-  errors, queue drops, or unsupported delivery branches. Mojo persists jobs/receipts;
-  Rust and C use memory queues. The 2026-10-10 audit found C job drops in the historical
-  results, invalidating the claim of equal completed background work for posting.
+  delivery or encryption. The durable harness checks exact completion and recipient receipts
+  for all three implementations, with no pending, failed or dropped jobs. Local Rust/C
+  comparison branches add durable outboxes; all three use SQLite WAL `synchronous=FULL`.
+  Posting throughput includes queue-drain time. Historical stock-port posting numbers
+  below remain withdrawn as an equal-work comparison.
 - **Cache behavior:** bounded responses, data-version invalidation, authorization before
   cache hits, and keys varying by user, URL, gzip, host, browser, Turbo frame and return-room
   cookie. Foreign SQL edits and access revocation are tested.
@@ -61,16 +62,16 @@ docker build -f bench/Dockerfile.tools -t campfire-local-tools:latest .
 docker run --rm --init -v /Users/ruby/Downloads/campfire-test:/workspace \
   campfire-local-tools:latest bash /workspace/once-campfire-mojo/bench/build.sh
 bash bench/test.sh
-bash bench/run.sh
+bash bench/run-durable.sh
 ```
 
 The existing canonical seed is `../once-campfire-verification/fixtures/default`; only copies
-are used. `bench/run.sh` runs the parity gate automatically before collecting measurements.
+are used. `bench/run-durable.sh` runs the parity gate automatically before collecting measurements.
 The unmodified upstream load generator validates every response; its acknowledged-write
 validator audits every returned message ID, exact body, room and FTS entry. Failed gates or
 invalid responses abort the comparison.
 
-Default method: 16 keep-alive HTTP/1.1 clients, gzip, three alternating-order rounds,
+Default method: 16 keep-alive HTTP/1.1 clients, gzip, three rotating-order rounds,
 2-second warmups and 8-second samples, medians. Server processes (including background jobs)
 share VM CPUs `0-3`; the client uses `4-7`. Each application gets a 64 MiB response-cache budget
 and upstream C/Rust retain other caches. These are VM CPU assignments, not physical-core
@@ -115,4 +116,4 @@ The historical C runs dropped 26,824, 25,386 and 25,282 push jobs. Successful HT
 
 Profiling and controlled variants are described in [bench/POSTING_DIAGNOSIS.md](bench/POSTING_DIAGNOSIS.md). The current implementation preserves durable jobs, copies UTF-8 spans during JSON encoding, reuses the encoded broadcast payload, skips disabled audit-payload construction, and exits forked workers after worker-local cleanup without tearing down the inherited parent runtime.
 
-Outstanding replacement work includes streaming large multipart uploads to disk (Rust permits up to 10 GiB by default), amd64 packaging/validation, and a real external browser push-subscription/delivery acceptance test. Local Disk support is shared by the references; C explicitly does not support migrating existing installations.
+Those previously outstanding items are now implemented and tested: disk-spooled uploads with a 10 GiB default limit, both Linux architectures, local Disk import, and actual Chrome/FCM delivery. The current durable comparison is documented above and in PORT_STATUS.md. C upstream explicitly does not support migrating existing installations.

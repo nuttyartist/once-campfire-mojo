@@ -46,6 +46,8 @@ def initialize(mut db: Database) raises:
     _ = db.rows("CREATE INDEX IF NOT EXISTS \"index_webhooks_on_user_id\" ON \"webhooks\" (\"user_id\")")
     _ = db.rows("CREATE TABLE IF NOT EXISTS mojo_login_limits (ip TEXT PRIMARY KEY, started INTEGER NOT NULL, attempts INTEGER NOT NULL)")
     _ = db.rows("CREATE TABLE IF NOT EXISTS mojo_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, message_id INTEGER NOT NULL, hooks INTEGER NOT NULL DEFAULT 1, kind TEXT NOT NULL DEFAULT 'message', attempts INTEGER NOT NULL DEFAULT 0, available_at INTEGER NOT NULL DEFAULT (unixepoch()), lease_until INTEGER NOT NULL DEFAULT 0, error TEXT, failed INTEGER NOT NULL DEFAULT 0)")
+    _ = db.rows("CREATE TABLE IF NOT EXISTS campfire_completed_jobs(message_id INTEGER NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(message_id,kind))")
+    _ = db.rows("CREATE TABLE IF NOT EXISTS campfire_delivery_receipts(message_id INTEGER NOT NULL,target_id INTEGER NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(message_id,target_id,kind))")
     _ = db.rows("CREATE INDEX IF NOT EXISTS mojo_jobs_available ON mojo_jobs(failed,available_at,lease_until)")
     _ = db.rows("CREATE TABLE IF NOT EXISTS mojo_deliveries (message_id INTEGER NOT NULL, kind TEXT NOT NULL, target_id INTEGER NOT NULL, PRIMARY KEY(message_id,kind,target_id))")
     var has_kind = False

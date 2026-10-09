@@ -17,7 +17,8 @@ COPY --from=build /mojo-runtime /usr/local/lib/mojo
 COPY public /app/public
 COPY deploy /app/deploy
 COPY tools/manage.py /app/tools/manage.py
-RUN mkdir -p /data && chown campfire:campfire /data
+RUN test -s /app/campfire && test -s /app/deploy/start && test -s /app/tools/manage.py && test -s /app/public/service-worker.js \
+    && mkdir -p /data && chown campfire:campfire /data
 ENV LD_LIBRARY_PATH=/usr/local/lib/mojo BIND_ADDRESS=127.0.0.1 PORT=3000 \
     DATABASE_PATH=/data/production.sqlite3 STORAGE_PATH=/data/files PUBLIC_PATH=/app/public \
     CAMPFIRE_DATA=/data TRUSTED_PROXY_IP=127.0.0.1 XDG_DATA_HOME=/data/caddy XDG_CONFIG_HOME=/data/caddy

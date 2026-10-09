@@ -78,7 +78,7 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
         var body = String()
         for sub in subscriptions:
             body += '<li class="membership-item flex flex-column gap"><p>'+escape(sub[1])+'</p>'+ui.form("/users/me/push_subscriptions/"+sub[0]+"/test_notifications","","post","Send test notification")+ui.form("/users/me/push_subscriptions/"+sub[0],"","delete","Delete subscription")+'</li>' 
-        return ui.page(db,signer,uid,req,"Push subscriptions",body)
+        return ui.page(db,signer,uid,req,"Push notification subscriptions",'<ul id="push_subscriptions">'+body+"</ul>")
     return html("",0)
 
 

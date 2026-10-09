@@ -89,7 +89,7 @@ def fixture_env():
 def validate_server_log(path):
     """Fail closed on dropped background work or runtime crashes, including shutdown."""
     patterns = {
-        "dropped background work": r"dropping job|discarded [1-9][0-9]* queued jobs|queue full|queue is full",
+        "dropped background work": r"dropping (?:job|notification)|dropped [1-9][0-9]* notifications|discarded [1-9][0-9]* queued jobs|queue full|queue is full|durable (?:worker|claim|job).*failed|job failed|handler failed|were abandoned",
         "runtime/worker failure": r"KGEN_CompilerRT_DestroyGlobals|Worker (?:exited unexpectedly|failed:)|Background job failed:|Request failed:|panicked at|Segmentation fault",
     }
     failures = []

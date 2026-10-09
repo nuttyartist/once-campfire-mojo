@@ -198,12 +198,24 @@ def delivered(mut db: Database, mid: String, kind: String, target: String) raise
 
 
 def receipt(mut db: Database, mid: String, kind: String, target: String) raises:
-    _ = db.rows("INSERT OR IGNORE INTO mojo_deliveries(message_id,kind,target_id) VALUES(?,?,?)",[mid,kind,target])
+    _ = db.rows("SAVEPOINT delivery_receipt")
+    try:
+        _ = db.rows("INSERT OR IGNORE INTO mojo_deliveries(message_id,kind,target_id) VALUES(?,?,?)",[mid,kind,target])
+        if getenv("CAMPFIRE_JOB_RECEIPTS", "0")=="1" and kind=="push":
+            _ = db.rows("INSERT OR IGNORE INTO campfire_delivery_receipts(message_id,target_id,kind) VALUES(?,?,?)",[mid,target,kind])
+        _ = db.rows("RELEASE delivery_receipt")
+    except e:
+        _ = db.rows("ROLLBACK TO delivery_receipt")
+        _ = db.rows("RELEASE delivery_receipt")
+        raise e
 
 
 def run(path: String) raises:
     var db = Database(path)
     while external_call["os_running",Int]():
+        if getenv("CAMPFIRE_JOBS_PAUSED","0")=="1":
+            external_call["os_sleep_ms",NoneType](50)
+            continue
         var rows = db.rows("UPDATE mojo_jobs SET lease_until=unixepoch()+600,attempts=attempts+1 WHERE id=(SELECT id FROM mojo_jobs WHERE failed=0 AND available_at<=unixepoch() AND lease_until<unixepoch() ORDER BY id LIMIT 1) RETURNING id,message_id,hooks,attempts,kind")
         if len(rows)==0:
             external_call["os_sleep_ms",NoneType](50)
@@ -217,6 +229,8 @@ def run(path: String) raises:
             else:
                 process(db,job[1],job[2]=="1",job[0])
             _ = db.rows("BEGIN IMMEDIATE")
+            if getenv("CAMPFIRE_JOB_RECEIPTS", "0")=="1":
+                _ = db.rows("INSERT OR IGNORE INTO campfire_completed_jobs(message_id,kind) VALUES(?,?)",[job[1],job[4]])
             _ = db.rows("DELETE FROM mojo_jobs WHERE id=?",[job[0]])
             if job[4]=="message":
                 _ = db.rows("DELETE FROM mojo_deliveries WHERE message_id=? AND NOT EXISTS(SELECT 1 FROM mojo_jobs WHERE message_id=? AND kind='message')",[job[1],job[1]])

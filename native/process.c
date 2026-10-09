@@ -18,7 +18,8 @@ long process_capture(const char *command,const char *arguments,long args_size,co
  char *argv[128];int count=1;argv[0]=(char*)command;
  for(long i=0;i<args_size;){if(count>=127){free(args);return -1;}argv[count++]=args+i;long n=strnlen(args+i,args_size-i);i+=n+1;}argv[count]=NULL;
  int in[2]={-1,-1},out[2];
- if(seekable){in[0]=memfd_create("campfire-media",MFD_CLOEXEC);if(in[0]<0){free(args);return -1;}long done=0;while(done<input_size){ssize_t n=write(in[0],(const char*)input+done,input_size-done);if(n<0&&errno==EINTR)continue;if(n<=0){close(in[0]);free(args);return -1;}done+=n;}lseek(in[0],0,SEEK_SET);}
+ if(seekable<0){in[0]=fcntl((int)(-seekable-1),F_DUPFD_CLOEXEC,3);if(in[0]<0){free(args);return -1;}lseek(in[0],0,SEEK_SET);}
+ else if(seekable){in[0]=memfd_create("campfire-media",MFD_CLOEXEC);if(in[0]<0){free(args);return -1;}long done=0;while(done<input_size){ssize_t n=write(in[0],(const char*)input+done,input_size-done);if(n<0&&errno==EINTR)continue;if(n<=0){close(in[0]);free(args);return -1;}done+=n;}lseek(in[0],0,SEEK_SET);}
  else if(pipe2(in,O_CLOEXEC)){free(args);return -1;}
  if(pipe2(out,O_CLOEXEC)){close(in[0]);close(in[1]);free(args);return -1;}
  pid_t child=fork();if(child<0){close(in[0]);close(in[1]);close(out[0]);close(out[1]);free(args);return -1;}

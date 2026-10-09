@@ -13,6 +13,8 @@ struct Request(Copyable, Movable):
     var headers: Dict[String, String]
     var body: String
     var peer: String
+    var body_fd: Int
+    var body_size: Int
 
     def header(self, name: String) -> String:
         return self.headers.get(name, "")
@@ -78,7 +80,7 @@ def parse_headers(head: String) raises -> Request:
     var path_query = target.split("?", maxsplit=1)
     var query = String(path_query[1]) if len(path_query) == 2 else String()
     return Request(
-        String(first[0]), target^, String(path_query[0]), query^, headers^, "", "127.0.0.1"
+        String(first[0]), target^, String(path_query[0]), query^, headers^, "", "127.0.0.1", -1, 0
     )
 
 

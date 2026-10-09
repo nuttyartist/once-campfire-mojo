@@ -1,6 +1,6 @@
 # Local deployment and data migration
 
-Build on ARM64 Linux (Docker Desktop on Apple silicon is supported):
+Build on ARM64 or amd64 Linux (Docker Desktop on Apple silicon is supported):
 
 ```sh
 docker build -f bench/Dockerfile.tools -t campfire-local-tools:latest .
@@ -47,4 +47,19 @@ Backups include a SHA-256 manifest, database, Disk files and keys. Restore verif
 
 Acknowledged messages and queued work survive process termination. Successful recipient deliveries have receipts, but HTTP side effects cannot be atomic with the local database: webhook consumers should tolerate retries. Worker exits are supervised and repeated crashes terminate the container for Compose to restart.
 
-Current size limits are 64 MiB per uploaded request, 64 KiB chunks per downloaded file, 128 MiB of connection buffers per HTTP worker, 1,024 connections per worker, bounded Cable queues, and 30-second incomplete-request/idle timeouts. Media decoding is restricted to bounded dimensions/pixel counts and time-limited subprocesses. These limits and the compatibility notes in `PORT_STATUS.md` apply when evaluating an existing installation.
+Multipart and signed direct-upload bodies default to 10 GiB (`MULTIPART_BYTESIZE_LIMIT`) and spool to anonymous files under `TMPDIR` (default `/tmp`). Allocate disk space for a request spool and its stored object; cleanup closes/unlinks aborted spools. Multipart text is limited to 16 MiB, 4,096 parts and 128 files. Other requests retain their bounded buffered-body policy. Downloads use 64 KiB chunks; connection buffers are bounded to 128 MiB per HTTP worker, with 1,024 connections per worker, bounded Cable queues, a 30-second idle limit and a 30-minute streamed-upload deadline. Media decoding is restricted to bounded dimensions/pixel counts and time-limited subprocesses. These limits and the compatibility notes in `PORT_STATUS.md` apply when evaluating an existing installation.
+
+## Durability and architecture acceptance
+
+Mojo now defaults to SQLite `synchronous=FULL` in WAL mode. `CAMPFIRE_SQLITE_SYNCHRONOUS=NORMAL` is an explicit weaker opt-in and is not used by the durable comparison. FULL requests a WAL sync before commit returns; hardware/virtualization must honor filesystem sync for power-loss guarantees. Tests kill application processes, not the user's Mac or Docker VM. External HTTP effects cannot be atomically committed with SQLite and may repeat after a crash; local recipient receipts prevent redoing already recorded work.
+
+`CAMPFIRE_JOBS_PAUSED=1` starts workers paused while retaining queued work durably; restart without it to resume. This supports controlled recovery acceptance. `CAMPFIRE_JOB_RECEIPTS=1` retains additional completion receipts for comparison/audit; it is not required for production recovery and grows audit tables.
+
+To build the second architecture locally:
+
+```sh
+docker build --platform linux/amd64 -f bench/Dockerfile.tools -t campfire-local-tools:amd64 .
+docker build --platform linux/amd64 --build-arg TOOLCHAIN_IMAGE=campfire-local-tools:amd64 -t campfire-mojo:amd64 .
+```
+
+The amd64 image was booted under local emulation and exercised with the browser smoke suite. Native ARM64 alone supplies the comparison's performance numbers. `tests/browser_push.mjs` uses a disposable Chrome profile, grants permission only for the local acceptance app, verifies a real provider subscription/delivery, unsubscribes it and removes the profile. Set `PLAYWRIGHT_MODULE`, `CAMPFIRE_PUSH_TEST_BASE` and `CAMPFIRE_PUSH_TEST_OUTPUT` for your environment.

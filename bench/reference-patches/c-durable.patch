@@ -1,0 +1,307 @@
+diff --git a/README.md b/README.md
+index 9c21384..6c6b9af 100644
+--- a/README.md
++++ b/README.md
+@@ -121,3 +121,11 @@ The session transfer page explicitly closes its auto-submit form; the pinned ref
+ 
+ MIT. See [`MIT-LICENSE`](MIT-LICENSE). Vendored dependencies keep their own
+ licenses, recorded in `vendor/DEPS.json`.
++
++### Local durable comparison branch (2026-10-10)
++
++This local-only branch adds opt-in `CAMPFIRE_DURABLE_JOBS=1` transactional SQLite outboxes for model events, persisted retries, and retained job/recipient completion receipts. It changes the upstream best-effort memory-queue contract. `CAMPFIRE_SQLITE_SYNCHRONOUS=FULL` makes all comparison connections sync WAL commits; NORMAL remains the upstream default. The comparison always selects FULL. Jobs remain in the database through shutdown/crash and retry failures with bounded backoff; after ten attempts a failed row is retained for inspection, not silently discarded. A single running application owns each database and resets outstanding leases on restart. Completed audit rows are retained and will grow until explicitly pruned.
++
++The accompanying Mojo repository's `tests/durable_comparison.py` and `bench/durable.py` verify acknowledged message IDs, exact notification recipient receipt sets, queue drain and process-crash recovery. Posting rate includes completion time. Three guarded-out subscription endpoints per posted message are used in the timed workload; real external push delivery is a separate acceptance test. These statistics describe locally modified applications, not untouched upstream releases or a pure language microbenchmark. Media/analysis jobs outside the measured text-post workload are not covered by this comparison's completion claim.
++
++`CAMPFIRE_JOBS_PAUSED=1` keeps workers paused for a controlled restart test without losing outbox work. Normal application tests run in the upstream mode; the shared durability gate runs explicitly in the new mode. The original shared benchmark fixture is copied, never modified.
+diff --git a/src/db/reader.c b/src/db/reader.c
+index 79e0e77..13a5148 100644
+--- a/src/db/reader.c
++++ b/src/db/reader.c
+@@ -127,6 +127,9 @@ static cf_err configure_connection(sqlite3 *handle, bool read_only) {
+         if (err != CF_OK) return err;
+     }
+ 
++    const char *durability=getenv("CAMPFIRE_SQLITE_SYNCHRONOUS");
++    if(durability && strcmp(durability,"NORMAL")!=0 && strcmp(durability,"FULL")!=0) return CF_INVALID;
++    if(durability && strcmp(durability,"FULL")==0 && sqlite3_exec(handle,"PRAGMA synchronous=FULL",NULL,NULL,NULL)!=SQLITE_OK) return CF_DB;
+     if (read_only) {
+         char ignored[16];
+         err = pragma_text(handle, "PRAGMA query_only=ON", ignored,
+diff --git a/src/db/writer.c b/src/db/writer.c
+index 9e56f2e..e31274d 100644
+--- a/src/db/writer.c
++++ b/src/db/writer.c
+@@ -16,6 +16,7 @@
+  *    without racing a returning caller.
+  */
+ #include "db/writer.h"
++#include "jobs/durable.h"
+ 
+ #include "app_internal.h"
+ #include "db/db_internal.h"
+@@ -268,7 +269,7 @@ static cf_err cf_writer_post_commit(struct cf_writer *w, struct cf_tx *tx) {
+                 cf_writer_stat_mandatory_failure(w);
+                 outcome = CF_INTERNAL;
+             }
+-        } else {
++        } else if (!cf_durable_enabled()) {
+             pthread_mutex_lock(&w->mu);
+             cf_writer_event_fn fn = w->event_fn[event->kind];
+             void *ctx = w->event_ctx[event->kind];
+@@ -299,6 +300,11 @@ static cf_err cf_writer_execute(struct cf_writer *w, struct cf_writer_req *req)
+         /* A callback cannot invent return codes outside the contract. */
+         cb = CF_INTERNAL;
+     }
++    if (cb == CF_OK && cf_durable_enabled()) {
++        for(size_t i=0;i<tx.event_count;i++) {
++            if(cf_durable_event(handle,&tx.events[i])!=SQLITE_OK) { cb=CF_DB; break; }
++        }
++    }
+     if (cb != CF_OK) {
+         cf_writer_rollback(w->db); /* events drop with the effects */
+         cf_tx_dispose_events(&tx);
+@@ -506,6 +512,9 @@ cf_err cf_writer_start(cf_app *app, const cf_config *config) {
+     }
+ 
+     rc = cf_db_open(config->database_path, false, &w->db);
++    if (rc == CF_OK && cf_durable_enabled() && cf_durable_prepare(cf_db_handle(w->db))!=SQLITE_OK) {
++        cf_db_close(w->db); rc=CF_DB;
++    }
+     if (rc != CF_OK) { /* message stays in this calling thread's TLS */
+         cf_writer_sync_destroy(w, sync_done);
+         free(w->queue);
+diff --git a/src/jobs/durable.h b/src/jobs/durable.h
+new file mode 100644
+index 0000000..e1918b0
+--- /dev/null
++++ b/src/jobs/durable.h
+@@ -0,0 +1,39 @@
++/* Local durable comparison extension. SQL outbox admission is transactional. */
++#ifndef CF_DURABLE_H
++#define CF_DURABLE_H
++#include <sqlite3.h>
++#include <stdlib.h>
++#include <string.h>
++#include "cf.h"
++static inline bool cf_durable_enabled(void) {
++    const char *v=getenv("CAMPFIRE_DURABLE_JOBS"); return v && strcmp(v,"1")==0;
++}
++static inline int cf_durable_prepare(sqlite3 *db) {
++    return sqlite3_exec(db,"CREATE TABLE IF NOT EXISTS campfire_jobs(id INTEGER PRIMARY KEY AUTOINCREMENT,kind INTEGER NOT NULL,user_id INTEGER NOT NULL DEFAULT 0,room_id INTEGER NOT NULL DEFAULT 0,message_id INTEGER NOT NULL DEFAULT 0,blob_id INTEGER NOT NULL DEFAULT 0,task_type TEXT,variation TEXT,attempts INTEGER NOT NULL DEFAULT 0,available_at INTEGER NOT NULL DEFAULT 0,lease_until INTEGER NOT NULL DEFAULT 0,completed_at INTEGER,error TEXT NOT NULL DEFAULT ''); CREATE INDEX IF NOT EXISTS campfire_jobs_ready ON campfire_jobs(kind,completed_at,available_at,lease_until,id); CREATE TABLE IF NOT EXISTS campfire_delivery_receipts(message_id INTEGER NOT NULL,target_id INTEGER NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(message_id,target_id,kind));",NULL,NULL,NULL);
++}
++static inline int cf_durable_open(const char *path, sqlite3 **out) {
++    int rc=sqlite3_open_v2(path,out,SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE|SQLITE_OPEN_NOMUTEX,NULL);
++    if(rc!=SQLITE_OK) return rc;
++    sqlite3_busy_timeout(*out,5000);
++    const char *mode=getenv("CAMPFIRE_SQLITE_SYNCHRONOUS");
++    return sqlite3_exec(*out,mode && strcmp(mode,"FULL")==0 ? "PRAGMA synchronous=FULL" : "PRAGMA synchronous=NORMAL",NULL,NULL,NULL);
++}
++static inline int cf_durable_event(sqlite3 *db,const cf_event *e) {
++    int kind;
++    switch(e->kind) {
++        case CF_EVENT_PUSH_MESSAGE: kind=0;break;
++        case CF_EVENT_DELIVER_WEBHOOK: kind=1;break;
++        case CF_EVENT_REMOVE_BANNED_CONTENT: kind=2;break;
++        case CF_EVENT_PURGE_BLOB: kind=3;break;
++        default:return SQLITE_OK;
++    }
++    sqlite3_stmt *s=NULL;
++    int rc=sqlite3_prepare_v2(db,"INSERT INTO campfire_jobs(kind,user_id,room_id,message_id,blob_id) VALUES(?,?,?,?,?)",-1,&s,NULL);
++    if(rc==SQLITE_OK) {
++        sqlite3_bind_int(s,1,kind); sqlite3_bind_int64(s,2,e->user_id);
++        sqlite3_bind_int64(s,3,e->room_id); sqlite3_bind_int64(s,4,e->message_id); sqlite3_bind_int64(s,5,e->blob_id);
++        rc=sqlite3_step(s)==SQLITE_DONE ? SQLITE_OK : sqlite3_errcode(db);
++    }
++    sqlite3_finalize(s);return rc;
++}
++#endif
+diff --git a/src/jobs/handlers.c b/src/jobs/handlers.c
+index 10eb11f..9dde4f4 100644
+--- a/src/jobs/handlers.c
++++ b/src/jobs/handlers.c
+@@ -26,6 +26,7 @@
+  *
+  */
+ #include "jobs/handlers.h"
++#include "jobs/durable.h"
+ 
+ #include "app.h"
+ #include "cable/channels.h"
+@@ -100,17 +101,32 @@ static cf_err jobs_push_invalidate_cb(cf_tx *tx, void *arg) {
+ 
+ static cf_err jobs_push_deliver_list(cf_jobs_handler_ctx *h,
+     const cf_push_payload *payload, cf_push_subscription_vector *subscriptions,
+-    const cf_push_vapid *vapid) {
++    const cf_push_vapid *vapid, int64_t message_id) {
+     cf_push_sort_by_id(subscriptions);
++    sqlite3 *receipts=NULL;
++    if(cf_durable_enabled() && cf_durable_open(cf_app_config(h->app)->database_path,&receipts)!=SQLITE_OK) {sqlite3_close(receipts);return CF_DB;}
+     cf_err first_error = CF_OK;
+     for (size_t i=0;i<subscriptions->len;i++) {
+         cf_push_subscription *subscription = &subscriptions->items[i];
++        if(receipts) {
++            sqlite3_stmt *s=NULL;int done=0;
++            int sr=sqlite3_prepare_v2(receipts,"SELECT 1 FROM campfire_delivery_receipts WHERE message_id=? AND target_id=? AND kind='push'",-1,&s,NULL);
++            if(sr==SQLITE_OK) {sqlite3_bind_int64(s,1,message_id);sqlite3_bind_int64(s,2,subscription->id);sr=sqlite3_step(s);done=sr==SQLITE_ROW;}
++            sqlite3_finalize(s);
++            if(sr!=SQLITE_ROW && sr!=SQLITE_DONE){first_error=CF_DB;continue;}
++            if(done)continue;
++        }
+         cf_db *db = NULL;
+         int64_t badge = 0;
+         cf_err rc = jobs_reader_open(h,&db);
+         if (rc == CF_OK) rc = cf_push_subscription_badge(db,subscription,&badge);
+         cf_db_close(db);
+         if (rc != CF_OK) {if(first_error==CF_OK)first_error=rc;continue;}
++        if(receipts) {
++            sqlite3_stmt *s=NULL;int sr=sqlite3_prepare_v2(receipts,"UPDATE campfire_jobs SET lease_until=unixepoch()+600 WHERE kind=0 AND message_id=? AND completed_at IS NULL",-1,&s,NULL);
++            if(sr==SQLITE_OK){sqlite3_bind_int64(s,1,message_id);sr=sqlite3_step(s);}sqlite3_finalize(s);
++            if(sr!=SQLITE_DONE){first_error=CF_DB;continue;}
++        }
+         cf_push_delivery outcome = {0};
+         atomic_fetch_add_explicit(&h->push_attempted,1,memory_order_relaxed);
+         rc = cf_push_deliver(subscription,
+@@ -131,9 +147,16 @@ static cf_err jobs_push_deliver_list(cf_jobs_handler_ctx *h,
+             rc = CF_IO;
+         }
+         cf_push_delivery_dispose(&outcome);
++        if(rc==CF_OK && receipts) {
++            sqlite3_stmt *s=NULL;
++            int sr=sqlite3_prepare_v2(receipts,"INSERT OR IGNORE INTO campfire_delivery_receipts(message_id,target_id,kind) VALUES(?,?,'push')",-1,&s,NULL);
++            if(sr==SQLITE_OK) {sqlite3_bind_int64(s,1,message_id);sqlite3_bind_int64(s,2,subscription->id);sr=sqlite3_step(s);}
++            sqlite3_finalize(s);if(sr!=SQLITE_DONE)rc=CF_DB;
++        }
+         if (rc != CF_OK && first_error == CF_OK) first_error = rc;
+         /* A failed recipient never suppresses independent remaining ones. */
+     }
++    sqlite3_close(receipts);
+     return first_error;
+ }
+ 
+@@ -217,8 +240,8 @@ cf_err cf_jobs_handle_push_message(void *ctx, const cf_job *job) {
+         cf_push_vapid_error detail = CF_PUSH_VAPID_OK;
+         rc = cf_push_vapid_from_config(cf_app_config(h->app),&vapid,&detail);
+         if (rc == CF_OK) {
+-            rc = jobs_push_deliver_list(h,&payload,&everything,&vapid);
+-            cf_err mention_rc = jobs_push_deliver_list(h,&payload,&mentions,&vapid);
++            rc = jobs_push_deliver_list(h,&payload,&everything,&vapid,job->message_id);
++            cf_err mention_rc = jobs_push_deliver_list(h,&payload,&mentions,&vapid,job->message_id);
+             if (rc == CF_OK) rc = mention_rc;
+         } else {
+             fprintf(stderr,"campfire: push disabled: %s\n",cf_push_vapid_error_name(detail));
+diff --git a/src/jobs/queue.c b/src/jobs/queue.c
+index 8532dee..8c55b95 100644
+--- a/src/jobs/queue.c
++++ b/src/jobs/queue.c
+@@ -10,6 +10,8 @@
+  * See src/jobs/jobs.h for the full contract.
+  */
+ #include "jobs/jobs.h"
++#include "jobs/durable.h"
++#include <time.h>
+ 
+ #include "core/error.h"
+ #include "db/writer.h"
+@@ -65,6 +67,7 @@ struct cf_job_queue {
+     bool sync_ready;        /* mutex and condition variable are live */
+     bool joined;            /* threads were joined by stop */
+ 
++    char *durable_path;
+     cf_job *slots;          /* ring buffer, capacity entries */
+     size_t capacity;
+     size_t head;            /* index of the oldest pending job */
+@@ -100,8 +103,47 @@ static void cf_job_dispose(cf_job *job) {
+ 
+ /* -------------------------------------------------------- worker loop --- */
+ 
++static void *cf_durable_worker(void *arg) {
++    struct cf_job_queue *q=arg;
++    sqlite3 *db=NULL;
++    if(cf_durable_open(q->durable_path,&db)!=SQLITE_OK) { fprintf(stderr,"campfire: durable worker open failed\n"); sqlite3_close(db); return NULL; }
++    for(;;) {
++        pthread_mutex_lock(&q->mu);
++        bool stopping=q->stopping;
++        cf_job_handler_fn fn=q->handler; void *ctx=q->handler_ctx;
++        pthread_mutex_unlock(&q->mu);
++        if(stopping) break;
++        const char *paused=getenv("CAMPFIRE_JOBS_PAUSED");
++        if(!fn || (paused && strcmp(paused,"1")==0)) { struct timespec t={0,10000000}; nanosleep(&t,NULL); continue; }
++        sqlite3_stmt *s=NULL;
++        int rc=sqlite3_prepare_v2(db,"UPDATE campfire_jobs SET lease_until=unixepoch()+600,attempts=attempts+1 WHERE id=(SELECT id FROM campfire_jobs WHERE kind=? AND completed_at IS NULL AND attempts<10 AND available_at<=unixepoch() AND lease_until<unixepoch() ORDER BY id LIMIT 1) RETURNING id,user_id,room_id,message_id,blob_id,task_type,variation",-1,&s,NULL);
++        if(rc==SQLITE_OK) { sqlite3_bind_int(s,1,(int)q->kind); rc=sqlite3_step(s); }
++        cf_job job={.kind=q->kind}; int64_t id=0;
++        if(rc==SQLITE_ROW) {
++            id=sqlite3_column_int64(s,0);job.user_id=sqlite3_column_int64(s,1);
++            job.room_id=sqlite3_column_int64(s,2);job.message_id=sqlite3_column_int64(s,3);job.blob_id=sqlite3_column_int64(s,4);
++            if(sqlite3_column_text(s,5)) job.task_type=strdup((const char*)sqlite3_column_text(s,5));
++            if(sqlite3_column_text(s,6)) job.variation=strdup((const char*)sqlite3_column_text(s,6));
++            rc=sqlite3_step(s);
++        }
++        sqlite3_finalize(s);
++        if(rc!=SQLITE_DONE) { fprintf(stderr,"campfire: durable claim failed; job retained (%d)\n",rc); id=0; }
++        if(!id) { cf_job_dispose(&job); struct timespec t={0,10000000}; nanosleep(&t,NULL); continue; }
++        pthread_mutex_lock(&q->mu);q->accepted++;q->running++;pthread_mutex_unlock(&q->mu);
++        cf_err result=fn(ctx,&job);cf_job_dispose(&job);
++        const char *sql=result==CF_OK ? "UPDATE campfire_jobs SET completed_at=unixepoch(),lease_until=0,error='' WHERE id=?" : "UPDATE campfire_jobs SET lease_until=0,available_at=unixepoch()+min(3600,attempts*attempts*5),error='handler failed' WHERE id=?";
++        rc=sqlite3_prepare_v2(db,sql,-1,&s,NULL);
++        if(rc==SQLITE_OK) {sqlite3_bind_int64(s,1,id);rc=sqlite3_step(s);}
++        sqlite3_finalize(s);
++        if(rc!=SQLITE_DONE || result!=CF_OK) fprintf(stderr,"campfire: durable job failed; retry retained\n");
++        pthread_mutex_lock(&q->mu);q->running--;if(result==CF_OK && rc==SQLITE_DONE)q->completed++;else q->failed++;pthread_mutex_unlock(&q->mu);
++    }
++    sqlite3_close(db);return NULL;
++}
++
+ static void *cf_job_worker_main(void *arg) {
+     struct cf_job_queue *q = arg;
++    if(q->durable_path) return cf_durable_worker(arg);
+ 
+     for (;;) {
+         pthread_mutex_lock(&q->mu);
+@@ -143,6 +185,18 @@ static void *cf_job_worker_main(void *arg) {
+ /* Append one payload, taking ownership of its owned strings on CF_OK only.
+  * Caller performs no allocation while the queue lock is held. */
+ static cf_err cf_job_queue_push(struct cf_job_queue *q, const cf_job *job) {
++    if(q->durable_path) {
++        sqlite3 *db=NULL;sqlite3_stmt *s=NULL;
++        int rc=cf_durable_open(q->durable_path,&db);
++        if(rc==SQLITE_OK) rc=sqlite3_prepare_v2(db,"INSERT INTO campfire_jobs(kind,user_id,room_id,message_id,blob_id,task_type,variation) VALUES(?,?,?,?,?,?,?)",-1,&s,NULL);
++        if(rc==SQLITE_OK) {
++            sqlite3_bind_int(s,1,(int)job->kind);sqlite3_bind_int64(s,2,job->user_id);sqlite3_bind_int64(s,3,job->room_id);sqlite3_bind_int64(s,4,job->message_id);sqlite3_bind_int64(s,5,job->blob_id);
++            sqlite3_bind_text(s,6,job->task_type,-1,SQLITE_TRANSIENT);sqlite3_bind_text(s,7,job->variation,-1,SQLITE_TRANSIENT);rc=sqlite3_step(s);
++        }
++        sqlite3_finalize(s);sqlite3_close(db);
++        if(rc==SQLITE_DONE) { free((void*)job->task_type);free((void*)job->variation);return CF_OK; }
++        return CF_DB;
++    }
+     pthread_mutex_lock(&q->mu);
+     if (q->stopping) {
+         pthread_mutex_unlock(&q->mu);
+@@ -318,6 +372,7 @@ cf_err cf_jobs_stats_get(const cf_jobs *jobs, cf_job_kind kind,
+ 
+ static void cf_job_queue_dispose(struct cf_job_queue *q) {
+     if (!q->initialized) return;
++    free(q->durable_path);
+     free(q->slots);
+     free(q->threads);
+     q->slots = NULL;
+@@ -344,9 +399,18 @@ cf_err cf_jobs_start(const cf_config *config, cf_jobs **out) {
+     if (jobs == NULL) return CF_NOMEM;
+ 
+     cf_err rc = CF_OK;
++    if(cf_durable_enabled()) {
++        sqlite3 *db=NULL;
++        int status=cf_durable_open(config->database_path,&db);
++        if(status==SQLITE_OK) status=cf_durable_prepare(db);
++        if(status==SQLITE_OK) status=sqlite3_exec(db,"UPDATE campfire_jobs SET lease_until=0 WHERE completed_at IS NULL",NULL,NULL,NULL);
++        sqlite3_close(db);
++        if(status!=SQLITE_OK) {free(jobs);return CF_DB;}
++    }
+     for (size_t k = 0; k < CF_JOB_KIND_COUNT; k++) {
+         struct cf_job_queue *q = &jobs->q[k];
+         q->kind = (cf_job_kind)k;
++        if(cf_durable_enabled()) {q->durable_path=strdup(config->database_path);if(!q->durable_path){rc=CF_NOMEM;goto fail;}}
+         q->capacity = capacity;
+         q->workers = k == CF_JOB_MEDIA ? CF_JOB_MEDIA_WORKERS : event_workers;
+         q->slots = calloc(q->capacity, sizeof *q->slots);

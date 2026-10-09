@@ -1,4 +1,5 @@
 from std.ffi import external_call
+from std.os import getenv
 from file_transfer import FileTransfer
 
 
@@ -27,7 +28,10 @@ struct Database(Movable):
         if self.handle == 0:
             raise Error("Cannot open database")
         _ = self.rows("PRAGMA journal_mode=WAL")
-        _ = self.rows("PRAGMA synchronous=NORMAL")
+        var durability = getenv("CAMPFIRE_SQLITE_SYNCHRONOUS","FULL")
+        if durability!="FULL" and durability!="NORMAL":
+            raise Error("Invalid CAMPFIRE_SQLITE_SYNCHRONOUS")
+        _ = self.rows("PRAGMA synchronous="+durability)
         _ = self.rows("PRAGMA foreign_keys=ON")
 
     def __deinit__(deinit self):

@@ -1,0 +1,295 @@
+diff --git a/README.md b/README.md
+index a240aef..e668101 100644
+--- a/README.md
++++ b/README.md
+@@ -86,6 +86,17 @@ against Rails. See [`parity/SCREENS.md`](parity/SCREENS.md) for coverage and mas
+ 
+ ## Known differences
+ 
++### Local durable comparison branch (2026-10-10)
++
++This local-only branch adds opt-in `CAMPFIRE_DURABLE_JOBS=1` transactional SQLite outboxes for model events, persisted retries, and retained job/recipient completion receipts. It changes the upstream best-effort memory-queue contract. `CAMPFIRE_SQLITE_SYNCHRONOUS=FULL` makes all comparison connections sync WAL commits; NORMAL remains the upstream default. The comparison always selects FULL. Jobs remain in the database through shutdown/crash and retry failures with bounded backoff; after ten attempts a failed row is retained for inspection, not silently discarded. A single running application owns each database and resets outstanding leases on restart. Completed audit rows are retained and will grow until explicitly pruned.
++
++The accompanying Mojo repository's `tests/durable_comparison.py` and `bench/durable.py` verify acknowledged message IDs, exact notification recipient receipt sets, queue drain and process-crash recovery. Posting rate includes completion time. Three guarded-out subscription endpoints per posted message are used in the timed workload; real external push delivery is a separate acceptance test. These statistics describe locally modified applications, not untouched upstream releases or a pure language microbenchmark. Media/analysis jobs outside the measured text-post workload are not covered by this comparison's completion claim.
++
++`CAMPFIRE_JOBS_PAUSED=1` keeps workers paused for a controlled restart test without losing outbox work. Normal application tests run in the upstream mode; the shared durability gate runs explicitly in the new mode. The original shared benchmark fixture is copied, never modified.
++
++Rust durable mode also runs database callbacks for index/unread/outbox changes before the message commit and awaits push transport results directly, bypassing the nested in-memory delivery pool.
++
++
+ The app keeps the Rails database, storage and current cookie formats compatible. Deliberate
+ behavior changes and compatibility limits are listed below.
+ 
+diff --git a/crates/campfire/src/integrations/jobs.rs b/crates/campfire/src/integrations/jobs.rs
+index 9f37387..4262787 100644
+--- a/crates/campfire/src/integrations/jobs.rs
++++ b/crates/campfire/src/integrations/jobs.rs
+@@ -29,6 +29,75 @@ async fn push_message(app: App, event: Event) -> anyhow::Result<()> {
+     let Event::PushMessage { message_id, .. } = event else { return Ok(()) };
+     let Some(pool) = app.web_push.clone() else { return Ok(()) };
+     let db = app.db.clone();
++    if campfire_db::durable::enabled() {
++        let notifications = app
++            .db
++            .read_offloaded(move |conn| {
++                let message = Message::find(conn, message_id)?;
++                let (payload, everything, mentions) = PushSubscription::pushes_for(conn, &*db.env().rich_text, &message, db.env().now())?;
++                everything
++                    .into_iter()
++                    .chain(mentions)
++                    .map(|sub| web_push::Notification::build(conn, &sub, &payload))
++                    .collect::<campfire_db::Result<Vec<_>>>()
++            })
++            .await?;
++        let mut first_error = None;
++        for notification in notifications {
++            let sid = notification.subscription.id;
++            let done = app
++                .db
++                .read(move |conn| {
++                    Ok(conn.query_row(
++                        "SELECT count(*) FROM campfire_delivery_receipts WHERE message_id=? AND target_id=? AND kind='push'",
++                        (message_id, sid),
++                        |r| r.get::<_, i64>(0),
++                    )? > 0)
++                })
++                .await?;
++            if done {
++                continue;
++            }
++            app.db
++                .write(move |tx| {
++                    tx.conn().execute(
++                        "UPDATE campfire_jobs SET lease_until=unixepoch()+600 WHERE kind='push' AND b=? AND completed_at IS NULL",
++                        [message_id],
++                    )?;
++                    Ok(())
++                })
++                .await?;
++            let result = pool.deliver_durable(&notification).await;
++            let invalid = match result {
++                Ok(_) => false,
++                Err(ref e) if e.invalidates_subscription() => true,
++                Err(e) => {
++                    first_error.get_or_insert(e);
++                    continue;
++                }
++            };
++            app.db
++                .write(move |tx| {
++                    if invalid {
++                        match PushSubscription::find(tx.conn(), sid) {
++                            Ok(sub) => sub.destroy(tx)?,
++                            Err(campfire_db::Error::RecordNotFound(_)) => (),
++                            Err(e) => return Err(e),
++                        }
++                    }
++                    tx.conn().execute(
++                        "INSERT OR IGNORE INTO campfire_delivery_receipts(message_id,target_id,kind) VALUES(?,?,'push')",
++                        (message_id, sid),
++                    )?;
++                    Ok(())
++                })
++                .await?;
++        }
++        if let Some(error) = first_error {
++            return Err(error.into());
++        }
++        return Ok(());
++    }
+     // Offloaded: it encrypts a notification for every subscriber.
+     app.db
+         .read_offloaded(move |conn| {
+diff --git a/crates/campfire/src/integrations/web_push/pool.rs b/crates/campfire/src/integrations/web_push/pool.rs
+index 6278d1c..375d9c1 100644
+--- a/crates/campfire/src/integrations/web_push/pool.rs
++++ b/crates/campfire/src/integrations/web_push/pool.rs
+@@ -133,6 +133,11 @@ impl Pool {
+         }
+     }
+ 
++    /// Await the actual transport outcome; the durable parent job owns retries.
++    pub async fn deliver_durable(&self, notification: &Notification) -> Result<Option<u16>, super::DeliveryError> {
++        notification.deliver(&self.inner.net, &self.inner.vapid).await
++    }
++
+     pub fn vapid(&self) -> &VapidConfig {
+         &self.inner.vapid
+     }
+diff --git a/crates/campfire/src/jobs.rs b/crates/campfire/src/jobs.rs
+index 6388ddf..0320ff4 100644
+--- a/crates/campfire/src/jobs.rs
++++ b/crates/campfire/src/jobs.rs
+@@ -213,9 +213,75 @@ pub fn start(queue: Queue, app: App, registry: Registry, concurrency: usize) ->
+             workers.push(tokio::spawn(work(receiver.clone(), app.clone(), registry.clone(), stopping.subscribe())));
+         }
+     }
++    if campfire_db::durable::enabled() {
++        for _ in 0..concurrency.max(1) {
++            workers.push(tokio::spawn(durable_work(app.clone(), registry.clone(), stopping.subscribe())));
++        }
++    }
+     Runner { stopping, workers }
+ }
+ 
++// Durable workers poll the outbox; memory admission never stands between commit and recovery.
++async fn durable_work(app: App, registry: Arc<Registry>, stopping: watch::Receiver<bool>) {
++    while !*stopping.borrow() {
++        if std::env::var("CAMPFIRE_JOBS_PAUSED").as_deref() == Ok("1") {
++            tokio::time::sleep(Duration::from_millis(50)).await;
++            continue;
++        }
++        let result = durable_one(app.clone(), &registry).await;
++        match result {
++            Ok(true) => (),
++            Ok(false) => tokio::time::sleep(Duration::from_millis(10)).await,
++            Err(error) => {
++                tracing::error!(%error, "durable worker failed; job retained");
++                tokio::time::sleep(Duration::from_millis(100)).await;
++            }
++        }
++    }
++}
++async fn durable_one(app: App, registry: &Registry) -> anyhow::Result<bool> {
++    let job = app.db.write(|tx| {
++        let mut stmt = tx.conn().prepare_cached("UPDATE campfire_jobs SET lease_until=unixepoch()+600,attempts=attempts+1 WHERE id=(SELECT id FROM campfire_jobs WHERE completed_at IS NULL AND attempts<10 AND available_at<=unixepoch() AND lease_until<unixepoch() ORDER BY id LIMIT 1) RETURNING id,kind,a,b")?;
++        let mut rows = stmt.query([])?;
++        Ok(match rows.next()? {
++            Some(row) => Some((row.get::<_,i64>(0)?,row.get::<_,String>(1)?,row.get::<_,i64>(2)?,row.get::<_,i64>(3)?)),
++            None => None,
++        })
++    }).await?;
++    let Some((id, kind, a, b)) = job else {
++        return Ok(false);
++    };
++    let event = match kind.as_str() {
++        "push" => Event::PushMessage { room_id: a, message_id: b },
++        "webhook" => Event::DeliverWebhook { bot_id: a, message_id: b },
++        "remove" => Event::RemoveBannedContent { user_id: a },
++        "purge" => Event::PurgeBlob { blob_id: a },
++        _ => return Err(anyhow!("unknown durable job kind {kind}")),
++    };
++    let handler = registry.get(JobKind::of(&event).unwrap()).ok_or_else(|| anyhow!("missing durable handler"))?;
++    let result = AssertUnwindSafe(handler(app.clone(), event)).catch_unwind().await;
++    let error = match result {
++        Ok(Ok(())) => None,
++        Ok(Err(error)) => Some(format!("{error:#}")),
++        Err(_) => Some("handler panicked".to_string()),
++    };
++    app.db
++        .write(move |tx| {
++            if let Some(error) = error {
++                tracing::error!(id,%error,"durable job failed; retry retained");
++                tx.conn().execute(
++                    "UPDATE campfire_jobs SET lease_until=0,available_at=unixepoch()+min(3600,attempts*attempts*5),error=? WHERE id=?",
++                    (error, id),
++                )?;
++            } else {
++                tx.conn().execute("UPDATE campfire_jobs SET completed_at=unixepoch(),lease_until=0,error='' WHERE id=?", [id])?;
++            }
++            Ok(())
++        })
++        .await?;
++    Ok(true)
++}
++
+ /// One of a kind's workers: performs that kind's jobs, one at a time, until its queue has closed
+ /// and drained.
+ async fn work(queue: Arc<Mutex<mpsc::Receiver<Work>>>, app: App, registry: Arc<Registry>, mut stopping: watch::Receiver<bool>) {
+diff --git a/crates/db/src/database.rs b/crates/db/src/database.rs
+index 8b8e950..e26a591 100644
+--- a/crates/db/src/database.rs
++++ b/crates/db/src/database.rs
+@@ -144,6 +144,24 @@ pub fn run_write<T>(conn: &Connection, env: &Env, f: impl FnOnce(&mut Tx<'_>) ->
+     let transaction = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
+     let mut tx = Tx { conn, env, in_transaction: true, after_commit: Vec::new() };
+     let value = f(&mut tx)?;
++    if crate::durable::enabled() {
++        // Run database callbacks before committing: message, index, unread state and outbox
++        // are one atomic write. Keep immediate cable revocations outside the outbox.
++        let mut immediate = Vec::new();
++        while !tx.after_commit.is_empty() {
++            for item in std::mem::take(&mut tx.after_commit) {
++                match item {
++                    AfterCommit::Hook(hook) => hook(&mut tx)?,
++                    AfterCommit::Event(event) => {
++                        if !crate::durable::enqueue(conn, &event)? {
++                            immediate.push(event);
++                        }
++                    }
++                }
++            }
++        }
++        tx.after_commit.extend(immediate.into_iter().map(AfterCommit::Event));
++    }
+     transaction.commit()?;
+ 
+     let mut queue = std::mem::take(&mut tx.after_commit);
+@@ -204,6 +222,10 @@ impl Database {
+         if config.prepare {
+             schema::prepare(&mut conn, &config.environment, &*env.clock)?;
+         }
++        if crate::durable::enabled() {
++            crate::durable::prepare(&conn)?;
++            tracing::warn!(synchronous = conn.pragma_query_value(None, "synchronous", |r| r.get::<_, i64>(0))?, "durable outbox enabled");
++        }
+         let mut checkpoints = Checkpoints::spawn(&config.path)?;
+         // In place of the auto-checkpoint, which is itself a WAL hook (`sqlite3_wal_autocheckpoint`).
+         conn.wal_hook(Some(note_wal_size));
+diff --git a/crates/db/src/durable.rs b/crates/db/src/durable.rs
+new file mode 100644
+index 0000000..021f8ad
+--- /dev/null
++++ b/crates/db/src/durable.rs
+@@ -0,0 +1,22 @@
++//! Opt-in local comparison: transactional outbox, retained completion receipts.
++use crate::{Connection, Event, Result};
++use std::sync::LazyLock;
++pub fn enabled() -> bool {
++    static ENABLED: LazyLock<bool> = LazyLock::new(|| std::env::var("CAMPFIRE_DURABLE_JOBS").as_deref() == Ok("1"));
++    *ENABLED
++}
++pub fn prepare(conn: &Connection) -> Result<()> {
++    conn.execute_batch("CREATE TABLE IF NOT EXISTS campfire_jobs(id INTEGER PRIMARY KEY AUTOINCREMENT,kind TEXT NOT NULL,a INTEGER NOT NULL,b INTEGER NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,available_at INTEGER NOT NULL DEFAULT 0,lease_until INTEGER NOT NULL DEFAULT 0,completed_at INTEGER,error TEXT NOT NULL DEFAULT ''); CREATE INDEX IF NOT EXISTS campfire_jobs_ready ON campfire_jobs(completed_at,available_at,lease_until,id); CREATE TABLE IF NOT EXISTS campfire_delivery_receipts(message_id INTEGER NOT NULL,target_id INTEGER NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(message_id,target_id,kind)); UPDATE campfire_jobs SET lease_until=0 WHERE completed_at IS NULL;")?;
++    Ok(())
++}
++pub fn enqueue(conn: &Connection, event: &Event) -> Result<bool> {
++    let (kind, a, b) = match *event {
++        Event::PushMessage { room_id, message_id } => ("push", room_id, message_id),
++        Event::DeliverWebhook { bot_id, message_id } => ("webhook", bot_id, message_id),
++        Event::RemoveBannedContent { user_id } => ("remove", user_id, 0),
++        Event::PurgeBlob { blob_id } => ("purge", blob_id, 0),
++        Event::DisconnectUser { .. } => return Ok(false),
++    };
++    conn.prepare_cached("INSERT INTO campfire_jobs(kind,a,b) VALUES(?,?,?)")?.execute((kind, a, b))?;
++    Ok(true)
++}
+diff --git a/crates/db/src/lib.rs b/crates/db/src/lib.rs
+index 0d7bdcc..569de92 100644
+--- a/crates/db/src/lib.rs
++++ b/crates/db/src/lib.rs
+@@ -7,6 +7,7 @@
+ //! database, and the after-commit queue.
+ 
+ pub mod database;
++pub mod durable;
+ pub mod error;
+ pub mod events;
+ #[cfg(feature = "test-support")]
+diff --git a/crates/db/src/schema.rs b/crates/db/src/schema.rs
+index 1fd542e..fb32064 100644
+--- a/crates/db/src/schema.rs
++++ b/crates/db/src/schema.rs
+@@ -63,7 +63,11 @@ pub fn configure_connection(conn: &Connection) -> Result<()> {
+     conn.busy_timeout(std::time::Duration::from_millis(BUSY_TIMEOUT_MS))?;
+     conn.pragma_update(None, "foreign_keys", true)?;
+     conn.pragma_update(None, "journal_mode", "wal")?;
+-    conn.pragma_update(None, "synchronous", "normal")?;
++    let durability = std::env::var("CAMPFIRE_SQLITE_SYNCHRONOUS").unwrap_or_else(|_| "NORMAL".into());
++    if !matches!(durability.as_str(), "FULL" | "NORMAL") {
++        return Err(crate::Error::other("invalid CAMPFIRE_SQLITE_SYNCHRONOUS"));
++    }
++    conn.pragma_update(None, "synchronous", durability)?;
+     conn.pragma_update(None, "journal_size_limit", 67_108_864)?;
+     conn.pragma_update(None, "cache_size", 2000)?;
+     Ok(())

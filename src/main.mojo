@@ -4,6 +4,7 @@ from app import App
 import jobs
 import cable
 from file_transfer import FileTransfer
+from body_stream import BodyStream
 from http import parse_headers, html, chunked
 
 
@@ -19,8 +20,10 @@ struct Connection(Copyable, Movable):
     var started: Int
     var websocket: cable.Cable
     var download: FileTransfer
+    var upload: BodyStream
 
     def close(mut self):
+        self.upload.close()
         self.download.close()
         _ = external_call["os_close", Int](self.fd)
         self.fd = -1
@@ -48,19 +51,29 @@ struct Connection(Copyable, Movable):
         var size = 0
         var cl = req.header("content-length")
         if cl != "":
-            if cl.byte_length() > 8:
+            if cl.byte_length() > 18:
                 raise Error("Invalid Content-Length")
             for digit in cl.as_bytes():
                 if digit < 48 or digit > 57:
                     raise Error("Invalid Content-Length")
             size = Int(cl)
-        if size < 0 or size > 67108864:
+        var spool = req.header("content-type").startswith("multipart/form-data") or (req.method=="PUT" and req.path.startswith("/rails/active_storage/disk/"))
+        var limit = Int(getenv("MULTIPART_BYTESIZE_LIMIT","10737418240")) if spool else 67108864
+        if size < 0 or size > limit:
             self.outgoing = html("Body too large", 413).pack(False)
             self.close_after = True
             return
         var consumed = end+4+size
         var complete = self.incoming.byte_length()>=consumed
-        if req.header("transfer-encoding")!="":
+        if spool:
+            var received = self.upload.feed(String(unsafe_from_utf8=self.incoming.as_bytes()[end+4:]),size,req.header("transfer-encoding")!="")
+            complete = received[1]
+            consumed = end+4+received[0]
+            req.body_fd = self.upload.fd
+            req.body_size = self.upload.size
+            if not complete:
+                self.incoming = String(unsafe_from_utf8=self.incoming.as_bytes()[:end+4])+String(unsafe_from_utf8=self.incoming.as_bytes()[consumed:])
+        elif req.header("transfer-encoding")!="":
             var decoded = chunked(String(unsafe_from_utf8=self.incoming.as_bytes()[end+4:]))
             complete = decoded[1]>0
             consumed = end+4+decoded[1]
@@ -108,6 +121,7 @@ struct Connection(Copyable, Movable):
             self.outgoing = html("Request could not be processed", 400).pack(
                 False
             )
+        self.upload.close()
         self.sent = 0
 
 
@@ -141,7 +155,7 @@ def serve(listener: Int, db_path: String, cache_limit: Int) raises:
                     if connections[i].fd < 0:
                         slot = i
                         break
-                var conn = Connection(fd, "", "", 0, now, False, False, 0, cable.Cable(), FileTransfer())
+                var conn = Connection(fd, "", "", 0, now, False, False, 0, cable.Cable(), FileTransfer(), BodyStream())
                 if slot >= 0:
                     connections[slot] = conn^
                 elif len(connections) < 1024:
@@ -163,7 +177,7 @@ def serve(listener: Int, db_path: String, cache_limit: Int) raises:
                     connections[i].websocket.finish(app.db)
                     connections[i].close()
                     continue
-            if now-connections[i].touched>30000 or (connections[i].websocket.uid=="" and connections[i].started>0 and now-connections[i].started>30000):
+            if now-connections[i].touched>30000 or (connections[i].websocket.uid=="" and connections[i].started>0 and now-connections[i].started>(1800000 if connections[i].upload.fd>=0 else 30000)):
                 connections[i].websocket.finish(app.db)
                 connections[i].close()
                 continue
@@ -213,12 +227,12 @@ def serve(listener: Int, db_path: String, cache_limit: Int) raises:
                         connections[i].close_after = connections[i].websocket.closed
                     else:
                         connections[i].dispatch(app)
-                except:
+                except e:
                     if connections[i].websocket.uid!="":
                         connections[i].websocket.finish(app.db)
                         connections[i].outgoing = cable.frame("\x03\xea",8)
                     else:
-                        connections[i].outgoing = html("Malformed request",400).pack(False)
+                        connections[i].outgoing = html("Body too large",413).pack(False) if String(e)=="Upload body too large" else html("Malformed request",400).pack(False)
                     connections[i].close_after = True
                 if connections[i].incoming.byte_length() > 67141632:
                     connections[i].close()

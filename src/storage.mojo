@@ -5,6 +5,7 @@ from database import Database
 from crypto import Signer, base64, json_string, url_encode
 from http import Request, Response, html, validator
 from parameters import Upload, Form
+from body_stream import read_slice
 from runtime import read_file, digest
 import media
 import templates
@@ -102,6 +103,8 @@ def metadata(mut db: Database, data: String, kind: String) raises -> String:
 
 
 def upload(mut db: Database, file: Upload) raises -> String:
+    if file.fd>=0:
+        return upload_spooled(db,file)
     var key = token()
     var now = db.scalar("SELECT strftime('%Y-%m-%d %H:%M:%f','now')")
     var kind = identify(file.data)
@@ -109,6 +112,73 @@ def upload(mut db: Database, file: Upload) raises -> String:
     store_bytes(db,key,file.data)
     _ = db.rows("INSERT INTO active_storage_blobs(key,filename,content_type,metadata,byte_size,checksum,created_at,service_name) VALUES(?,?,?,?,?,?,?,'local')",[key,safe_filename(file.filename),kind,meta,String(file.data.byte_length()),checksum(file.data),now])
     return db.last_id()
+
+
+def checksum_fd(fd: Int, offset: Int, size: Int) raises -> String:
+    var bytes = List[UInt8](length=16,fill=0)
+    if external_call["fs_md5_range",Int](fd,offset,size,bytes.unsafe_ptr())!=16:
+        raise Error("Upload checksum failed")
+    return base64(String(unsafe_from_utf8=Span(unsafe_ptr=bytes.unsafe_ptr(),length=16)))
+
+
+def store_spooled(mut db: Database, key: String, file: Upload) raises:
+    var rel = relative(key)
+    var directory = root()+"/"+String(rel[byte=:5])
+    if external_call["fs_mkdirs",Int](directory.as_c_string_span())!=0:
+        raise Error("Cannot create storage directory")
+    var path = root()+"/"+rel
+    if external_call["fs_copy_range_new",Int](file.fd,file.offset,file.size,path.as_c_string_span())!=0:
+        raise Error("Cannot save upload")
+    db.pending_files.append(path)
+
+
+def metadata_file(mut db: Database, key: String, kind: String) raises -> String:
+    var path = root()+"/"+relative(key)
+    var meta = String('{"identified":true,"analyzed":true}')
+    if kind.startswith("image/") or kind=="application/pdf":
+        var dims = List[Int](length=2,fill=0)
+        if external_call["image_dimensions_path",Int](path.as_c_string_span(),dims.unsafe_ptr())==0:
+            meta = '{"identified":true,"analyzed":true,"width":'+String(dims[0])+',"height":'+String(dims[1])+'}'
+    elif kind.startswith("video/") or kind.startswith("audio/"):
+        var rel = relative(key)
+        var base = root()
+        var fd = external_call["fs_open_beneath",Int](base.as_c_string_span(),rel.as_c_string_span())
+        if fd<0:
+            raise Error("Cannot open media")
+        try:
+            meta = media.metadata(db,"",kind,fd)
+        except:
+            pass
+        _ = external_call["os_close",Int](fd)
+    return meta^
+
+
+def upload_spooled(mut db: Database, file: Upload) raises -> String:
+    var key = token()
+    var kind = identify(read_slice(file.fd,file.offset,min(file.size,65536)))
+    var digest = checksum_fd(file.fd,file.offset,file.size)
+    store_spooled(db,key,file)
+    var meta = metadata_file(db,key,kind)
+    _ = db.rows("INSERT INTO active_storage_blobs(key,filename,content_type,metadata,byte_size,checksum,created_at,service_name) VALUES(?,?,?,?,?,?,strftime('%Y-%m-%d %H:%M:%f','now'),'local')",[key,safe_filename(file.filename),kind,meta,String(file.size),digest])
+    return db.last_id()
+
+
+def open_blob(key: String) raises -> Int:
+    var base = root()
+    var rel = relative(key)
+    var fd = external_call["fs_open_beneath",Int](base.as_c_string_span(),rel.as_c_string_span())
+    if fd<0:
+        raise Error("Missing stored upload")
+    return fd
+
+
+def verify_file(mut db: Database, blob: String) raises:
+    var row = db.rows("SELECT key,byte_size FROM active_storage_blobs WHERE id=?",[blob])[0].copy()
+    var fd = open_blob(row[0])
+    var size = external_call["fs_size",Int](fd)
+    _ = external_call["os_close",Int](fd)
+    if size!=Int(row[1]):
+        raise Error("Incomplete stored upload")
 
 
 def attach(mut db: Database, blob: String, record: String, id: String, name: String) raises:
@@ -279,11 +349,11 @@ def variant(mut db: Database, blob: String, transformations: String, symbols: Bo
     var height = Int(db.scalar("SELECT json_extract(?,'$[1]')",[dimensions]))
     if width<1 or height<1 or width>4096 or height>4096:
         raise Error("Invalid variant dimensions")
-    var source = read_file(root(),relative(row[0][0]),134217728)
+    var source_path = root()+"/"+relative(row[0][0])
     var address = 0
     var size = 0
     var crop = db.scalar("SELECT json_type(?,'$.resize_to_fill')",[transformations])=="array"
-    if external_call["image_transform",Int](source.as_bytes().unsafe_ptr(),source.byte_length(),width,height,Int(crop),format.as_c_string_span(),Pointer(to=address),Pointer(to=size))!=0:
+    if external_call["image_transform_path",Int](source_path.as_c_string_span(),width,height,Int(crop),format.as_c_string_span(),Pointer(to=address),Pointer(to=size))!=0:
         raise Error("Cannot decode image")
     var output = Pointer[UInt8,MutUntrackedOrigin](unsafe_from_address=address)
     var body = String(unsafe_from_utf8=Span(unsafe_ptr=output,length=size))
@@ -303,17 +373,23 @@ def preview(mut db: Database, blob: String) raises -> String:
     var pixels = db.rows("SELECT coalesce(json_extract(?,'$.width'),0),coalesce(json_extract(?,'$.height'),0)",[row[3],row[3]])[0].copy()
     if row[2]!="application/pdf" and (Int(pixels[0])<1 or Int(pixels[1])<1 or Int(pixels[0])>250000000//Int(pixels[1])):
         raise Error("Media too large or undecodable")
-    var source = read_file(root(),relative(row[0]),134217728)
-    if row[2].startswith("video/"):
-        var data = media.poster(source,row[2])
-        stored = upload(db,Upload(row[1]+".jpg","image/jpeg",data))
+    var fd = open_blob(row[0])
+    var data = String()
+    try:
+        if row[2].startswith("video/"):
+            data = media.poster("",row[2],fd)
+        elif row[2]=="application/pdf":
+            data = media.pdf_preview("",fd)
+    except e:
+        _ = external_call["os_close",Int](fd)
+        raise e^
+    _ = external_call["os_close",Int](fd)
+    if data!="":
+        var pdf = row[2]=="application/pdf"
+        stored = upload(db,Upload(row[1]+(".png" if pdf else ".jpg"),"image/png" if pdf else "image/jpeg",data))
         attach(db,stored,"ActiveStorage::Blob",blob,"preview_image")
         return stored^
-    if row[2]=="application/pdf":
-        var data = media.pdf_preview(source)
-        stored = upload(db,Upload(row[1]+".png","image/png",data))
-        attach(db,stored,"ActiveStorage::Blob",blob,"preview_image")
-        return stored^
+
     return blob
 
 
@@ -399,7 +475,7 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
         if req.method!="POST":
             return html("Not found",404)
         var size = f.fields.get("blob[byte_size]","")
-        if size=="" or Int(size)<0 or Int(size)>67108864:
+        if size=="" or Int(size)<0 or Int(size)>Int(getenv("MULTIPART_BYTESIZE_LIMIT","10737418240")):
             return html("Invalid upload size",422)
         var key = token()
         var name = safe_filename(f.fields.get("blob[filename]","file"))
@@ -453,17 +529,28 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
                 return html("Unauthorized",401)
             var length = db.scalar("SELECT json_extract(?,'$.content_length')",[data])
             var expected = db.scalar("SELECT json_extract(?,'$.checksum')",[data])
-            if String(req.body.byte_length())!=length or checksum(req.body)!=expected:
+            var actual_size = req.body_size if req.body_fd>=0 else req.body.byte_length()
+            var actual_checksum = checksum_fd(req.body_fd,0,actual_size) if req.body_fd>=0 else checksum(req.body)
+            if String(actual_size)!=length or actual_checksum!=expected:
                 return html("Upload checksum mismatch",422)
             var existing = False
             try:
-                existing = checksum(read_file(root(),relative(key),134217728))==expected
+                var fd = open_blob(key)
+                try:
+                    existing = checksum_fd(fd,0,external_call["fs_size",Int](fd))==expected
+                except:
+                    existing = False
+                _ = external_call["os_close",Int](fd)
             except:
                 pass
             if not existing:
-                store_bytes(db,key,req.body)
-            var kind = identify(req.body)
-            _ = db.rows("UPDATE active_storage_blobs SET content_type=?,metadata=? WHERE key=?",[kind,metadata(db,req.body,kind),key])
+                if req.body_fd>=0:
+                    store_spooled(db,key,Upload("","", "",req.body_fd,0,req.body_size))
+                else:
+                    store_bytes(db,key,req.body)
+            var sample = read_slice(req.body_fd,0,min(req.body_size,65536)) if req.body_fd>=0 else req.body
+            var kind = identify(sample)
+            _ = db.rows("UPDATE active_storage_blobs SET content_type=?,metadata=? WHERE key=?",[kind,metadata_file(db,key,kind),key])
             return html("",204)
         var blob = db.scalar("SELECT id FROM active_storage_blobs WHERE key=?",[key])
         var download_req = req.copy()
@@ -486,12 +573,10 @@ def profile_upload(mut db: Database, f: Form, id: String, account: Bool = False)
     var name = "account[logo]" if account else "user[avatar]"
     if name in f.files:
         var file = f.files[name].copy()
-        if not identify(file.data).startswith("image/"):
-            raise Error("Upload must be an image")
-        var dims = List[Int](length=2,fill=0)
-        if external_call["image_dimensions",Int](file.data.as_bytes().unsafe_ptr(),file.data.byte_length(),dims.unsafe_ptr())!=0:
-            raise Error("Invalid image")
         var blob = upload(db,file)
+        var row = db.rows("SELECT key,content_type,metadata FROM active_storage_blobs WHERE id=?",[blob])[0].copy()
+        if not row[1].startswith("image/") or db.scalar("SELECT json_extract(?,'$.width')",[row[2]])=="":
+            raise Error("Invalid image")
         attach(db,blob,"Account" if account else "User",id,"logo" if account else "avatar")
 
 
