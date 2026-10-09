@@ -1,6 +1,6 @@
 from std.ffi import external_call
 from database import Database
-from http import Request, Response, html
+from http import Request, Response, html, conditional
 from text import params, positive, token, plain_text, escape
 import views
 import jobs
@@ -9,6 +9,7 @@ import schema
 import runtime
 import controllers
 import parameters
+import accounts
 import pubsub
 import ui
 import message_actions
@@ -105,12 +106,16 @@ struct App(Movable):
         if req.method!="GET" and req.method!="POST" and req.method!="PATCH" and req.method!="PUT" and req.method!="DELETE":
             return html("Method not supported",405).pack(False)
         var mutation = req.method != "GET"
-        _ = self.db.rows("BEGIN IMMEDIATE" if mutation else "BEGIN")
+        _ = self.db.rows("BEGIN IMMEDIATE" if mutation or req.path.startswith("/rails/active_storage/") or req.path.endswith("/avatar") or req.path=="/account/logo" else "BEGIN")
         try:
             var result = html("",0)
             if req.path.startswith("/rails/active_storage/"):
                 var storage_uid = self.user(req) if mutation else String()
                 result = storage.route(self.db,self.signer,req,storage_uid,form)
+            if result.status==0 and req.path.startswith("/users/") and req.path.endswith("/avatar") and req.method=="GET" and self.user(req)=="":
+                result = accounts.request_login(self.db,self.signer,req)
+            if result.status==0 and req.path.startswith("/join/") and self.user(req)!="":
+                result = ui.redirect("/",302)
             if result.status==0:
                 result = controllers.public(self.db,self.signer,req,form)
             if result.status!=0:
@@ -119,7 +124,7 @@ struct App(Movable):
                     storage.rollback(self.db)
                 else:
                     _ = self.db.rows("COMMIT")
-                    self.db.pending_files.clear()
+                    storage.commit(self.db)
                 self.invalidate()
                 return result.pack(req.gzip())
             if req.path=="/session/new" and req.method=="GET":
@@ -141,7 +146,7 @@ struct App(Movable):
             var uid = self.user(req)
             if uid=="":
                 _ = self.db.rows("ROLLBACK")
-                return html("",302,"Location: /session/new\r\n").pack(False)
+                return accounts.request_login(self.db,self.signer,req).pack(False)
             result = controllers.route(self.db,self.signer,req,uid,form)
             if result.status==0:
                 result = html("Not found",404)
@@ -151,7 +156,7 @@ struct App(Movable):
                 storage.rollback(self.db)
             else:
                 _ = self.db.rows("COMMIT")
-                self.db.pending_files.clear()
+                storage.commit(self.db)
                 pubsub.flush(self.db)
                 if mutation:
                     self.invalidate()
@@ -213,6 +218,8 @@ struct App(Movable):
             req.path += "/"+mid
         var form = parameters.Form()
         if boost:
+            if req.method=="POST" and String(raw.strip())=="":
+                return html("Boost is empty",422)
             req.path = "/messages/"+mid+"/boosts"
             if len(segments)==8:
                 req.path += "/"+String(positive(String(segments[7])))
@@ -245,7 +252,7 @@ struct App(Movable):
                 return result^
             var bid = self.db.last_id()
             _ = self.db.rows("COMMIT")
-            self.db.pending_files.clear()
+            storage.commit(self.db)
             pubsub.flush(self.db)
             self.invalidate()
             if req.method=="DELETE":
@@ -269,7 +276,7 @@ struct App(Movable):
         var rows = self.db.rows(
             (
                 "SELECT u.id,s.id,s.last_active_at FROM sessions s JOIN users u"
-                " ON u.id=s.user_id WHERE s.token=? AND u.status=0 AND NOT"
+                " ON u.id=s.user_id WHERE s.token=? AND u.status=0 AND u.role<>2 AND NOT"
                 " EXISTS(SELECT 1 FROM bans b WHERE b.user_id=u.id)"
             ),
             [tok],
@@ -337,7 +344,7 @@ struct App(Movable):
         return html(
             "",
             302,
-            "Location: /\r\nSet-Cookie: session_token="
+            "Location: "+accounts.post_login(self.db,self.signer,req)+"\r\nSet-Cookie: mojo_return_to=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0\r\nSet-Cookie: session_token="
             + self.signer.cookie(tok, expiry)
             + "; Path=/; HttpOnly; SameSite=Lax; Max-Age=631152000"+("; Secure" if req.origin().startswith("https://") else "")+"\r\n",
         )
@@ -345,7 +352,7 @@ struct App(Movable):
     def read(mut self, req: Request) raises -> String:
         var uid = self.user(req)
         if uid == "":
-            return html("", 302, "Location: /session/new\r\n").pack(False)
+            return accounts.request_login(self.db,self.signer,req).pack(False)
         if req.path == "/":
             var rid = self.db.scalar("SELECT room_id FROM memberships WHERE user_id=? AND room_id=?",[uid,req.cookie("last_room") if req.cookie("last_room")!="" else req.cookie("last_room_visited")])
             if rid=="":
@@ -387,7 +394,7 @@ struct App(Movable):
             + ":"
             + req.header("turbo-frame")
             + ":"
-            + req.cookie("last_room_visited")+req.cookie("last_room")
+            + req.cookie("last_room_visited")+req.cookie("last_room")+req.header("if-none-match")
         )
         if key in self.cache:
             return self.cache[key]
@@ -446,13 +453,14 @@ struct App(Movable):
             var at_message = len(segments)==4 and String(segments[3]).startswith("@")
             if at_message:
                 var anchor = String(String(segments[3])[byte=1:])
-                if self.db.scalar("SELECT id FROM messages WHERE id=? AND room_id=?",[anchor,rid])=="":
-                    return html("Message not found",404).pack(False)
-                query_filter += "AND m.created_at >= (SELECT coalesce(min(created_at),(SELECT created_at FROM messages WHERE id=?)) FROM (SELECT created_at FROM messages WHERE room_id=? AND created_at <= (SELECT created_at FROM messages WHERE id=?) ORDER BY created_at DESC LIMIT 20)) "
-                args.append(anchor)
-                args.append(rid)
-                args.append(anchor)
-                direction = "ASC"
+                if self.db.scalar("SELECT id FROM messages WHERE id=? AND room_id=?",[anchor,rid])!="":
+                    query_filter += "AND m.id IN (SELECT id FROM (SELECT id FROM messages WHERE room_id=? AND created_at<(SELECT created_at FROM messages WHERE id=?) ORDER BY created_at DESC LIMIT 40) UNION ALL SELECT ? UNION ALL SELECT id FROM (SELECT id FROM messages WHERE room_id=? AND created_at>(SELECT created_at FROM messages WHERE id=?) ORDER BY created_at LIMIT 40)) "
+                    args.append(rid)
+                    args.append(anchor)
+                    args.append(anchor)
+                    args.append(rid)
+                    args.append(anchor)
+                    direction = "ASC"
             var rows = self.db.rows(
                 "SELECT * FROM ("
                 + MESSAGE_COLUMNS
@@ -461,7 +469,7 @@ struct App(Movable):
                 + direction
                 + ",m.id "
                 + direction
-                + " LIMIT 40) ORDER BY 3,1",
+                + (" LIMIT 81) ORDER BY 3,1" if at_message and direction=="ASC" else " LIMIT 40) ORDER BY 3,1"),
                 args,
             )
             if len(segments) == 4 and not at_message:
@@ -489,7 +497,7 @@ struct App(Movable):
                 )
         else:
             return html("Not found", 404).pack(False)
-        var wire = result.pack(req.gzip())
+        var wire = conditional(result^,req).pack(req.gzip())
         if (
             self.cache_limit > 0
             and wire.byte_length() + key.byte_length() < self.cache_limit
@@ -521,7 +529,7 @@ struct App(Movable):
         var fields = parsed.fields.copy()
         var raw_body = fields.get("message[body]", "")
         var text = richtext.resolved(self.db,self.signer,raw_body,True)
-        var canonical = richtext.convert(raw_body)
+        var canonical = richtext.canonical(self.db,raw_body)
         var has_file = "message[attachment]" in parsed.files or fields.get("message[attachment]","") != ""
         if (text.strip() == "" and not has_file) or text.byte_length() > 65536:
             return html("Text message must contain 1–65536 bytes", 422)
@@ -566,7 +574,9 @@ struct App(Movable):
                     blob = self.signer.verify(self.db,"ActiveStorage",fields.get("message[attachment]",""),"blob_id",False)
                 if blob=="" or self.db.scalar("SELECT 1 FROM active_storage_blobs WHERE id=?",[blob])!="1":
                     raise Error("Invalid attachment")
+                _ = runtime.read_file(storage.root(),storage.relative(self.db.scalar("SELECT key FROM active_storage_blobs WHERE id=?",[blob])),134217728)
                 storage.attach(self.db,blob,"Message",mid,"attachment")
+                storage.prepare(self.db,blob)
                 if text.strip()=="":
                     text = self.db.scalar("SELECT filename FROM active_storage_blobs WHERE id=?",[blob])
             _ = self.db.rows(
@@ -577,6 +587,7 @@ struct App(Movable):
                 ),
                 [canonical, mid, now, now],
             )
+            richtext.sync_embeds(self.db,self.signer,self.db.last_id(),canonical)
             _ = self.db.rows(
                 "INSERT INTO message_search_index(rowid,body) VALUES(?,?)",
                 [mid, text],
@@ -594,12 +605,13 @@ struct App(Movable):
                     " room_id=? AND user_id<>? AND involvement<>'invisible' AND"
                     " (connected_at IS NULL OR connected_at <"
                     " datetime('now','-60 seconds'))"
+                    " AND (unread_at IS NULL OR (SELECT type FROM rooms WHERE id=room_id)='Rooms::Direct')"
                 ),
                 [now, now, rid, uid],
             )
             jobs.enqueue(self.db,mid)
             _ = self.db.rows("COMMIT")
-            self.db.pending_files.clear()
+            storage.commit(self.db)
             jobs.count(0)
             var rows = self.db.rows(MESSAGE_COLUMNS + "WHERE m.id=?", [mid])
             var body = (

@@ -6,6 +6,7 @@ from text import escape, positive, params
 import templates
 import views
 import ui
+import storage
 import pubsub
 from accounts import stamp
 
@@ -32,6 +33,9 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
     var parts = req.path.split("/")
     var verb = req.method
     var now = stamp(db)
+    if req.path=="/rooms" and verb=="GET":
+        var last = db.scalar("SELECT room_id FROM memberships WHERE user_id=? ORDER BY room_id DESC LIMIT 1",[uid])
+        return ui.redirect("/rooms/"+last if last!="" else "/")
     if req.path.startswith("/autocompletable/users"):
         var q = params(req.query)
         var rid = q.get("room_id","")
@@ -42,7 +46,9 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
         if rid!="":
             sql += " AND id IN (SELECT user_id FROM memberships WHERE room_id=?)"
             args.append(rid)
-        var users = db.rows(sql+" ORDER BY lower(name) LIMIT 20",args)
+        var page = max(1,min(100000,Int(q.get("page","1"))))
+        args.append(String((page-1)*20))
+        var users = db.rows(sql+" ORDER BY lower(name),id LIMIT 20 OFFSET ?",args)
         var items = List[String]()
         var body = String()
         for user in users:
@@ -76,20 +82,37 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
                 return html(views.layout(v,req))
             if len(parts)==4 and String(parts[3])!="new":
                 return ui.redirect("/rooms/"+rid)
+            if direct and rid!="":
+                var body = String('<section class="directs--edit margin-block-end">')
+                for member in db.rows("SELECT u.id,u.name,strftime('%Y%m%d%H%M%S',u.updated_at) FROM users u JOIN memberships m ON m.user_id=u.id WHERE m.room_id=? ORDER BY lower(u.name)",[rid]):
+                    body += '<div class="member flex flex-column gap fill-shade pad border-radius"><a class="btn avatar" href="/users/'+member[0]+'"><img src="'+escape(signer.avatar(member[0],member[2]))+'" width="48" height="48"></a><strong>'+escape(member[1])+'</strong></div>'
+                body += '</section>'+ui.form("/rooms/directs/"+rid,"","delete","Delete Ping")
+                return ui.page(db,signer,uid,req,"Ping",body)
             var name = "New room" if rid=="" else db.scalar("SELECT coalesce(name,'') FROM rooms WHERE id=?",[rid])
-            var fields = ui.input("room[name]",name,"Name this room")
+            var can_edit = rid=="" or may_administer(db,uid,rid)
+            var fields = ui.field("room[name]",name,"Name this room","everyone","text","required" if can_edit else "readonly")
+            var other = "opens" if type_path=="closeds" else "closeds"
+            if can_edit:
+                fields += '<a class="btn" data-turbo-action="replace" href="/rooms/'+other+("/"+rid+"/edit" if rid!="" else "/new")+'">'+("Give everyone access to this room" if type_path=="closeds" else "Give only some access to this room")+'</a>'
+            fields += '<menu class="flex flex-column gap margin-none pad fill-shade border-radius">'
+            if type_path=="opens":
+                for user in db.rows("SELECT id,name FROM users WHERE status=0 ORDER BY lower(name)"):
+                    fields += '<li class="flex align-center gap"><a href="/users/'+user[0]+'">'+escape(user[1])+'</a></li>' 
             if type_path=="closeds":
                 var users = db.rows("SELECT id,name FROM users WHERE status=0 ORDER BY lower(name)")
                 for user in users:
                     var checked = db.scalar("SELECT 1 FROM memberships WHERE room_id=? AND user_id=?",[rid,user[0]])=="1" or (rid=="" and user[0]==uid)
-                    fields += '<label><input type="checkbox" name="user_ids[]" value="'+user[0]+'"'+(' checked' if checked else '')+'>'+escape(user[1])+'</label>'
-            var body = ui.form("/rooms/"+type_path+("/"+rid if rid!="" else ""),fields,"patch" if rid!="" else "post","Save")
-            if rid!="":
+                    fields += '<label><input type="checkbox" name="user_ids[]" value="'+user[0]+'"'+(' checked' if checked else '')+(' disabled' if not can_edit else '')+'>'+escape(user[1])+'</label>'
+            fields += "</menu>"
+            var body = ui.form("/rooms/"+type_path+("/"+rid if rid!="" else ""),fields,"patch" if rid!="" else "post","Save") if can_edit else fields
+            if rid!="" and can_edit:
                 body += ui.form("/rooms/"+type_path+"/"+rid,"","delete","Delete room")
             return ui.page(db,signer,uid,req,"Room settings",body)
         if verb=="DELETE":
             return destroy(db,rid,uid)
         if verb!="POST" and verb!="PATCH" and verb!="PUT":
+            return html("Not found",404)
+        if (rid!="" and (direct or verb=="POST")) or (rid=="" and verb!="POST"):
             return html("Not found",404)
         var members = ids(db,uid,f,direct)
         var kind = "Rooms::Direct" if direct else ("Rooms::Open" if type_path=="opens" else "Rooms::Closed")
@@ -140,10 +163,8 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
 def destroy(mut db: Database, rid: String, uid: String) raises -> Response:
     if rid=="" or not may_administer(db,uid,rid):
         return html("Forbidden",403)
-    _ = db.rows("DELETE FROM boosts WHERE message_id IN (SELECT id FROM messages WHERE room_id=?)",[rid])
-    _ = db.rows("DELETE FROM message_search_index WHERE rowid IN (SELECT id FROM messages WHERE room_id=?)",[rid])
-    _ = db.rows("DELETE FROM action_text_rich_texts WHERE record_type='Message' AND record_id IN (SELECT id FROM messages WHERE room_id=?)",[rid])
-    _ = db.rows("DELETE FROM messages WHERE room_id=?",[rid])
+    # Revoke access immediately; bounded background transactions remove history.
+    _ = db.rows("UPDATE rooms SET type=CASE WHEN type='Rooms::Open' THEN 'Rooms::Closed' ELSE type END WHERE id=?",[rid])
     _ = db.rows("DELETE FROM memberships WHERE room_id=?",[rid])
-    _ = db.rows("DELETE FROM rooms WHERE id=?",[rid])
+    _ = db.rows("INSERT INTO mojo_jobs(message_id,kind) VALUES(?,'remove_room')",[rid])
     return ui.redirect("/")

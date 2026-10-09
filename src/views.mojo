@@ -54,7 +54,15 @@ def emoji(s: String) -> Bool:
     return True
 
 
-def message(
+def message(mut db: Database, mut signer: Signer, row: List[String]) raises -> String:
+    try:
+        return render_message(db,signer,row)
+    except e:
+        print("Could not render message",row[0],String(e))
+        return '<div class="message message--formatted message--failed center"><div class="message__body"><div class="message__body-content txt-align-center">Failed to load message content</div></div></div>'
+
+
+def render_message(
     mut db: Database, mut signer: Signer, row: List[String]
 ) raises -> String:
     var v = Dict[String, String]()
@@ -83,13 +91,17 @@ def message(
     v["boosts_path"] = "/messages/" + row[0] + "/boosts"
     v["new_boost_path"] = v["boosts_path"] + "/new"
     v["all_emoji"] = "1" if emoji(richtext.convert(row[7], True)) else "0"
-    v["presentation"] = storage.presentation(db,signer,row[0])
-    if v["presentation"] == "":
-        var plain = richtext.resolved(db,signer,row[7],True)
-        if plain.startswith("/play "):
-            v["presentation"] = sounds.presentation(String(plain[byte=6:]))
+    try:
+        v["presentation"] = storage.presentation(db,signer,row[0])
         if v["presentation"] == "":
-            v["presentation"] = '<div class="lexxy-content">\n  '+richtext.resolved(db,signer,row[7])+"\n</div>\n"
+            var plain = richtext.resolved(db,signer,row[7],True)
+            if plain.startswith("/play "):
+                v["presentation"] = sounds.presentation(String(plain[byte=6:]))
+            if v["presentation"] == "":
+                v["presentation"] = '<div class="lexxy-content">\n  '+richtext.resolved(db,signer,row[7])+"\n</div>\n"
+    except e:
+        print("Could not render message presentation",row[0],String(e))
+        v["presentation"] = ""
     var reactions = List[String](["👍", "👏", "👋", "💪", "❤️", "😂", "🎉", "🔥"])
     var titles = List[String](
         [
@@ -108,6 +120,12 @@ def message(
         v["character"] = reactions[i]
         v["title"] = titles[i]
         buttons += t.reaction(v)
+    var attachment = db.rows("SELECT b.id,b.filename FROM active_storage_blobs b JOIN active_storage_attachments a ON a.blob_id=b.id WHERE a.record_type='Message' AND a.name='attachment' AND a.record_id=?",[row[0]])
+    v["has_attachment"] = "1" if len(attachment)>0 else "0"
+    if len(attachment)>0:
+        v["blob_path"] = storage.blob_path(signer,attachment[0][0],attachment[0][1])
+        v["download_path"] = v["blob_path"]+"?disposition=attachment"
+        v["filename"] = attachment[0][1]
     v["reactions"] = buttons^
     v["actions"] = t.actions(v)
     var boosts = db.rows(
@@ -291,7 +309,13 @@ def room(
         var names = List[String]()
         for member in members:
             names.append(member[0])
-        name = ", ".join(names) if len(names)>0 else db.scalar("SELECT name FROM users WHERE id=?",[uid])
+        name = db.scalar("SELECT name FROM users WHERE id=?",[uid])
+        if len(names)==1:
+            name = names[0]
+        elif len(names)==2:
+            name = names[0]+" and "+names[1]
+        elif len(names)>2:
+            name = ", ".join(names[:len(names)-1])+", and "+names[len(names)-1]
     var v = context(db, signer, uid, req, name, "sidebar")
     v["room_id"] = rid
     v["room_name"] = name

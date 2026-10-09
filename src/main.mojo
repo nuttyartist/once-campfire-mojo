@@ -3,7 +3,7 @@ from std.os import getenv
 from app import App
 import jobs
 import cable
-from http import parse_headers, html
+from http import parse_headers, html, chunked
 
 
 @fieldwise_init
@@ -14,6 +14,8 @@ struct Connection(Copyable, Movable):
     var sent: Int
     var touched: Int
     var close_after: Bool
+    var continued: Bool
+    var started: Int
     var websocket: cable.Cable
 
     def close(mut self):
@@ -23,6 +25,8 @@ struct Connection(Copyable, Movable):
         self.outgoing = ""
 
     def dispatch(mut self, mut app: App) raises:
+        if self.started==0:
+            self.started = external_call["os_now_ms",Int]()
         var end = self.incoming.find("\r\n\r\n")
         if end < 0:
             if self.incoming.byte_length() > 32768:
@@ -51,15 +55,28 @@ struct Connection(Copyable, Movable):
             self.outgoing = html("Body too large", 413).pack(False)
             self.close_after = True
             return
-        if self.incoming.byte_length() < end + 4 + size:
+        var consumed = end+4+size
+        var complete = self.incoming.byte_length()>=consumed
+        if req.header("transfer-encoding")!="":
+            var decoded = chunked(String(unsafe_from_utf8=self.incoming.as_bytes()[end+4:]))
+            complete = decoded[1]>0
+            consumed = end+4+decoded[1]
+            req.body = decoded[0]
+        elif complete:
+            req.body = String(unsafe_from_utf8=self.incoming.as_bytes()[end+4:consumed])
+        if not complete:
+            var expect = req.header("expect").lower()
+            if expect!="" and expect!="100-continue":
+                self.outgoing = html("Expectation failed",417).pack(False)
+                self.close_after = True
+            elif expect=="100-continue" and not self.continued:
+                self.outgoing = "HTTP/1.1 100 Continue\r\n\r\n"
+                self.continued = True
             return
-        req.body = String(
-            unsafe_from_utf8=self.incoming.as_bytes()[end + 4 : end + 4 + size]
-        )
-        var remaining = String(
-            unsafe_from_utf8=self.incoming.as_bytes()[end + 4 + size :]
-        )
+        var remaining = String(unsafe_from_utf8=self.incoming.as_bytes()[consumed:])
         self.incoming = remaining^
+        self.continued = False
+        self.started = 0
         if req.path == "/cable" and req.header("upgrade").lower() == "websocket":
             var uid = app.user(req)
             if uid == "":
@@ -85,6 +102,13 @@ struct Connection(Copyable, Movable):
         self.sent = 0
 
 
+def buffered_bytes(connections: List[Connection]) -> Int:
+    var total = 0
+    for conn in connections:
+        total += conn.incoming.byte_length()+conn.outgoing.byte_length()
+    return total
+
+
 def serve(listener: Int, db_path: String, cache_limit: Int) raises:
     var app = App(db_path, cache_limit)
     var connections = List[Connection]()
@@ -108,7 +132,7 @@ def serve(listener: Int, db_path: String, cache_limit: Int) raises:
                     if connections[i].fd < 0:
                         slot = i
                         break
-                var conn = Connection(fd, "", "", 0, now, False, cable.Cable())
+                var conn = Connection(fd, "", "", 0, now, False, False, 0, cable.Cable())
                 if slot >= 0:
                     connections[slot] = conn^
                 elif len(connections) < 1024:
@@ -130,7 +154,7 @@ def serve(listener: Int, db_path: String, cache_limit: Int) raises:
                     connections[i].websocket.finish(app.db)
                     connections[i].close()
                     continue
-            if now - connections[i].touched > 30000:
+            if now-connections[i].touched>30000 or (connections[i].websocket.uid=="" and connections[i].started>0 and now-connections[i].started>30000):
                 connections[i].websocket.finish(app.db)
                 connections[i].close()
                 continue
@@ -147,6 +171,10 @@ def serve(listener: Int, db_path: String, cache_limit: Int) raises:
                 if n == -2:
                     continue
                 if n <= 0:
+                    connections[i].websocket.finish(app.db)
+                    connections[i].close()
+                    continue
+                if buffered_bytes(connections)+n>134217728:
                     connections[i].websocket.finish(app.db)
                     connections[i].close()
                     continue
@@ -172,6 +200,10 @@ def serve(listener: Int, db_path: String, cache_limit: Int) raises:
                 if connections[i].incoming.byte_length() > 67141632:
                     connections[i].close()
             if connections[i].fd >= 0 and connections[i].outgoing != "":
+                if buffered_bytes(connections)>134217728:
+                    connections[i].websocket.finish(app.db)
+                    connections[i].close()
+                    continue
                 var fd = connections[i].fd
                 var offset = connections[i].sent
                 var body = connections[i].outgoing.as_bytes()

@@ -64,20 +64,24 @@ long bus_init(void) {
   if (bus==MAP_FAILED) return -1;
   pthread_mutexattr_t attr; pthread_mutexattr_init(&attr);
   pthread_mutexattr_setpshared(&attr,PTHREAD_PROCESS_SHARED);
+  pthread_mutexattr_setrobust(&attr,PTHREAD_MUTEX_ROBUST);
   int rc=pthread_mutex_init(&bus->mutex,&attr);pthread_mutexattr_destroy(&attr);return rc;
 }
+static void bus_lock(void) {
+  if(pthread_mutex_lock(&bus->mutex)==EOWNERDEAD){for(int i=0;i<BUS_SLOTS;i++)bus->events[i].sequence=-1;bus->sequence+=BUS_SLOTS;pthread_mutex_consistent(&bus->mutex);}
+}
 long bus_sequence(void) {
-  pthread_mutex_lock(&bus->mutex);long n=bus->sequence;pthread_mutex_unlock(&bus->mutex);return n;
+  bus_lock();long n=bus->sequence;pthread_mutex_unlock(&bus->mutex);return n;
 }
 long bus_publish(const void *bytes, long length) {
   if (length<0 || length>BUS_BYTES) return -1;
-  pthread_mutex_lock(&bus->mutex);
+  bus_lock();
   long seq=++bus->sequence;struct event *e=&bus->events[seq%BUS_SLOTS];
   memcpy(e->bytes,bytes,length);e->length=length;e->sequence=seq;
   pthread_mutex_unlock(&bus->mutex);return seq;
 }
 long bus_read(long seq, void *bytes, long capacity) {
-  pthread_mutex_lock(&bus->mutex);
+  bus_lock();
   struct event *e=&bus->events[seq%BUS_SLOTS];long n=e->length;
   if(seq>bus->sequence)n=0;
   else if(e->sequence!=seq || n>capacity)n=-1;
@@ -115,12 +119,30 @@ long image_dimensions(const void *bytes,long length,long *dimensions) {
   dimensions[0]=vips_image_get_width(im);dimensions[1]=vips_image_get_height(im);
   g_object_unref(im);return 0;
 }
-long image_thumbnail(const void *bytes,long length,long width,long height,long crop,void **out,long *size) {
+long image_transform(const void *bytes,long length,long width,long height,long crop,const char *format,void **out,long *size) {
   image_initialize();long dims[2];
   if(width<1||height<1||width>4096||height>4096||image_dimensions(bytes,length,dims)||dims[0]<1||dims[1]<1||dims[0]>250000000/dims[1])return -1;
   VipsImage *thumb=NULL;size_t n=0;
   if(vips_thumbnail_buffer((void*)bytes,length,&thumb,width,"height",(int)height,"crop",crop?VIPS_INTERESTING_CENTRE:VIPS_INTERESTING_NONE,"size",VIPS_SIZE_DOWN,NULL)){vips_error_clear();return -1;}
-  int rc=vips_webpsave_buffer(thumb,out,&n,NULL);g_object_unref(thumb);
+  int rc=-1;
+  if(!strcmp(format,"webp"))rc=vips_webpsave_buffer(thumb,out,&n,NULL);
+  else if(!strcmp(format,"png"))rc=vips_pngsave_buffer(thumb,out,&n,NULL);
+  else if(!strcmp(format,"jpg")||!strcmp(format,"jpeg"))rc=vips_jpegsave_buffer(thumb,out,&n,NULL);
+  else if(!strcmp(format,"gif"))rc=vips_gifsave_buffer(thumb,out,&n,NULL);
+  g_object_unref(thumb);
   if(rc){vips_error_clear();return -1;}*size=(long)n;return 0;
 }
 void buffer_free(void *p) { g_free(p); }
+
+long image_thumbnail(const void *bytes,long length,long width,long height,long crop,void **out,long *size) { return image_transform(bytes,length,width,height,crop,"webp",out,size); }
+
+#include <zlib.h>
+long crc32_bytes(const void *data,long length) { return crc32(0,data,length); }
+#include <dlfcn.h>
+/* libmagic is optional in development and installed in the standalone image. */
+long mime_detect(const void *bytes,long length,char *output,long capacity) {
+ typedef void *(*open_fn)(int);typedef int (*load_fn)(void*,const char*);typedef const char *(*buffer_fn)(void*,const void*,size_t);
+ static void *library,*cookie;static buffer_fn buffer;static int initialized;
+ if(!initialized){initialized=1;library=dlopen("libmagic.so.1",RTLD_LOCAL|RTLD_NOW);if(library){open_fn create=(open_fn)dlsym(library,"magic_open");load_fn load=(load_fn)dlsym(library,"magic_load");buffer=(buffer_fn)dlsym(library,"magic_buffer");if(create&&load&&buffer){cookie=create(0x10|0x200);if(cookie&&load(cookie,NULL)!=0)cookie=NULL;}}}
+ if(!cookie||!buffer)return -1;const char *type=buffer(cookie,bytes,length);if(!type||strlen(type)>=(size_t)capacity)return -1;strcpy(output,type);return strlen(type);
+}

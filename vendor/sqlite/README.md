@@ -1,0 +1,1 @@
+SQLite 3.53.4 amalgamation, copied from the local C comparison checkout's pinned dependency. SQLite is in the public domain; see the dedication in sqlite3.c. Compile flags enable FTS5, thread safety and the default JSON support.

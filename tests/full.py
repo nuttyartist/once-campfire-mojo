@@ -47,7 +47,7 @@ class Full(unittest.TestCase):
  def setUpClass(cls):
   cls.stack=contextlib.ExitStack();cls.addClassCleanup(cls.stack.close)
   cls.output=Path(cls.stack.enter_context(tempfile.TemporaryDirectory(prefix='mojo-full-')))
-  cls.db,_,_=cls.stack.enter_context(local.server('mojo',cls.output,cache=False))
+  cls.db,cls.runtime,_=cls.stack.enter_context(local.server('mojo',cls.output,cache=False))
   cls.labels=json.loads((local.SEED/'labels.json').read_text());cls.cookie=local.login(cls.labels)
   cls.uid=cls.labels['users.david'];cls.rid=cls.labels['rooms.watercooler']
  def request(self,path,method='GET',fields=None,cookie=None,body=None,headers=None):
@@ -97,13 +97,15 @@ class Full(unittest.TestCase):
   res=self.multipart('/users/me/profile',{'_method':'patch'},{'user[avatar]':('avatar.webp','image/webp',image)})
   self.assertEqual(res[0],303,res[2])
   res=self.request('/users/me/sidebar');url=re.findall(rb'src="(/users/[^\"]+/avatar\?[^\"]*)"',res[2])[-1].decode().replace('&amp;','&')
-  res=self.request(url,cookie='');self.assertEqual(res[0],200);self.assertEqual(res[1]['Content-Type'],'image/webp')
+  self.assertEqual(self.request(url,cookie='')[0],302)
+  res=self.request(url);self.assertEqual(res[0],200);self.assertEqual(res[1]['Content-Type'],'image/webp')
   import subprocess
   check=subprocess.run(['ffmpeg','-v','error','-i','pipe:0','-frames:v','1','-f','null','-'],input=res[2],capture_output=True)
   self.assertEqual(check.returncode,0,check.stderr)
  def test_05_direct_room_cannot_be_republished(self):
   res=self.request('/rooms/directs','POST',fields={'user_ids[]':str(self.uid)})
   self.assertEqual(res[0],303);rid=res[1]['Location'].split('/')[-1]
+  self.assertEqual(self.request('/rooms/directs/'+rid,'PATCH',fields={'user_ids[]':str(self.labels['users.kevin'])})[0],404)
   self.assertEqual(self.request('/rooms/opens/'+rid,'PATCH',fields={'room[name]':'must stay private'})[0],404)
   with local.connection(self.db) as db:self.assertEqual(db.execute('SELECT type FROM rooms WHERE id=?',(rid,)).fetchone()[0],'Rooms::Direct')
  def test_06_cable_fragmentation_delivery_and_revocation(self):
@@ -170,5 +172,265 @@ class Full(unittest.TestCase):
   self.assertEqual(received[0]['room']['path'],f'/rooms/{rid}/{bid}-{key}/messages')
   res=self.request(f'/rooms/{rid}/{bid}-{key}/messages','POST',cookie='',body='Via the existing bot API',headers={'Content-Type':'text/plain'})
   self.assertEqual(res[0],201,res[2])
+
+ def test_10_bot_pagination_boosts_and_attachments(self):
+  with local.connection(self.db) as db:
+   bot,key=db.execute("SELECT u.id,u.bot_token FROM users u JOIN memberships m ON m.user_id=u.id WHERE m.room_id=? AND u.role=2 AND u.status=0 LIMIT 1",(self.rid,)).fetchone()
+   expected=[r[0] for r in db.execute('SELECT id FROM (SELECT id,created_at FROM messages WHERE room_id=? ORDER BY created_at DESC,id DESC LIMIT 40) ORDER BY created_at,id',(self.rid,))]
+  path=f'/rooms/{self.rid}/{bot}-{key}/messages'
+  res=self.request(path,cookie='');self.assertEqual(res[0],200,res[2]);rows=json.loads(res[2]);self.assertEqual([x['id'] for x in rows],expected)
+  self.assertIn('avatar_url',rows[0]['creator']);self.assertIn('role',rows[0]['creator'])
+  self.assertEqual(self.request(path+'?before=999999999',cookie='')[0],404)
+  res=self.request(path,'POST',cookie='',body='Bot create, edit and delete',headers={'Content-Type':'text/plain'});self.assertEqual(res[0],201,res[2])
+  mid=int(res[1]['Location'].split('/')[-1]);one=path+'/'+str(mid)
+  res=self.request(one,'PUT',cookie='',body='Updated by bot',headers={'Content-Type':'text/plain'});self.assertEqual(res[0],200,res[2]);self.assertEqual(json.loads(res[2])['body']['plain_text'],'Updated by bot')
+  res=self.request(one+'/boosts','POST',cookie='',body='👍'.encode(),headers={'Content-Type':'text/plain'});self.assertEqual(res[0],201,res[2]);boost=json.loads(res[2]);self.assertEqual(boost['booster']['id'],bot)
+  self.assertEqual(self.request(one+'/boosts/'+str(boost['id']),'DELETE',cookie='')[0],204)
+  self.assertEqual(self.request(one,'DELETE',cookie='')[0],204)
+  res=self.multipart(path,{}, {'attachment':('bot.bin','application/octet-stream',b'Bot binary\x00\xff')});self.assertEqual(res[0],201,res[2])
+ def test_11_last_room_and_permalink(self):
+  res=self.request(f'/rooms/{self.rid}');self.assertIn('last_room=',res[1].get('Set-Cookie',''))
+  res=self.request('/',cookie=self.cookie+f'; last_room={self.rid}');self.assertEqual(res[1]['Location'],f'/rooms/{self.rid}')
+  with local.connection(self.db) as db:mid=db.execute('SELECT id FROM messages WHERE room_id=? ORDER BY created_at LIMIT 1',(self.rid,)).fetchone()[0]
+  res=self.request(f'/rooms/{self.rid}/@{mid}');self.assertEqual(res[0],200,res[2]);self.assertIn(f'data-message-id="{mid}"'.encode(),res[2])
+  self.assertEqual(self.request(f'/rooms/{self.rid}/@999999999')[0],200)
+ def test_12_unfurl_private_urls_and_unsafe_embeds(self):
+  for url in ['http://127.0.0.1/secret','http://[::1]/secret','http://2130706433/secret','http://169.254.169.254/latest/meta-data/','file:///etc/passwd','https://user:pass@127.0.0.1/']:
+   res=self.request('/unfurl_link','POST',fields={'url':url});self.assertEqual(res[0],204,(url,res[2]))
+  content='<p>Preview <action-text-attachment content-type="application/vnd.actiontext.opengraph-embed" filename="A &lt;b&gt;title&lt;/b&gt;" caption="Description" href="/account/join_code" url="http://2130706433/account/logo"></action-text-attachment></p>'
+  res=self.request(f'/rooms/{self.rid}/messages','POST',fields={'message[body]':content})
+  self.assertEqual(res[0],200,res[2]);self.assertIn(b'og-embed__title',res[2]);self.assertNotIn(b'href="/account/join_code"',res[2]);self.assertNotIn(b'2130706433',res[2])
+ def test_13_http_chunked_and_continue(self):
+  body=urllib.parse.urlencode({'message[body]':'Chunked request ✓'}).encode()
+  sock=socket.create_connection(('127.0.0.1',local.PORT),timeout=5);self.addCleanup(sock.close)
+  headers=f'POST /rooms/{self.rid}/messages HTTP/1.1\r\nHost: 127.0.0.1:{local.PORT}\r\nCookie: {self.cookie}\r\nContent-Type: application/x-www-form-urlencoded\r\nTransfer-Encoding: chunked\r\nExpect: 100-continue\r\nConnection: close\r\n\r\n'
+  sock.sendall(headers.encode());self.assertEqual(sock.recv(4096),b'HTTP/1.1 100 Continue\r\n\r\n')
+  for chunk in [body[:9],body[9:]]:sock.sendall(f'{len(chunk):x}\r\n'.encode()+chunk+b'\r\n')
+  sock.sendall(b'0\r\n\r\n');response=b''
+  while True:
+   data=sock.recv(65536)
+   if not data:break
+   response+=data
+  self.assertTrue(response.startswith(b'HTTP/1.1 200'),response[:500]);self.assertIn('Chunked request ✓'.encode(),response)
+ def test_14_video_metadata_poster_and_variant_reuse(self):
+  import subprocess
+  clip=(local.WORKSPACE/'once-campfire/test/fixtures/files/alpha-centuri.mov').read_bytes()
+  res=self.multipart(f'/rooms/{self.rid}/messages',{}, {'message[attachment]':('clip.mov','video/quicktime',clip)})
+  self.assertEqual(res[0],200,res[2]);poster=re.search(rb'poster="([^\"]+)"',res[2]).group(1).decode().replace('&amp;','&')
+  with local.connection(self.db) as db:
+   meta=json.loads(db.execute("SELECT metadata FROM active_storage_blobs WHERE filename='clip.mov' ORDER BY id DESC LIMIT 1").fetchone()[0]);self.assertGreater(meta['width'],0);self.assertGreater(meta['height'],0);self.assertTrue(meta['video'])
+  first=self.request(poster,cookie='');self.assertEqual(first[0],200,first[2]);self.assertEqual(first[1]['Content-Type'],'image/webp')
+  check=subprocess.run(['ffmpeg','-v','error','-i','pipe:0','-frames:v','1','-f','null','-'],input=first[2],capture_output=True);self.assertEqual(check.returncode,0,check.stderr)
+  with local.connection(self.db) as db:count=db.execute('SELECT count(*) FROM active_storage_variant_records').fetchone()[0]
+  self.assertEqual(self.request(poster,cookie='')[2],first[2])
+  with local.connection(self.db) as db:self.assertEqual(db.execute('SELECT count(*) FROM active_storage_variant_records').fetchone()[0],count)
+ def test_15_worker_crash_and_durable_jobs(self):
+  import signal
+  candidates=[]
+  for item in Path('/proc').iterdir():
+   if item.name.isdigit():
+    try:
+     executable=Path(os.readlink(item/'exe'))
+     if executable==self.runtime/'app/campfire':
+      parent=int((item/'stat').read_text().split()[3]);candidates.append((int(item.name),parent))
+    except (OSError,ValueError):pass
+  ids={p for p,_ in candidates};root=next(p for p,parent in candidates if parent not in ids)
+  child=next(p for p,parent in candidates if parent==root);os.kill(child,signal.SIGKILL)
+  deadline=time.monotonic()+5;replaced=False
+  while time.monotonic()<deadline:
+   kids=Path(f'/proc/{root}/task/{root}/children').read_text().split()
+   if len(kids)==7 and str(child) not in kids:replaced=True;break
+   time.sleep(.05)
+  self.assertTrue(replaced);self.assertEqual(self.request('/up')[0],200)
+  with local.connection(self.db) as db:
+   mid=db.execute('SELECT id FROM messages WHERE room_id=? ORDER BY id LIMIT 1',(self.rid,)).fetchone()[0]
+   db.execute('INSERT INTO mojo_jobs(message_id,hooks) VALUES(?,0)',(mid,));job=db.execute('SELECT last_insert_rowid()').fetchone()[0]
+  deadline=time.monotonic()+5;pending=1
+  while time.monotonic()<deadline:
+   with local.connection(self.db) as db:pending=db.execute('SELECT count(*) FROM mojo_jobs WHERE id=?',(job,)).fetchone()[0]
+   if not pending:break
+   time.sleep(.05)
+  self.assertEqual(pending,0)
+ def test_16_conditional_responses_and_authorization(self):
+  res=self.request(f'/rooms/{self.rid}');self.assertEqual(res[0],200);tag=res[1]['ETag']
+  again=self.request(f'/rooms/{self.rid}',headers={'If-None-Match':tag});self.assertEqual(again[0],304);self.assertEqual(again[2],b'')
+  self.assertEqual(self.request(f'/rooms/{self.rid}',cookie='',headers={'If-None-Match':tag})[0],302)
+  asset='/assets/'+json.loads((Path(__file__).resolve().parents[1]/'assets/manifest.json').read_text())['add.svg']['digested_path']
+  res=self.request(asset,cookie='');self.assertEqual(res[0],200);self.assertEqual(self.request(asset,cookie='',headers={'If-None-Match':res[1]['ETag']})[0],304)
+ def test_17_attachment_cleanup_and_if_range(self):
+  data=b'Lifecycle file '+os.urandom(50)
+  res=self.multipart(f'/rooms/{self.rid}/messages',{}, {'message[attachment]':('cleanup.bin','application/octet-stream',data)})
+  self.assertEqual(res[0],200,res[2]);mid=int(re.search(rb'data-message-id="(\d+)"',res[2]).group(1));url=re.search(rb'href="(/rails/active_storage/blobs/proxy/[^\"]+)"',res[2]).group(1).decode()
+  with local.connection(self.db) as db:bid,key=db.execute("SELECT b.id,b.key FROM active_storage_blobs b JOIN active_storage_attachments a ON a.blob_id=b.id WHERE a.record_type='Message' AND a.record_id=?",(mid,)).fetchone()
+  res=self.request(url,cookie='');self.assertEqual(res[2],data);tag=res[1]['ETag']
+  self.assertEqual(self.request(url,cookie='',headers={'If-None-Match':tag})[0],304)
+  res=self.request(url,cookie='',headers={'Range':'bytes=1-9','If-Range':'"old"'});self.assertEqual(res[0],200);self.assertEqual(res[2],data)
+  res=self.request(url,cookie='',headers={'Range':'bytes=1-9','If-Range':tag});self.assertEqual(res[0],206);self.assertNotIn('Content-Encoding',res[1]);self.assertEqual(res[2],data[1:10])
+  self.assertEqual(self.request(f'/rooms/{self.rid}/messages/{mid}','DELETE')[0],200)
+  with local.connection(self.db) as db:
+   self.assertEqual(db.execute('SELECT count(*) FROM messages WHERE id=?',(mid,)).fetchone()[0],0,'message deletion')
+   self.assertEqual(db.execute('SELECT count(*) FROM active_storage_attachments WHERE blob_id=?',(bid,)).fetchone()[0],0,'attachment deletion')
+  self.assertEqual(self.request(url,cookie='')[0],404)
+  with local.connection(self.db) as db:self.assertEqual(db.execute('SELECT count(*) FROM active_storage_blobs WHERE id=?',(bid,)).fetchone()[0],0)
+  self.assertFalse((self.runtime/'files'/key[:2]/key[2:4]/key).exists())
+
+ def test_18_ban_revokes_sessions_and_removes_content(self):
+  with local.connection(self.db) as db:code=db.execute('SELECT join_code FROM accounts').fetchone()[0];rid=db.execute("SELECT id FROM rooms WHERE type='Rooms::Open' LIMIT 1").fetchone()[0]
+  name='Moderation '+os.urandom(5).hex()
+  res=self.request('/join/'+code,'POST',cookie='',fields={'user[name]':name,'user[email_address]':name.replace(' ','')+'@test.invalid','user[password]':'test-password'})
+  self.assertEqual(res[0],303,res[2]);cookie=res[1]['Set-Cookie'].split(';',1)[0]
+  with local.connection(self.db) as db:
+   uid=db.execute('SELECT id FROM users WHERE name=?',(name,)).fetchone()[0]
+   db.execute("UPDATE sessions SET ip_address='203.0.113.7' WHERE user_id=?",(uid,))
+  ws=WS(cookie);self.addCleanup(ws.close)
+  res=self.request(f'/rooms/{rid}/messages','POST',cookie=cookie,fields={'message[body]':'Content to remove '+name})
+  self.assertEqual(res[0],200,res[2]);mid=int(re.search(rb'data-message-id="(\d+)"',res[2]).group(1))
+  self.assertEqual(self.request(f'/users/{uid}/ban','POST',fields={})[0],303)
+  self.assertEqual(ws.until(lambda x:x.get('type')=='disconnect')['reason'],'unauthorized')
+  self.assertEqual(self.request('/users/me/profile',cookie=cookie)[0],302)
+  deadline=time.monotonic()+5
+  while time.monotonic()<deadline:
+   with local.connection(self.db) as db:count=db.execute('SELECT count(*) FROM messages WHERE creator_id=?',(uid,)).fetchone()[0]
+   if count==0:break
+   time.sleep(.03)
+  self.assertEqual(count,0)
+  with local.connection(self.db) as db:
+   self.assertEqual(db.execute('SELECT ip_address FROM bans WHERE user_id=?',(uid,)).fetchall(),[('203.0.113.7',)])
+   self.assertEqual(db.execute('SELECT count(*) FROM message_search_index WHERE rowid=?',(mid,)).fetchone()[0],0)
+   self.assertEqual(db.execute("SELECT count(*) FROM action_text_rich_texts WHERE record_type='Message' AND record_id=?",(mid,)).fetchone()[0],0)
+  self.assertIn(('Unban '+name).encode(),self.request(f'/users/{uid}')[2])
+  self.assertEqual(self.request(f'/users/{uid}/ban','DELETE')[0],303)
+  with local.connection(self.db) as db:self.assertEqual(db.execute('SELECT status FROM users WHERE id=?',(uid,)).fetchone()[0],0)
+ def test_19_account_controls_and_authorization(self):
+  with local.connection(self.db) as db:
+   code,settings=db.execute('SELECT join_code,settings FROM accounts').fetchone();member=self.labels['users.kevin']
+   oldrole=db.execute('SELECT role FROM users WHERE id=?',(member,)).fetchone()[0]
+   db.execute('UPDATE users SET role=0 WHERE id=?',(member,))
+   token='disposable-member-'+os.urandom(8).hex()
+   db.execute("INSERT INTO sessions(token,user_id,last_active_at,created_at,updated_at) VALUES(?,?,datetime('now'),datetime('now'),datetime('now'))",(token,member))
+  # Reuse the independently implemented Rails cookie signer in the parity gate.
+  import parity
+  cookie=parity.sign_cookie(token)
+  try:
+   page=self.request('/account/edit',cookie=cookie)
+   self.assertEqual(page[0],200);self.assertIn(code.encode(),page[2]);self.assertNotIn(b'Regenerate join link',page[2])
+   for path,fields in [('/account',{'account[name]':'Forbidden'}),('/account/bots',{'user[name]':'Forbidden'}),('/account/join_code',{})]:
+    self.assertEqual(self.request(path,'PATCH' if path=='/account' else 'POST',cookie=cookie,fields=fields)[0],403,path)
+   self.assertEqual(self.request('/account','PATCH',fields={'account[settings][restrict_room_creation_to_administrators]':'1'})[0],303)
+   self.assertEqual(self.request('/rooms/opens/new',cookie=cookie)[0],403)
+   self.assertEqual(self.request('/rooms/closeds','POST',cookie=cookie,fields={'room[name]':'Forbidden'})[0],403)
+   self.assertEqual(self.request('/account/join_code','POST',fields={})[0],303)
+   with local.connection(self.db) as db:self.assertNotEqual(db.execute('SELECT join_code FROM accounts').fetchone()[0],code)
+   self.assertEqual(self.request('/join/'+code,cookie='')[0],404)
+  finally:
+   with local.connection(self.db) as db:
+    db.execute('UPDATE accounts SET join_code=?,settings=?',(code,settings));db.execute('UPDATE users SET role=? WHERE id=?',(oldrole,member));db.execute('DELETE FROM sessions WHERE token=?',(token,))
+ def test_20_account_user_pagination_visibility(self):
+  prefix='Page regression '+os.urandom(4).hex()
+  with local.connection(self.db) as db:
+   db.executemany("INSERT INTO users(name,role,status,created_at,updated_at) VALUES(?,0,?,datetime('now'),datetime('now'))",[(prefix+f' {i:04}',i%3) for i in range(1530)])
+  try:
+   for page in [1,2,3]:
+    res=self.request('/account/users.turbo_stream?page='+str(page));self.assertEqual(res[0],200)
+    with local.connection(self.db) as db:expected=[r[0] for r in db.execute('SELECT name FROM users WHERE role=0 AND status IN (0,2) ORDER BY lower(name),id LIMIT 500 OFFSET ?',((page-1)*500,))]
+    import html
+    actual=[html.unescape(x.decode()) for x in re.findall(rb'<strong>([^<]*)</strong>',res[2])]
+    self.assertEqual(actual,expected)
+  finally:
+   with local.connection(self.db) as db:db.execute('DELETE FROM users WHERE name LIKE ?',(prefix+'%',))
+
+ def test_21_login_return_target_and_tampering(self):
+  path=f'/rooms/{self.rid}?via=bookmark'
+  res=self.request(path,cookie='');self.assertEqual(res[0],302)
+  saved=res[1]['Set-Cookie'].split(';',1)[0]
+  with local.connection(self.db) as db:
+   limits=db.execute('SELECT * FROM mojo_login_limits').fetchall()
+   email=db.execute('SELECT email_address FROM users WHERE id=?',(self.uid,)).fetchone()[0]
+  try:
+   res=self.request('/session','POST',cookie=saved,fields={'email_address':email,'password':self.labels['passwords.all']})
+   self.assertEqual(res[0],302);self.assertEqual(res[1]['Location'],path)
+   res=self.request('/session','POST',cookie=saved+'x',fields={'email_address':email,'password':self.labels['passwords.all']})
+   self.assertEqual(res[0],302);self.assertNotIn('//',res[1]['Location']);self.assertNotEqual(res[1]['Location'],path)
+  finally:
+   with local.connection(self.db) as db:
+    db.execute('DELETE FROM mojo_login_limits');db.executemany('INSERT INTO mojo_login_limits VALUES(?,?,?)',limits)
+ def test_22_async_room_delete_and_attachment_cleanup(self):
+  res=self.request('/rooms/opens','POST',fields={'room[name]':'Deletion regression'});self.assertEqual(res[0],303)
+  rid=res[1]['Location'].split('/')[-1]
+  res=self.multipart(f'/rooms/{rid}/messages',{'message[body]':'Delete room content'}, {'message[attachment]':('cleanup.bin','application/octet-stream',b'room cleanup')});self.assertEqual(res[0],200)
+  with local.connection(self.db) as db:
+   mid=db.execute('SELECT id FROM messages WHERE room_id=?',(rid,)).fetchone()[0]
+   key=db.execute("SELECT b.key FROM active_storage_blobs b JOIN active_storage_attachments a ON a.blob_id=b.id WHERE a.record_type='Message' AND a.record_id=?",(mid,)).fetchone()[0]
+  res=self.request('/rooms/opens/'+rid,'DELETE');self.assertIn(res[0],[302,303])
+  until=time.monotonic()+5
+  while time.monotonic()<until:
+   with local.connection(self.db) as db:remaining=db.execute('SELECT count(*) FROM rooms WHERE id=?',(rid,)).fetchone()[0]
+   if not remaining:break
+   time.sleep(.05)
+  self.assertEqual(remaining,0)
+  with local.connection(self.db) as db:
+   for table,column in [('memberships','room_id'),('messages','room_id'),('message_search_index','rowid')]:self.assertEqual(db.execute('SELECT count(*) FROM '+table+' WHERE '+column+'=?',(mid if column=='rowid' else rid,)).fetchone()[0],0)
+  self.assertFalse((self.runtime/'files'/key[:2]/key[2:4]/key).exists())
+ def test_23_richtext_editor_and_malformed_stored_message(self):
+  import html
+  user=json.loads(self.request('/autocompletable/users.json?query=David',headers={'Accept':'application/json'})[2])[0]
+  body='<p>Editing <action-text-attachment sgid="'+user['sgid']+'" content-type="text/html" content="&lt;img src=x onerror=alert(1)&gt;"></action-text-attachment></p>'
+  res=self.request(f'/rooms/{self.rid}/messages','POST',fields={'message[body]':body});self.assertEqual(res[0],200,res[2])
+  with local.connection(self.db) as db:mid=db.execute('SELECT max(id) FROM messages').fetchone()[0]
+  edit=self.request(f'/rooms/{self.rid}/messages/{mid}/edit');self.assertEqual(edit[0],200)
+  value=html.unescape(re.search(rb'<lexxy-editor[^>]+value="([^"]*)"',edit[2]).group(1).decode())
+  self.assertIn('application/vnd.campfire.mention',value);self.assertNotIn('onerror',value);self.assertIn(user['name'],value)
+  for broken in ['<b>'*450+'bad'+'</b>'*450,'<p><action-text-attachment></action-text-attachment></p>']:
+   with local.connection(self.db) as db:db.execute("UPDATE action_text_rich_texts SET body=? WHERE record_type='Message' AND record_id=?",(broken,mid))
+   self.assertEqual(self.request(f'/rooms/{self.rid}')[0],200)
+  # Repair the fixture so later background work never encounters corrupt input.
+  with local.connection(self.db) as db:db.execute("UPDATE action_text_rich_texts SET body=? WHERE record_type='Message' AND record_id=?",('Repaired editor test',mid))
+ def test_24_multiple_byte_ranges_and_redirects(self):
+  from email.parser import BytesParser
+  from email.policy import default
+  data=bytes(range(256))*2
+  res=self.multipart(f'/rooms/{self.rid}/messages',{}, {'message[attachment]':('ranges.bin','application/octet-stream',data)});self.assertEqual(res[0],200)
+  url=re.findall(rb'href="(/rails/active_storage/blobs/proxy/[^"]+)"',res[2])[0].decode().replace('&amp;','&')
+  res=self.request(url,cookie='',headers={'Range':'bytes=0-5,20-23,-3'});self.assertEqual(res[0],206)
+  message=BytesParser(policy=default).parsebytes(('Content-Type: '+res[1]['Content-Type']+'\r\n\r\n').encode()+res[2])
+  self.assertEqual([p.get_payload(decode=True) for p in message.iter_parts()],[data[:6],data[20:24],data[-3:]])
+  self.assertEqual(self.request(url,cookie='',headers={'Range':'bytes=abc-def'})[0],416)
+  redir=self.request(url.replace('/proxy/','/redirect/'),cookie='');self.assertEqual(redir[0],302)
+  location=redir[1]['Location'];self.assertIn('/rails/active_storage/disk/',location)
+  parsed=urllib.parse.urlsplit(location)
+  self.assertEqual(self.request(parsed.path+('?' + parsed.query if parsed.query else ''),cookie='')[2],data)
+ def test_25_webhook_failure_isolated_and_retried(self):
+  from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
+  import threading
+  hits={'bad':0,'good':0}
+  class Handler(BaseHTTPRequestHandler):
+   def log_message(self,*args):pass
+   def do_POST(self):
+    self.rfile.read(int(self.headers['Content-Length']));name=self.path[1:];hits[name]+=1
+    code=503 if name=='bad' and hits[name]==1 else 200
+    self.send_response(code);self.send_header('Content-Type','text/plain');self.end_headers()
+    if code==200:self.wfile.write((name+' isolated reply').encode())
+  server=ThreadingHTTPServer(('127.0.0.1',0),Handler);threading.Thread(target=server.serve_forever,daemon=True).start();self.addCleanup(server.server_close);self.addCleanup(server.shutdown)
+  ids=[]
+  for kind in ['bad','good']:
+   name='Retry '+kind+' '+os.urandom(4).hex()
+   self.assertEqual(self.request('/account/bots','POST',fields={'user[name]':name,'user[webhook_url]':f'http://127.0.0.1:{server.server_port}/{kind}'})[0],303)
+   with local.connection(self.db) as db:ids.append(db.execute('SELECT id FROM users WHERE name=?',(name,)).fetchone()[0])
+  rid=self.request('/rooms/directs','POST',fields={'user_ids[]':ids})[1]['Location'].split('/')[-1]
+  self.assertEqual(self.request(f'/rooms/{rid}/messages','POST',fields={'message[body]':'Delivery isolation'})[0],200)
+  until=time.monotonic()+3
+  while time.monotonic()<until and not hits['good']:time.sleep(.03)
+  self.assertEqual(hits['good'],1);self.assertEqual(hits['bad'],1)
+  with local.connection(self.db) as db:db.execute("UPDATE mojo_jobs SET available_at=0 WHERE attempts>0 AND failed=0")
+  until=time.monotonic()+8;replies=[]
+  while time.monotonic()<until:
+   with local.connection(self.db) as db:replies=db.execute('SELECT m.creator_id,i.body FROM messages m JOIN message_search_index i ON i.rowid=m.id WHERE m.room_id=? AND m.creator_id IN (?,?)',(rid,*ids)).fetchall()
+   if len(replies)==2:break
+   time.sleep(.03)
+  self.assertEqual(set(replies),{(ids[0],'bad isolated reply'),(ids[1],'good isolated reply')});self.assertEqual(hits,{'bad':2,'good':1})
+
+ def test_99_login_limit_shared_across_workers(self):
+  statuses=[self.request('/session','POST',cookie='',fields={'email_address':'nobody@invalid.test','password':'incorrect'})[0] for _ in range(12)]
+  self.assertEqual(statuses[:9],[401]*9);self.assertEqual(statuses[9:],[429]*3)
 
 if __name__=='__main__':unittest.main(verbosity=2)

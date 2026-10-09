@@ -714,6 +714,40 @@ def actions(v: Dict[String, String]) raises -> String:
     out += "</details></div>\n"
     return out^
 
+def avatar(v: Dict[String, String]) raises -> String:
+    var out = String()
+    out += "<svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n"
+    out += "  viewBox=\"0 0 512 512\" class=\"avatar\" aria-hidden=\"true\">\n"
+    out += "  <defs>\n"
+    out += "    <clipPath id=\"porthole\">\n"
+    out += "      <circle cx=\"50%\" cy=\"50%\" r=\"50%\" />\n"
+    out += "    </clipPath>\n"
+    out += "  </defs>\n"
+    out += "\n"
+    out += "  <g>\n"
+    out += "    <rect width=\"100%\" height=\"100%\" rx=\"50\" fill=\""
+    out += escape(v.get("color", ""))
+    out += "\" />\n"
+    out += "\n"
+    out += "    <text x=\"50%\" y=\"50%\" fill=\"#FFFFFF\"\n"
+    out += "      text-anchor=\"middle\" dy=\"0.35em\"\n"
+    out += "      "
+    if (v.get("wide", "") == "1"):
+        out += "textLength=\"85%\" lengthAdjust=\"spacingAndGlyphs\""
+    out += "\n"
+    out += "      font-family=\"-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif\"\n"
+    out += "      font-size=\"230\"\n"
+    out += "      font-weight=\"800\"\n"
+    out += "      letter-spacing=\"-5\">\n"
+    out += "      "
+    out += escape(v.get("initials", ""))
+    out += "\n"
+    out += "    </text>\n"
+    out += "  </g>\n"
+    out += "</svg>\n"
+    out += "\n"
+    return out^
+
 def bell(v: Dict[String, String]) raises -> String:
     var out = String()
     out += "<span>\n"
@@ -1325,6 +1359,91 @@ def lightbox(v: Dict[String, String]) raises -> String:
     out += "    <span class=\"for-screen-reader\">Share file</span>\n"
     out += "  </button>\n"
     out += "</dialog>\n"
+    return out^
+
+def manifest(v: Dict[String, String]) raises -> String:
+    var out = String()
+    out += "{\n"
+    out += "  \"name\": "
+    out += v.get("name", "")
+    out += ",\n"
+    out += "  \"icons\": [\n"
+    out += "    {\n"
+    out += "      \"src\": "
+    out += v.get("logo_path_small", "")
+    out += ",\n"
+    out += "      \"type\": \"image/png\",\n"
+    out += "      \"sizes\": \"192x192\"\n"
+    out += "    },\n"
+    out += "    {\n"
+    out += "      \"src\": "
+    out += v.get("logo_path", "")
+    out += ",\n"
+    out += "      \"type\": \"image/png\",\n"
+    out += "      \"sizes\": \"512x512\"\n"
+    out += "    },\n"
+    out += "    {\n"
+    out += "      \"src\": "
+    out += v.get("logo_path", "")
+    out += ",\n"
+    out += "      \"type\": \"image/png\",\n"
+    out += "      \"sizes\": \"512x512\",\n"
+    out += "      \"purpose\": \"maskable\"\n"
+    out += "    }\n"
+    out += "  ],\n"
+    out += "  \"start_url\": \"/\",\n"
+    out += "  \"display\": \"standalone\",\n"
+    out += "  \"scope\": \"/\",\n"
+    out += "  \"description\": \"A chat app from the makers of Basecamp and HEY.\",\n"
+    out += "  \"categories\": [\"social\", \"business\", \"productivity\"],\n"
+    out += "  \"theme_color\": \"#ffffff\",\n"
+    out += "  \"background_color\": \"#ffffff\",\n"
+    out += "  \"shortcuts\": [\n"
+    out += "    {\n"
+    out += "      \"name\": \"New chat room\",\n"
+    out += "      \"description\": \"Open Campfire and start a new chat room\",\n"
+    out += "      \"url\": \"rooms/opens/new\",\n"
+    out += "      \"icons\": [{ \"src\": "
+    out += v.get("add_url", "")
+    out += ", \"sizes\": \"any\" }]\n"
+    out += "    },\n"
+    out += "    {\n"
+    out += "      \"name\": \"My profile\",\n"
+    out += "      \"description\": \"Open Campfire and view your profile\",\n"
+    out += "      \"url\": \"/users/me/profile\",\n"
+    out += "      \"icons\": [{ \"src\": "
+    out += v.get("person_url", "")
+    out += ", \"sizes\": \"any\" }]\n"
+    out += "    }\n"
+    out += "  ],\n"
+    out += "  \"screenshots\": [\n"
+    out += "    {\n"
+    out += "      \"src\": "
+    out += v.get("android_chat_url", "")
+    out += ",\n"
+    out += "      \"sizes\": \"1080x2400\",\n"
+    out += "      \"form_factor\": \"narrow\",\n"
+    out += "      \"label\": \"Campfire is an installable, self-hosted group chat system.\"\n"
+    out += "    },\n"
+    out += "    {\n"
+    out += "      \"src\": "
+    out += v.get("android_sidebar_url", "")
+    out += ",\n"
+    out += "      \"sizes\": \"1080x2400\",\n"
+    out += "      \"form_factor\": \"narrow\",\n"
+    out += "      \"label\": \"Easily invite people. Make rooms. @mentions, DMs, and mobile support.\"\n"
+    out += "    },\n"
+    out += "    {\n"
+    out += "      \"src\": "
+    out += v.get("android_dark_mode_url", "")
+    out += ",\n"
+    out += "      \"sizes\": \"1080x2400\",\n"
+    out += "      \"form_factor\": \"narrow\",\n"
+    out += "      \"label\": \"Full support for dark mode, customizable to your brand.\"\n"
+    out += "    }\n"
+    out += "  ]\n"
+    out += "}\n"
+    out += "\n"
     return out^
 
 def message(v: Dict[String, String]) raises -> String:

@@ -140,3 +140,8 @@ long net_request(const char *url,const char *method,const char *header_lines,con
  if(result==CURLE_OPERATION_TIMEDOUT)status=-3;
  done:curl_easy_cleanup(curl);curl_slist_free_all(resolved);curl_slist_free_all(headers);curl_url_cleanup(parsed);return status;
 }
+long p256_validate_public(const void *public_key) {
+ EC_GROUP *group=EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1);if(!group)return 0;EC_POINT *point=EC_POINT_new(group);
+ int ok=point&&EC_POINT_oct2point(group,point,public_key,65,NULL)&&EC_POINT_is_on_curve(group,point,NULL)&&!EC_POINT_is_at_infinity(group,point);
+ EC_POINT_free(point);EC_GROUP_free(group);return ok;
+}

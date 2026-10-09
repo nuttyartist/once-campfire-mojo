@@ -9,6 +9,7 @@ def c_text[callee: StaticString](handle: Int) -> String:
 struct Database(Movable):
     var handle: Int
     var request_host: String
+    var pending_deletes: List[String]
     var pending_files: List[String]
     var pending_events: List[String]
     var statements: Dict[String, Int]
@@ -16,6 +17,7 @@ struct Database(Movable):
     def __init__(out self, var path: String) raises:
         self.handle = external_call["sql_open", Int](path.as_c_string_span())
         self.request_host = ""
+        self.pending_deletes = List[String]()
         self.pending_files = List[String]()
         self.pending_events = List[String]()
         self.statements = Dict[String, Int]()
@@ -47,8 +49,8 @@ struct Database(Movable):
         for i in range(len(args)):
             var arg = args[i]
             if (
-                external_call["sql_bind", Int](
-                    stmt, i + 1, arg.as_c_string_span()
+                external_call["sql_bind_n", Int](
+                    stmt, i + 1, arg.as_bytes().unsafe_ptr(), arg.byte_length()
                 )
                 != 0
             ):
@@ -62,7 +64,7 @@ struct Database(Movable):
                 var p = external_call[
                     "sql_column", Pointer[UInt8, MutUntrackedOrigin]
                 ](stmt, i)
-                row.append(String(unsafe_from_utf8_ptr=p))
+                row.append(String(unsafe_from_utf8=Span(unsafe_ptr=p,length=external_call["sql_bytes",Int](stmt,i))))
             result.append(row^)
             status = external_call["sql_step", Int](stmt)
         _ = external_call["sql_reset", Int](stmt)

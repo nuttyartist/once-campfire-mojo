@@ -101,7 +101,7 @@ class Integration(unittest.TestCase):
     def test_06_csrf_and_content_type(self):
         self.assertEqual(self.post("denied",{"Sec-Fetch-Site":"cross-site"})[0],422)
         self.assertEqual(self.post("denied",{"Origin":"http://unrelated.invalid"})[0],422)
-        self.assertEqual(self.post("denied",{"Content-Type":"application/json"})[0],422)
+        self.assertEqual(self.post("denied",{"Content-Type":"application/json"})[0],400)
 
     def test_07_unicode_escaping_and_persistence(self):
         value = "שלום café 🔥 <script>alert('x')</script> & coffee"
@@ -144,9 +144,9 @@ class Integration(unittest.TestCase):
 
     def test_10_http_framing(self):
         cases = [
-            (b"GET /up HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\nContent-Length: 1\r\n\r\n",400),
-            (b"POST /session HTTP/1.1\r\nHost: localhost\r\nContent-Length: 9999999\r\n\r\n",413),
-            (b"POST /session HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n",400),
+            (b"GET /up HTTP/1.1\r\nHost: 127.0.0.1:25130\r\nContent-Length: 0\r\nContent-Length: 1\r\n\r\n",400),
+            (b"POST /session HTTP/1.1\r\nHost: 127.0.0.1:25130\r\nContent-Length: 67108865\r\n\r\n",413),
+            (b"POST /session HTTP/1.1\r\nHost: 127.0.0.1:25130\r\nTransfer-Encoding: chunked\r\nContent-Length: 0\r\n\r\n",400),
         ]
         for raw,status in cases:
             with socket.create_connection(("127.0.0.1",local.PORT),timeout=10) as sock:

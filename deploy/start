@@ -1,0 +1,20 @@
+#!/bin/sh
+set -eu
+python3 /app/tools/manage.py init --data "$CAMPFIRE_DATA"
+set -a
+. "$CAMPFIRE_DATA/config.env"
+set +a
+# Public URLs and secure cookies are explicit; no untrusted forwarded Host/proto.
+export PUBLIC_ORIGIN=${PUBLIC_ORIGIN:-http://localhost:8080}
+export CAMPFIRE_SITE=${CAMPFIRE_SITE:-http://:8080}
+/app/campfire &
+app_pid=$!
+caddy run --config /app/deploy/Caddyfile --adapter caddyfile &
+proxy_pid=$!
+trap 'kill -TERM "$app_pid" "$proxy_pid" 2>/dev/null || true; wait; exit 0' TERM INT
+while kill -0 "$app_pid" 2>/dev/null && kill -0 "$proxy_pid" 2>/dev/null; do
+    sleep 1 & wait $! || true
+done
+kill -TERM "$app_pid" "$proxy_pid" 2>/dev/null || true
+wait || true
+exit 1

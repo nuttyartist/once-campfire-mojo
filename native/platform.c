@@ -119,9 +119,13 @@ const char *sql_error(long db) {
   return sqlite3_errmsg((sqlite3 *)(intptr_t)db);
 }
 long sql_bind(long s, long i, const char *text) {
-  return sqlite3_bind_text((sqlite3_stmt *)(intptr_t)s, (int)i, text, -1,
+  return sqlite3_bind_text((sqlite3_stmt *)(intptr_t)s, (int)i, text ? text : "", -1,
                            SQLITE_TRANSIENT);
 }
+long sql_bind_n(long s, long i, const char *text, long n) {
+  return sqlite3_bind_text((sqlite3_stmt *)(intptr_t)s,(int)i,text ? text : "",(int)n,SQLITE_TRANSIENT);
+}
+long sql_bytes(long s,long i) { return sqlite3_column_bytes((sqlite3_stmt *)(intptr_t)s,(int)i); }
 long sql_step(long s) { return sqlite3_step((sqlite3_stmt *)(intptr_t)s); }
 long sql_reset(long s) {
   sqlite3_clear_bindings((sqlite3_stmt *)(intptr_t)s);
@@ -183,6 +187,7 @@ long base64_decode(const unsigned char *p,long n,void *out) {
 /* Normalize an HTML5 parse tree into the existing traversal ABI. libxml2 is
    only the node container here; Gumbo decides all HTML parsing semantics. */
 static xmlNodePtr html5_node(const GumboNode *node) {
+ if(node->type==GUMBO_NODE_COMMENT)return xmlNewComment((const xmlChar*)node->v.text.text);
  if(node->type==GUMBO_NODE_TEXT || node->type==GUMBO_NODE_WHITESPACE || node->type==GUMBO_NODE_CDATA)return xmlNewText((const xmlChar*)node->v.text.text);
  if(node->type!=GUMBO_NODE_ELEMENT && node->type!=GUMBO_NODE_TEMPLATE)return NULL;
  const GumboElement *e=&node->v.element;
@@ -194,8 +199,9 @@ static xmlNodePtr html5_node(const GumboNode *node) {
  for(unsigned i=0;i<e->children.length;i++){xmlNodePtr child=html5_node(e->children.data[i]);if(child)xmlAddChild(result,child);}
  return result;
 }
-long dom_parse(const char *html, long n) {
- GumboOptions options=kGumboDefaultOptions;options.max_tree_depth=128;options.max_attributes=128;options.max_errors=0;
+static long dom_parse_impl(const char *html, long n, int fragment) {
+ GumboOptions options=kGumboDefaultOptions;options.max_tree_depth=401;options.max_attributes=400;options.max_errors=0;
+ if(fragment)options.fragment_context="body";
  GumboOutput *parsed=gumbo_parse_with_options(&options,html,n);
  if(!parsed)return 0;
  if(parsed->status!=GUMBO_STATUS_OK){gumbo_destroy_output(parsed);return 0;}
@@ -203,6 +209,11 @@ long dom_parse(const char *html, long n) {
  xmlDocSetRootElement(doc,html5_node(parsed->root));
  gumbo_destroy_output(parsed);return (long)(intptr_t)doc;
 }
+long dom_parse(const char *html,long n) { return dom_parse_impl(html,n,0); }
+long dom_parse_fragment(const char *html,long n) { return dom_parse_impl(html,n,1); }
+void dom_set_name(long node,const char *name) { xmlNodeSetName((xmlNodePtr)(intptr_t)node,(const xmlChar*)name); }
+void dom_set_attr(long node,const char *key,const char *value) { xmlSetProp((xmlNodePtr)(intptr_t)node,(const xmlChar*)key,(const xmlChar*)value); }
+void dom_clear_node(long address) { xmlNodePtr node=(void*)(intptr_t)address;xmlFreeNodeList(node->children);node->children=NULL;node->last=NULL;xmlFreePropList(node->properties);node->properties=NULL; }
 void dom_free(long doc) { xmlFreeDoc((xmlDocPtr)(intptr_t)doc); }
 long dom_root(long doc) { return (long)(intptr_t)xmlDocGetRootElement((xmlDocPtr)(intptr_t)doc); }
 long dom_child(long node) { return (long)(intptr_t)((xmlNodePtr)(intptr_t)node)->children; }
@@ -264,8 +275,8 @@ static xmlNodePtr find_body(xmlNodePtr node) {
  for(;node;node=node->next){if(node->type==XML_ELEMENT_NODE&&!xmlStrcmp(node->name,(const xmlChar*)"body"))return node;xmlNodePtr found=find_body(node->children);if(found)return found;}return NULL;
 }
 long dom_replace_html(long address,const char *value,long length) {
- xmlNodePtr node=(void*)(intptr_t)address;xmlDocPtr doc=(void*)(intptr_t)dom_parse(value,length);if(!doc)return -1;
- xmlNodePtr body=find_body(xmlDocGetRootElement(doc));
+ xmlNodePtr node=(void*)(intptr_t)address;xmlDocPtr doc=(void*)(intptr_t)dom_parse_fragment(value,length);if(!doc)return -1;
+ xmlNodePtr body=find_body(xmlDocGetRootElement(doc));if(!body)body=xmlDocGetRootElement(doc);
  if(body)for(xmlNodePtr child=body->children;child;child=child->next)xmlAddPrevSibling(node,xmlDocCopyNode(child,node->doc,1));
  xmlUnlinkNode(node);xmlFreeNode(node);xmlFreeDoc(doc);return 0;
 }
@@ -286,3 +297,24 @@ long os_wait_child(void) { int status;pid_t p=waitpid(-1,&status,WNOHANG);return
 void os_kill(long pid,long sig) { kill(pid,sig); }
 
 long os_lock_file(const char *path) { int fd=open(path,O_RDWR|O_CREAT|O_CLOEXEC,0600);if(fd<0)return -1;if(flock(fd,LOCK_EX|LOCK_NB)){close(fd);return -1;}return fd; }
+
+/* Generic regular expression search; callers own patterns and interpretation. */
+#include <glib.h>
+long regex_find(const char *pattern,const char *text,long n,long start,long *span) {
+ static GHashTable *patterns;
+ if(!patterns)patterns=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,(GDestroyNotify)g_regex_unref);
+ GRegex *regex=g_hash_table_lookup(patterns,pattern);
+ if(!regex){GError *error=NULL;regex=g_regex_new(pattern,G_REGEX_OPTIMIZE,0,&error);if(!regex){if(error)g_error_free(error);return -1;}g_hash_table_insert(patterns,g_strdup(pattern),regex);}
+ GMatchInfo *match=NULL;gboolean found=g_regex_match_full(regex,text,n,start,0,&match,NULL);
+ if(found){gint a=0,b=0;g_match_info_fetch_pos(match,0,&a,&b);span[0]=a;span[1]=b;}
+ if(match)g_match_info_free(match);return found?1:0;
+}
+void dom_remove(long address) { xmlNodePtr node=(void*)(intptr_t)address;xmlUnlinkNode(node);xmlFreeNode(node); }
+
+long dom_inner_html(long address,const char *value,long length) {
+ xmlNodePtr node=(void*)(intptr_t)address;xmlDocPtr doc=(void*)(intptr_t)dom_parse_fragment(value,length);if(!doc)return -1;
+ xmlFreeNodeList(node->children);node->children=NULL;node->last=NULL;
+ xmlNodePtr root=xmlDocGetRootElement(doc);
+ for(xmlNodePtr child=root->children;child;child=child->next)xmlAddChild(node,xmlDocCopyNode(child,node->doc,1));
+ xmlFreeDoc(doc);return 0;
+}

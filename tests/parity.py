@@ -108,7 +108,9 @@ def capture(app,imported_session=None):
    stats=drain()
    assert stats['queued']==stats['completed']==1,stats
    assert stats['notifications']==stats['rejected_endpoints']==3,stats
-   with local.connection(db) as conn:members=conn.execute('select count(*) from memberships where room_id=?',(LABELS['rooms.hq'],)).fetchone()[0]
+   with local.connection(db) as conn:members=conn.execute("select count(*) from memberships where room_id=? AND (unread_at IS NOT NULL OR connected_at>datetime('now','-60 seconds'))",(LABELS['rooms.hq'],)).fetchone()[0]
+   # The current Rails checkout filters unread recipients and adds timestamps;
+   # Rust's pinned older reference sends to every member. Verify current Rails policy.
    assert stats['broadcasts']==1 and stats['unread_broadcasts']==members,stats
    state['jobs']=stats
    for forged in [sign_cookie(token,'cookie.different'),sign_cookie(token,expiry='2000-01-01T00:00:00.000Z'),cookie+'tamper']:

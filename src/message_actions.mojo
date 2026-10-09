@@ -21,7 +21,7 @@ def wire_user(mut db: Database, mut signer: Signer, uid: String, req: Request) r
 
 
 def wire_message(mut db: Database, mut signer: Signer, row: List[String], req: Request) raises -> String:
-    return '{"id":'+row[0]+',"created_at":'+json_string(row[2].replace(" ","T")+"Z")+',"body":{"plain_text":'+json_string(richtext.resolved(db,signer,row[7],True))+',"html":'+json_string('<div class="lexxy-content">'+richtext.resolved(db,signer,row[7])+'</div>')+'},"creator":'+wire_user(db,signer,row[3],req)+',"room":{"id":'+row[5]+'},"url":'+json_string(req.origin()+"/rooms/"+row[5]+"/messages/"+row[0])+'}'
+    return '{"id":'+row[0]+',"created_at":'+json_string(row[2].replace(" ","T")+"Z")+',"body":{"plain_text":'+json_string(richtext.resolved(db,signer,row[7],True))+',"html":'+json_string('<div class="lexxy-content">'+richtext.resolved(db,signer,row[7],False,True)+'</div>')+'},"creator":'+wire_user(db,signer,row[3],req)+',"room":{"id":'+row[5]+'},"url":'+json_string(req.origin()+"/rooms/"+row[5]+"/messages/"+row[0])+'}'
 
 
 def wire_boost(mut db: Database, mut signer: Signer, bid: String, req: Request) raises -> String:
@@ -68,14 +68,23 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
         if db.scalar("SELECT 1 FROM memberships WHERE room_id=? AND user_id=?",[rid,uid])!="1":
             return html("Not found",404)
         var since = params(req.query).get("since","0")
-        var rows = db.rows(COLUMNS+"WHERE m.room_id=? AND (julianday(m.updated_at)-2440587.5)*86400000>? ORDER BY m.created_at,m.id LIMIT 200",[rid,since])
+        var milliseconds = 0
+        try:
+            milliseconds = Int(since)
+        except:
+            pass
+        var stamp = db.scalar("SELECT strftime('%Y-%m-%d %H:%M:%f',?/1000.0,'unixepoch')",[String(milliseconds)])
+        var new = db.rows(COLUMNS+"WHERE m.room_id=? AND m.created_at>? ORDER BY m.created_at,m.id LIMIT 40",[rid,stamp])
+        var ids = List[String]()
+        for row in new:
+            ids.append(row[0])
+        var updated = db.rows("SELECT * FROM ("+COLUMNS+"WHERE m.room_id=? AND m.updated_at>? AND m.id NOT IN (SELECT value FROM json_each(?)) ORDER BY +m.created_at DESC,m.id DESC LIMIT 40) ORDER BY 3,1",[rid,stamp,"["+",".join(ids)+"]"])
         var kind = db.scalar("SELECT type FROM rooms WHERE id=?",[rid]).replace("::","_").lower()
         var body = String()
-        for row in rows:
-            if db.scalar("SELECT (julianday(?)-2440587.5)*86400000>?",[row[2],since])=="1":
-                body += ui.stream("append","messages_"+kind+"_"+rid,views.message(db,signer,row))
-            else:
-                body += ui.stream("replace","message_"+row[1],views.message(db,signer,row))
+        if len(new)>0:
+            body += ui.stream("append","messages_"+kind+"_"+rid,views.messages(db,signer,new))
+        for row in updated:
+            body += ui.stream("replace","message_"+row[1],views.message(db,signer,row))
         return Response(200,body,"text/vnd.turbo-stream.html; charset=utf-8","")
     else:
         return html("",0)
@@ -92,16 +101,20 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
             var count = 0
             for _ in content.codepoints():
                 count += 1
-            if String(content.strip())=="" or count>16:
-                return html("Boost must contain 1–16 characters",422)
+            if content.byte_length()>65536:
+                return html("Boost is too long",422)
             _ = db.rows("INSERT INTO boosts(booster_id,content,message_id,created_at,updated_at) VALUES(?,?,?,?,?)",[uid,content,mid,now,now])
             bid = db.last_id()
+            _ = db.rows("UPDATE messages SET updated_at=? WHERE id=?",[now,mid])
+            _ = db.rows("UPDATE rooms SET updated_at=? WHERE id=?",[now,rid])
             pubsub.room(db,rid,ui.stream("append","boosts_message_"+row[1],render_boost(db,signer,bid)))
             return ui.redirect("/messages/"+mid+"/boosts")
         if verb=="DELETE":
             if db.scalar("SELECT 1 FROM boosts WHERE id=? AND message_id=? AND booster_id=?",[bid,mid,uid])!="1":
                 return html("Boost not found",404)
             _ = db.rows("DELETE FROM boosts WHERE id=?",[bid])
+            _ = db.rows("UPDATE messages SET updated_at=? WHERE id=?",[now,mid])
+            _ = db.rows("UPDATE rooms SET updated_at=? WHERE id=?",[now,rid])
             var body = ui.stream("remove","boost_"+bid)
             pubsub.room(db,rid,body)
             return Response(200,body,"text/vnd.turbo-stream.html; charset=utf-8","")
@@ -116,7 +129,7 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
         return html("Forbidden",403)
     if verb=="GET" and edit:
         var action = "/rooms/"+rid+"/messages/"+mid
-        var editor = '<lexxy-editor name="message[body]" value="'+escape(row[7])+'" aria-label="Edit message" class="input lexxy-content" autofocus></lexxy-editor>'
+        var editor = '<lexxy-editor name="message[body]" value="'+escape(richtext.editable(db,signer,row[7]))+'" aria-label="Edit message" class="input lexxy-content" autofocus></lexxy-editor>'
         return html('<turbo-frame id="edit_message_'+row[1]+'">'+ui.form(action,editor,"patch")+ui.form(action,"","delete","Delete message")+'</turbo-frame>')
     if verb=="PATCH" or verb=="PUT":
         var raw = f.fields.get("message[body]","")
@@ -126,7 +139,8 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
         if "message[attachment]" in f.files:
             var blob = storage.upload(db,f.files["message[attachment]"])
             storage.attach(db,blob,"Message",mid,"attachment")
-        _ = db.rows("UPDATE action_text_rich_texts SET body=?,updated_at=? WHERE record_type='Message' AND record_id=? AND name='body'",[richtext.convert(raw),now,mid])
+        _ = db.rows("UPDATE action_text_rich_texts SET body=?,updated_at=? WHERE record_type='Message' AND record_id=? AND name='body'",[richtext.canonical(db,raw),now,mid])
+        richtext.sync_embeds(db,signer,db.scalar("SELECT id FROM action_text_rich_texts WHERE record_type='Message' AND record_id=? AND name='body'",[mid]),raw)
         _ = db.rows("UPDATE message_search_index SET body=? WHERE rowid=?",[plain,mid])
         _ = db.rows("UPDATE messages SET updated_at=? WHERE id=?",[now,mid])
         _ = db.rows("UPDATE rooms SET updated_at=? WHERE id=?",[now,rid])
@@ -134,16 +148,28 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
         pubsub.room(db,rid,ui.stream("replace","message_"+row[1],views.message(db,signer,updated)))
         return ui.redirect("/rooms/"+rid+"/messages/"+mid)
     if verb=="DELETE":
-        _ = db.rows("DELETE FROM boosts WHERE message_id=?",[mid])
-        _ = db.rows("DELETE FROM action_text_rich_texts WHERE record_type='Message' AND record_id=?",[mid])
-        _ = db.rows("DELETE FROM message_search_index WHERE rowid=?",[mid])
-        _ = db.rows("DELETE FROM messages WHERE id=?",[mid])
-        _ = db.rows("UPDATE rooms SET messages_count=max(0,messages_count-1),updated_at=? WHERE id=?",[now,rid])
-        var body = ui.stream("remove","message_"+row[1])
-        pubsub.room(db,rid,body)
+        var body = destroy_message(db,mid)
         return Response(200,body,"text/vnd.turbo-stream.html; charset=utf-8","")
     if verb=="GET":
         if "application/json" in req.header("accept"):
             return Response(200,wire_message(db,signer,row,req),"application/json","")
         return html(views.message(db,signer,row))
     return html("Not found",404)
+
+
+def destroy_message(mut db: Database, mid: String) raises -> String:
+    var rows = db.rows("SELECT room_id,client_message_id FROM messages WHERE id=?",[mid])
+    if len(rows)==0:
+        return ""
+    var row = rows[0].copy()
+    storage.remove_message(db,mid)
+    _ = db.rows("DELETE FROM boosts WHERE message_id=?",[mid])
+    _ = db.rows("DELETE FROM action_text_rich_texts WHERE record_type='Message' AND record_id=?",[mid])
+    _ = db.rows("DELETE FROM message_search_index WHERE rowid=?",[mid])
+    _ = db.rows("DELETE FROM messages WHERE id=?",[mid])
+    _ = db.rows("DELETE FROM mojo_deliveries WHERE message_id=?",[mid])
+    _ = db.rows("DELETE FROM mojo_jobs WHERE message_id=? AND kind='message'",[mid])
+    _ = db.rows("UPDATE rooms SET messages_count=max(0,messages_count-1),updated_at=? WHERE id=?",[stamp(db),row[0]])
+    var body = ui.stream("remove","message_"+row[1])
+    pubsub.room(db,row[0],body)
+    return body^

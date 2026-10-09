@@ -1,6 +1,6 @@
 from std.ffi import external_call
 from std.os import getenv
-from http import Request, Response, html
+from http import Request, Response, html, conditional
 
 
 def digest(data: String, sha256: Bool = True) raises -> String:
@@ -54,6 +54,6 @@ def asset(req: Request) raises -> Response:
         return html("Not found", 404)
     try:
         var body = read_file(getenv("PUBLIC_PATH", "public"), relative)
-        return Response(200, body, mime(relative), "")
+        return conditional(Response(200,body,mime(relative),""),req,"public, max-age=300")
     except:
         return html("Not found", 404)

@@ -3,9 +3,11 @@ from std.ffi import external_call
 from std.os import getenv
 from database import Database
 from crypto import Signer, base64, json_string, url_encode
-from http import Request, Response, html
+from http import Request, Response, html, validator
 from parameters import Upload, Form
-from runtime import read_file
+from runtime import read_file, digest
+import media
+import marshal
 from text import token, escape, params, decode
 
 
@@ -49,6 +51,12 @@ def store_bytes(mut db: Database, key: String, data: String) raises:
 
 
 def identify(data: String) -> String:
+    var detected = List[UInt8](length=256,fill=0)
+    var n = external_call["mime_detect",Int](data.as_bytes().unsafe_ptr(),data.byte_length(),detected.unsafe_ptr(),len(detected))
+    if n>0:
+        var kind = String(unsafe_from_utf8=Span(unsafe_ptr=detected.unsafe_ptr(),length=n))
+        if kind!="application/octet-stream":
+            return kind
     var b = data.as_bytes()
     if len(b)>=8 and b[0]==137 and b[1]==80 and b[2]==78 and b[3]==71:
         return "image/png"
@@ -64,6 +72,12 @@ def identify(data: String) -> String:
         return "video/mp4"
     if data.startswith("ID3"):
         return "audio/mpeg"
+    if len(b)>=4 and b[0]==26 and b[1]==69 and b[2]==223 and b[3]==163:
+        return "video/webm"
+    if len(b)>=2 and b[0]==255 and (Int(b[1])&224)==224:
+        return "audio/mpeg"
+    if data.startswith("BM"):
+        return "image/bmp"
     if data.startswith("OggS"):
         return "audio/ogg"
     if len(b)>=12 and data.startswith("RIFF") and String(unsafe_from_utf8=b[8:12])=="WAVE":
@@ -71,22 +85,34 @@ def identify(data: String) -> String:
     return "application/octet-stream"
 
 
+def metadata(mut db: Database, data: String, kind: String) raises -> String:
+    var meta = String('{"identified":true,"analyzed":true}')
+    if kind.startswith("image/") or kind=="application/pdf":
+        var dims = List[Int](length=2,fill=0)
+        if external_call["image_dimensions",Int](data.as_bytes().unsafe_ptr(),data.byte_length(),dims.unsafe_ptr())==0:
+            meta = '{"identified":true,"analyzed":true,"width":'+String(dims[0])+',"height":'+String(dims[1])+'}'
+    elif kind.startswith("video/") or kind.startswith("audio/"):
+        try:
+            meta = media.metadata(db,data,kind)
+        except:
+            pass
+    return meta^
+
+
 def upload(mut db: Database, file: Upload) raises -> String:
     var key = token()
     var now = db.scalar("SELECT strftime('%Y-%m-%d %H:%M:%f','now')")
     var kind = identify(file.data)
-    var meta = String('{"identified":true,"analyzed":true}')
-    if kind.startswith("image/"):
-        var dims = List[Int](length=2,fill=0)
-        if external_call["image_dimensions",Int](file.data.as_bytes().unsafe_ptr(),file.data.byte_length(),dims.unsafe_ptr())==0:
-            meta = '{"identified":true,"analyzed":true,"width":'+String(dims[0])+',"height":'+String(dims[1])+'}'
+    var meta = metadata(db,file.data,kind)
     store_bytes(db,key,file.data)
     _ = db.rows("INSERT INTO active_storage_blobs(key,filename,content_type,metadata,byte_size,checksum,created_at,service_name) VALUES(?,?,?,?,?,?,?,'local')",[key,safe_filename(file.filename),kind,meta,String(file.data.byte_length()),checksum(file.data),now])
     return db.last_id()
 
 
 def attach(mut db: Database, blob: String, record: String, id: String, name: String) raises:
-    _ = db.rows("DELETE FROM active_storage_attachments WHERE record_type=? AND record_id=? AND name=?",[record,id,name])
+    if db.scalar("SELECT blob_id FROM active_storage_attachments WHERE record_type=? AND record_id=? AND name=?",[record,id,name])==blob:
+        return
+    detach(db,record,id,name)
     _ = db.rows("INSERT INTO active_storage_attachments(name,record_type,record_id,blob_id,created_at) VALUES(?,?,?,?,strftime('%Y-%m-%d %H:%M:%f','now'))",[name,record,id,blob])
 
 
@@ -100,18 +126,47 @@ def blob_path(mut signer: Signer, id: String, filename: String) raises -> String
 
 def bytes_response(body: String, kind: String, filename: String, req: Request, force_download: Bool = False) raises -> Response:
     var extra = "Accept-Ranges: bytes\r\nContent-Disposition: "+("attachment" if force_download or kind=="application/octet-stream" else "inline")+'; filename="'+safe_filename(filename)+'"\r\n'
+    var tag = validator(body)
+    extra += "ETag: "+tag+"\r\nCache-Control: public, max-age=300\r\n"
+    if req.header("if-none-match")==tag or req.header("if-none-match")=="W/"+tag or req.header("if-none-match")=="*":
+        return Response(304,"",kind,extra)
     var range = req.header("range")
+    if req.header("if-range")!="" and req.header("if-range")!=tag:
+        range = ""
     if range.startswith("bytes="):
-        var bits = String(range[byte=6:]).split("-",maxsplit=1)
         var total = body.byte_length()
-        if len(bits)!=2 or "," in range:
+        var pieces = String(range[byte=6:]).split(",")
+        var spans = List[Tuple[Int,Int]]()
+        if len(pieces)>16:
             return Response(416,"",kind,"Content-Range: bytes */"+String(total)+"\r\n")
-        var start = Int(bits[0]) if String(bits[0])!="" else max(0,total-Int(bits[1]))
-        var end = Int(bits[1]) if String(bits[1])!="" and String(bits[0])!="" else total-1
-        end = min(end,total-1)
-        if start<0 or start>=total or end<start:
+        try:
+            for piece in pieces:
+                var bits = String(piece.strip()).split("-",maxsplit=1)
+                if len(bits)!=2 or (String(bits[0])=="" and String(bits[1])==""):
+                    raise Error("Malformed range")
+                for bit in bits:
+                    for c in bit.as_bytes():
+                        if c<48 or c>57:
+                            raise Error("Malformed range")
+                var start = Int(bits[0]) if String(bits[0])!="" else max(0,total-Int(bits[1]))
+                var end = Int(bits[1]) if String(bits[1])!="" and String(bits[0])!="" else total-1
+                end = min(end,total-1)
+                if start>=0 and start<total and end>=start:
+                    spans.append((start,end))
+        except:
             return Response(416,"",kind,"Content-Range: bytes */"+String(total)+"\r\n")
-        return Response(206,String(unsafe_from_utf8=body.as_bytes()[start:end+1]),kind,extra+"Content-Range: bytes "+String(start)+"-"+String(end)+"/"+String(total)+"\r\n")
+        if len(spans)==0:
+            return Response(416,"",kind,"Content-Range: bytes */"+String(total)+"\r\n")
+        if len(spans)==1:
+            var start = spans[0][0]
+            var end = spans[0][1]
+            return Response(206,String(unsafe_from_utf8=body.as_bytes()[start:end+1]),kind,extra+"Content-Range: bytes "+String(start)+"-"+String(end)+"/"+String(total)+"\r\n")
+        var boundary = "campfire-"+token()
+        var multipart = String()
+        for span in spans:
+            multipart += "--"+boundary+"\r\nContent-Type: "+kind+"\r\nContent-Range: bytes "+String(span[0])+"-"+String(span[1])+"/"+String(total)+"\r\n\r\n"+String(unsafe_from_utf8=body.as_bytes()[span[0]:span[1]+1])+"\r\n"
+        multipart += "--"+boundary+"--\r\n"
+        return Response(206,multipart,"multipart/byteranges; boundary="+boundary,extra)
     return Response(200,body,kind,extra)
 
 
@@ -127,21 +182,82 @@ def download(mut db: Database, blob: String, req: Request) raises -> Response:
     return bytes_response(body,kind,row[1],req,params(req.query).get("disposition","")=="attachment")
 
 
-def image(mut db: Database, blob: String, req: Request, width: Int, height: Int, crop: Bool = False) raises -> Response:
-    var row = db.rows("SELECT key,filename,content_type FROM active_storage_blobs WHERE id=?",[blob])
+def variant(mut db: Database, blob: String, transformations: String, symbols: Bool = False) raises -> String:
+    var hash = base64(digest(marshal.dump(db,transformations,symbols),False))
+    var prior = db.scalar("SELECT a.blob_id FROM active_storage_variant_records v JOIN active_storage_attachments a ON a.record_type='ActiveStorage::VariantRecord' AND a.record_id=v.id AND a.name='image' WHERE v.blob_id=? AND v.variation_digest=?",[blob,hash])
+    if prior!="":
+        return prior
+    var row = db.rows("SELECT key,filename,content_type,metadata FROM active_storage_blobs WHERE id=?",[blob])
     if len(row)==0:
-        return html("Image not found",404)
-    var source = read_file(root(),relative(row[0][0]))
-    if not identify(source).startswith("image/"):
-        return html("Not a supported image",422)
+        raise Error("Missing image")
+    var values = db.rows("SELECT key FROM json_each(?)",[transformations])
+    for item in values:
+        if item[0] not in ["format","resize_to_limit","resize_to_fill","resize_to_fit"]:
+            raise Error("Unsupported image transformation")
+    var format = db.scalar("SELECT coalesce(json_extract(?,'$.format'),'png')",[transformations])
+    if format not in ["png","jpg","jpeg","webp","gif"]:
+        raise Error("Unsupported image format")
+    var dimensions = db.rows("SELECT coalesce(json_extract(?,'$.resize_to_limit'),json_extract(?,'$.resize_to_fill'),json_extract(?,'$.resize_to_fit'),'[1200,800]')",[transformations,transformations,transformations])[0][0]
+    var width = Int(db.scalar("SELECT json_extract(?,'$[0]')",[dimensions]))
+    var height = Int(db.scalar("SELECT json_extract(?,'$[1]')",[dimensions]))
+    if width<1 or height<1 or width>4096 or height>4096:
+        raise Error("Invalid variant dimensions")
+    var source = read_file(root(),relative(row[0][0]),134217728)
     var address = 0
     var size = 0
-    if external_call["image_thumbnail",Int](source.as_bytes().unsafe_ptr(),source.byte_length(),width,height,Int(crop),Pointer(to=address),Pointer(to=size))!=0:
-        return html("Cannot decode image",422)
+    var crop = db.scalar("SELECT json_type(?,'$.resize_to_fill')",[transformations])=="array"
+    if external_call["image_transform",Int](source.as_bytes().unsafe_ptr(),source.byte_length(),width,height,Int(crop),format.as_c_string_span(),Pointer(to=address),Pointer(to=size))!=0:
+        raise Error("Cannot decode image")
     var output = Pointer[UInt8,MutUntrackedOrigin](unsafe_from_address=address)
     var body = String(unsafe_from_utf8=Span(unsafe_ptr=output,length=size))
     external_call["buffer_free",NoneType](output)
-    return bytes_response(body,"image/webp",safe_filename(row[0][1])+".webp",req)
+    var file = Upload(safe_filename(row[0][1])+"."+format,"image/"+format,body)
+    var result = upload(db,file)
+    _ = db.rows("INSERT INTO active_storage_variant_records(blob_id,variation_digest) VALUES(?,?)",[blob,hash])
+    attach(db,result,"ActiveStorage::VariantRecord",db.last_id(),"image")
+    return result^
+
+
+def preview(mut db: Database, blob: String) raises -> String:
+    var stored = db.scalar("SELECT blob_id FROM active_storage_attachments WHERE record_type='ActiveStorage::Blob' AND record_id=? AND name='preview_image'",[blob])
+    if stored!="":
+        return stored
+    var row = db.rows("SELECT key,filename,content_type,metadata FROM active_storage_blobs WHERE id=?",[blob])[0].copy()
+    var pixels = db.rows("SELECT coalesce(json_extract(?,'$.width'),0),coalesce(json_extract(?,'$.height'),0)",[row[3],row[3]])[0].copy()
+    if Int(pixels[0])<1 or Int(pixels[1])<1 or Int(pixels[0])>250000000//Int(pixels[1]):
+        raise Error("Media too large or undecodable")
+    var source = read_file(root(),relative(row[0]),134217728)
+    if row[2].startswith("video/"):
+        var data = media.poster(source,row[2])
+        stored = upload(db,Upload(row[1]+".png","image/png",data))
+        attach(db,stored,"ActiveStorage::Blob",blob,"preview_image")
+        return stored^
+    return blob
+
+
+def prepare(mut db: Database, blob: String) raises:
+    var kind = db.scalar("SELECT content_type FROM active_storage_blobs WHERE id=?",[blob])
+    if kind.startswith("image/") or kind.startswith("video/") or kind=="application/pdf":
+        try:
+            var source = preview(db,blob) if kind.startswith("video/") else blob
+            var format = "webp" if kind.startswith("video/") else "jpg" if kind=="image/jpeg" else "gif" if kind=="image/gif" else "png"
+            _ = variant(db,source,'{"format":'+json_string(format)+',"resize_to_limit":[1200,800]}',True)
+        except:
+            # A file remains downloadable when the media decoder cannot preview it.
+            pass
+
+
+def image(mut db: Database, blob: String, req: Request, width: Int, height: Int, crop: Bool = False, format: String = "webp") raises -> Response:
+    try:
+        var id = variant(db,blob,'{"format":'+json_string(format)+','+json_string("resize_to_fill" if crop else "resize_to_limit")+':['+String(width)+','+String(height)+']}',True)
+        return download(db,id,req)
+    except:
+        return html("Cannot decode image",422)
+
+
+def representation_path(mut signer: Signer, id: String, filename: String, format: String) raises -> String:
+    var variation = signer.envelope("ActiveStorage",'{"format":'+json_string(format)+',"resize_to_limit":[1200,800]}',"variation")
+    return "/rails/active_storage/representations/proxy/"+url_encode(signed_id(signer,id))+"/"+url_encode(variation)+"/"+url_encode(safe_filename(filename))
 
 
 def presentation(mut db: Database, mut signer: Signer, mid: String) raises -> String:
@@ -151,9 +267,9 @@ def presentation(mut db: Database, mut signer: Signer, mid: String) raises -> St
     var b = rows[0].copy()
     var url = blob_path(signer,b[0],b[1])
     if b[2].startswith("image/") and b[2]!="image/svg+xml":
-        return '<figure class="attachment attachment--preview"><a href="'+escape(url)+'"><img src="'+escape(url)+'" alt="'+escape(b[1])+'" loading="lazy" style="max-width:100%;max-height:800px"></a><figcaption>'+escape(b[1])+'</figcaption></figure>'
+        return '<figure class="attachment attachment--preview"><a href="'+escape(url)+'"><img src="'+escape(representation_path(signer,b[0],b[1],"jpg" if b[2]=="image/jpeg" else "gif" if b[2]=="image/gif" else "png"))+'" alt="'+escape(b[1])+'" loading="lazy" style="max-width:100%;max-height:800px"></a><figcaption>'+escape(b[1])+'</figcaption></figure>'
     if b[2].startswith("video/"):
-        return '<video controls preload="metadata" src="'+escape(url)+'"></video><a href="'+escape(url)+'">'+escape(b[1])+'</a>'
+        return '<video controls preload="metadata" poster="'+escape(representation_path(signer,b[0],b[1],"webp"))+'" src="'+escape(url)+'"></video><a href="'+escape(url)+'">'+escape(b[1])+'</a>'
     if b[2].startswith("audio/"):
         return '<audio controls src="'+escape(url)+'"></audio><a href="'+escape(url)+'">'+escape(b[1])+'</a>'
     return '<figure class="attachment"><a download href="'+escape(url)+'">'+escape(b[1])+'</a><figcaption>'+b[3]+' bytes</figcaption></figure>'
@@ -181,12 +297,33 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
         var data = '{"key":'+json_string(key)+',"content_type":'+json_string(kind)+',"content_length":'+size+',"checksum":'+json_string(sum)+',"service_name":"local"}'
         var upload_url = req.origin()+"/rails/active_storage/disk/"+url_encode(signer.envelope("ActiveStorage",data,"blob_token",expiry))
         return Response(200,'{"id":'+id+',"key":'+json_string(key)+',"filename":'+json_string(name)+',"content_type":'+json_string(kind)+',"byte_size":'+size+',"checksum":'+json_string(sum)+',"signed_id":'+json_string(signed_id(signer,id))+',"direct_upload":{"url":'+json_string(upload_url)+',"headers":{"Content-Type":'+json_string(kind)+',"Content-MD5":'+json_string(sum)+'}}}',"application/json","")
+    if len(parts)>=8 and String(parts[3])=="representations" and req.method=="GET":
+        var blob = signer.verify(db,"ActiveStorage",decode(String(parts[5])),"blob_id",False)
+        var transformations = signer.verify(db,"ActiveStorage",decode(String(parts[6])),"variation",False)
+        if blob=="" or transformations=="":
+            return html("Not found",404)
+        var kind = db.scalar("SELECT content_type FROM active_storage_blobs WHERE id=?",[blob])
+        if kind.startswith("video/"):
+            blob = preview(db,blob)
+        return download(db,variant(db,blob,transformations),req)
     if len(parts)>=6 and String(parts[1])=="rails" and String(parts[2])=="active_storage" and String(parts[3])=="blobs":
+        if req.method!="GET" or String(parts[4]) not in ["proxy","redirect"]:
+            return html("File not found",404)
         var id = signer.verify(db,"ActiveStorage",decode(String(parts[5])),"blob_id",False)
         if id=="":
             return html("File not found",404)
+        if String(parts[4])=="redirect":
+            var rows = db.rows("SELECT key,filename,content_type FROM active_storage_blobs WHERE id=?",[id])
+            if len(rows)==0:
+                return html("File not found",404)
+            var expiry = db.scalar("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now','+5 minutes')")
+            var data = '{"key":'+json_string(rows[0][0])+',"disposition":'+json_string(params(req.query).get("disposition","inline"))+',"content_type":'+json_string(rows[0][2])+',"service_name":"local"}'
+            var url = req.origin()+"/rails/active_storage/disk/"+url_encode(signer.envelope("ActiveStorage",data,"blob_key",expiry))+"/"+url_encode(safe_filename(rows[0][1]))
+            return html("",302,"Location: "+url+"\r\nCache-Control: private, max-age=300\r\n")
         return download(db,id,req)
     if len(parts)>=5 and String(parts[3])=="disk":
+        if req.method!="GET" and req.method!="PUT":
+            return html("Not found",404)
         var token = decode(String(parts[4]))
         var purpose = "blob_token" if req.method=="PUT" else "blob_key"
         var data = signer.verify(db,"ActiveStorage",token,purpose,False)
@@ -202,14 +339,26 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
             var expected = db.scalar("SELECT json_extract(?,'$.checksum')",[data])
             if String(req.body.byte_length())!=length or checksum(req.body)!=expected:
                 return html("Upload checksum mismatch",422)
-            store_bytes(db,key,req.body)
+            var existing = False
+            try:
+                existing = checksum(read_file(root(),relative(key),134217728))==expected
+            except:
+                pass
+            if not existing:
+                store_bytes(db,key,req.body)
+            var kind = identify(req.body)
+            _ = db.rows("UPDATE active_storage_blobs SET content_type=?,metadata=? WHERE key=?",[kind,metadata(db,req.body,kind),key])
             return html("",204)
         var blob = db.scalar("SELECT id FROM active_storage_blobs WHERE key=?",[key])
-        return download(db,blob,req)
+        var download_req = req.copy()
+        if db.scalar("SELECT json_extract(?,'$.disposition')",[data]).startswith("attachment"):
+            download_req.query = "disposition=attachment"
+        return download(db,blob,download_req)
     return html("",0)
 
 
 def rollback(mut db: Database):
+    db.pending_deletes.clear()
     for file in db.pending_files:
         var name = file.copy()
         _ = external_call["fs_unlink",Int](name.as_c_string_span())
@@ -227,3 +376,53 @@ def profile_upload(mut db: Database, f: Form, id: String, account: Bool = False)
             raise Error("Invalid image")
         var blob = upload(db,file)
         attach(db,blob,"Account" if account else "User",id,"logo" if account else "avatar")
+
+
+def purge(mut db: Database, blob: String, depth: Int = 0) raises:
+    if depth>32:
+        raise Error("Attachment cycle")
+    if db.scalar("SELECT 1 FROM active_storage_attachments WHERE blob_id=? LIMIT 1",[blob])=="1":
+        return
+    var key = db.scalar("SELECT key FROM active_storage_blobs WHERE id=?",[blob])
+    if key=="":
+        return
+    var children = db.rows("SELECT blob_id FROM active_storage_attachments WHERE record_type='ActiveStorage::Blob' AND record_id=?",[blob])
+    _ = db.rows("DELETE FROM active_storage_attachments WHERE record_type='ActiveStorage::Blob' AND record_id=?",[blob])
+    var variants = db.rows("SELECT id FROM active_storage_variant_records WHERE blob_id=?",[blob])
+    for v in variants:
+        var attached = db.rows("SELECT blob_id FROM active_storage_attachments WHERE record_type='ActiveStorage::VariantRecord' AND record_id=?",[v[0]])
+        for a in attached:
+            children.append(a.copy())
+        _ = db.rows("DELETE FROM active_storage_attachments WHERE record_type='ActiveStorage::VariantRecord' AND record_id=?",[v[0]])
+    _ = db.rows("DELETE FROM active_storage_variant_records WHERE blob_id=?",[blob])
+    for child in children:
+        purge(db,child[0],depth+1)
+    _ = db.rows("DELETE FROM active_storage_blobs WHERE id=?",[blob])
+    db.pending_deletes.append(root()+"/"+relative(key))
+
+
+def detach(mut db: Database, record: String, id: String, name: String = "") raises:
+    var filter = String("record_type=? AND record_id=?")
+    var args = List[String]([record,id])
+    if name!="":
+        filter += " AND name=?"
+        args.append(name)
+    var rows = db.rows("SELECT blob_id FROM active_storage_attachments WHERE "+filter,args)
+    _ = db.rows("DELETE FROM active_storage_attachments WHERE "+filter,args)
+    for row in rows:
+        purge(db,row[0])
+
+
+def remove_message(mut db: Database, mid: String) raises:
+    detach(db,"Message",mid)
+    var richtexts = db.rows("SELECT id FROM action_text_rich_texts WHERE record_type='Message' AND record_id=?",[mid])
+    for r in richtexts:
+        detach(db,"ActionText::RichText",r[0])
+
+
+def commit(mut db: Database):
+    db.pending_files.clear()
+    for file in db.pending_deletes:
+        var path = file.copy()
+        _ = external_call["fs_unlink",Int](path.as_c_string_span())
+    db.pending_deletes.clear()

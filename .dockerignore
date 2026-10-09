@@ -1,7 +1,8 @@
 .git
-.venv
 build
 storage
 tmp
 bench/results
 __pycache__
+*.pyc
+.venv

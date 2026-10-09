@@ -155,7 +155,7 @@ struct Cable(Copyable, Movable):
                     self.present(db,sub.room_id,not sub.present)
                     self.subscriptions[ident].present = True
                 elif action == "refresh" and sub.present:
-                    self.present(db,sub.room_id,False)
+                    _ = db.rows("UPDATE memberships SET connected_at=strftime('%Y-%m-%d %H:%M:%f','now') WHERE room_id=? AND user_id=?",[sub.room_id,self.uid])
                 elif action == "absent":
                     self.absent(db,sub)
                     self.subscriptions[ident].present = False

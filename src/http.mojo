@@ -1,5 +1,6 @@
 from std.ffi import external_call
 from text import decode
+from crypto import base64
 from std.os import getenv
 
 
@@ -36,6 +37,7 @@ struct Request(Copyable, Movable):
 
 
 def parse_headers(head: String) raises -> Request:
+    _ = String(from_utf8=head.as_bytes())
     var lines = head.split("\r\n")
     var first = lines[0].split(" ")
     if len(first) != 3 or String(first[2]) != "HTTP/1.1":
@@ -60,7 +62,7 @@ def parse_headers(head: String) raises -> Request:
         if name in headers:
             raise Error("Duplicate header")
         headers[name] = String(pair[1].strip())
-    if "transfer-encoding" in headers or "host" not in headers:
+    if "host" not in headers or ("transfer-encoding" in headers and (headers["transfer-encoding"].lower()!="chunked" or "content-length" in headers)):
         raise Error("Invalid framing")
     var host = headers["host"]
     if host=="" or "/" in host or "\\" in host or "@" in host or " " in host or "\t" in host:
@@ -90,7 +92,7 @@ struct Response(Copyable, Movable):
     def pack(self, gzip: Bool) raises -> String:
         var body = self.body
         var encoding = String()
-        if gzip and body.byte_length() > 128:
+        if gzip and self.status==200 and body.byte_length()>128 and (self.content_type.startswith("text/") or "json" in self.content_type or "xml" in self.content_type):
             var buf = List[UInt8](
                 length=body.byte_length() + body.byte_length() // 100 + 128,
                 fill=0,
@@ -110,6 +112,16 @@ struct Response(Copyable, Movable):
         var reason = String("OK")
         if self.status == 201:
             reason = "Created"
+        elif self.status == 206:
+            reason = "Partial Content"
+        elif self.status == 304:
+            reason = "Not Modified"
+        elif self.status == 405:
+            reason = "Method Not Allowed"
+        elif self.status == 416:
+            reason = "Range Not Satisfiable"
+        elif self.status == 417:
+            reason = "Expectation Failed"
         elif self.status == 303:
             reason = "See Other"
         elif self.status == 204:
@@ -139,10 +151,10 @@ struct Response(Copyable, Movable):
             + reason
             + "\r\nContent-Type: "
             + self.content_type
-            + "\r\nContent-Length: "
-            + String(body.byte_length())
-            + "\r\nVary: Accept-Encoding\r\nCache-Control:"
-            " no-store\r\nX-Content-Type-Options: nosniff\r\n"
+            + ("\r\nContent-Length: "+String(body.byte_length()) if self.status!=204 and self.status!=304 else "")
+            + "\r\nVary: Accept-Encoding\r\n"
+            + ("Cache-Control: no-store\r\n" if "Cache-Control:" not in self.extra else "")
+            + "X-Content-Type-Options: nosniff\r\n"
             + encoding
             + self.extra
             + "\r\n"
@@ -152,3 +164,70 @@ struct Response(Copyable, Movable):
 
 def html(body: String, status: Int = 200, extra: String = "") -> Response:
     return Response(status, body, "text/html; charset=utf-8", extra)
+
+
+def chunked(source: String) raises -> Tuple[String,Int]:
+    var body = String()
+    var offset = 0
+    while True:
+        var tail = String(unsafe_from_utf8=source.as_bytes()[offset:])
+        var end = tail.find("\r\n")
+        if end<0:
+            if tail.byte_length()>8192:
+                raise Error("Chunk line too large")
+            return ("",0)
+        var line = String(tail[byte=:end])
+        var fields = line.split(";",maxsplit=1)
+        var raw = String(fields[0])
+        if raw=="" or raw.byte_length()>8:
+            raise Error("Invalid chunk size")
+        var size = 0
+        for c in raw.lower().as_bytes():
+            var digit = Int(c)-48 if c>=48 and c<=57 else Int(c)-87 if c>=97 and c<=102 else -1
+            if digit<0:
+                raise Error("Invalid chunk size")
+            size = size*16+digit
+        if body.byte_length()+size>67108864:
+            raise Error("Body too large")
+        offset += end+2
+        if size==0:
+            var rest = String(unsafe_from_utf8=source.as_bytes()[offset:])
+            if rest.startswith("\r\n"):
+                return (body^,offset+2)
+            var finish = rest.find("\r\n\r\n")
+            if finish<0:
+                if rest.byte_length()>32768:
+                    raise Error("Trailers too large")
+                return ("",0)
+            var trailers = parse_headers("GET / HTTP/1.1\r\nHost: "+getenv("PUBLIC_ORIGIN","http://localhost").replace("http://","").replace("https://","")+"\r\n"+String(rest[byte=:finish]))
+            for forbidden in ["content-length","transfer-encoding","authorization","cookie"]:
+                if trailers.header(forbidden)!="":
+                    raise Error("Forbidden trailer")
+            return (body^,offset+finish+4)
+        if source.byte_length()<offset+size+2:
+            return ("",0)
+        if source.as_bytes()[offset+size]!=13 or source.as_bytes()[offset+size+1]!=10:
+            raise Error("Invalid chunk delimiter")
+        body += String(unsafe_from_utf8=source.as_bytes()[offset:offset+size])
+        offset += size+2
+
+
+def validator(data: String) raises -> String:
+    var hash = List[UInt8](length=32,fill=0)
+    if external_call["crypto_hash",Int](data.as_bytes().unsafe_ptr(),data.byte_length(),1,hash.unsafe_ptr())!=32:
+        raise Error("Cannot hash response")
+    return '"'+base64(String(unsafe_from_utf8=Span(unsafe_ptr=hash.unsafe_ptr(),length=32)),True,False)+'"'
+
+
+def conditional(var response: Response, req: Request, policy: String = "private, no-cache") raises -> Response:
+    if response.status!=200:
+        return response^
+    var tag = validator(response.body+("gzip" if req.gzip() else "identity"))
+    response.extra += "ETag: "+tag+"\r\nCache-Control: "+policy+"\r\n"
+    for candidate in req.header("if-none-match").split(","):
+        var value = String(candidate.strip())
+        if value=="*" or value==tag or value=="W/"+tag:
+            response.status = 304
+            response.body = ""
+            break
+    return response^

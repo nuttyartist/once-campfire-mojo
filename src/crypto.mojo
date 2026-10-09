@@ -2,6 +2,7 @@ from std.ffi import external_call
 from std.os import getenv
 from text import decode
 from database import Database
+import marshal
 
 
 def json_string(s: String) -> String:
@@ -110,10 +111,12 @@ def secure_equal(var a: String, var b: String) -> Bool:
 struct Signer(Movable):
     var keys: Dict[String, String]
     var secret: String
+    var clock: String
 
-    def __init__(out self) raises:
+    def __init__(out self, secret: String = "") raises:
         self.keys = Dict[String, String]()
-        self.secret = getenv("SECRET_KEY_BASE", "")
+        self.secret = secret if secret!="" else getenv("SECRET_KEY_BASE", "")
+        self.clock = "now"
         if self.secret.byte_length() < 32:
             raise Error("SECRET_KEY_BASE must contain at least 32 bytes")
 
@@ -202,6 +205,8 @@ struct Signer(Movable):
         try:
             var offset = wire.byte_length() - (66 if sha256 else 42)
             if offset <= 0 or String(wire[byte=offset:offset+2]) != "--":
+                if sha256 and salt=="active_record/signed_id":
+                    return self.verify(db,salt,wire,purpose,False)
                 return ""
             var encoded = String(wire[byte=:offset])
             if not secure_equal(self.mac(salt, encoded, sha256), String(wire[byte=offset+2:])):
@@ -209,15 +214,22 @@ struct Signer(Movable):
             var payload = unbase64(encoded)
             if db.scalar("SELECT json_valid(?)", [payload]) != "1":
                 return ""
-            if purpose == "" and db.scalar("SELECT json_type(?)", [payload]) == "text":
-                return db.scalar("SELECT json_extract(?,'$')", [payload])
+            if db.scalar("SELECT json_type(?,'$._rails')",[payload])=="":
+                if purpose=="":
+                    return db.scalar("SELECT json_extract(?,'$')",[payload])
+                if salt=="signed_global_ids" and db.scalar("SELECT json_extract(?,'$.purpose')",[payload])==purpose:
+                    if db.scalar("SELECT CASE WHEN json_extract(?,'$.expires_at') IS NULL THEN 1 WHEN julianday(json_extract(?,'$.expires_at'))>=julianday(?) THEN 1 ELSE 0 END",[payload,payload,self.clock])=="1":
+                        return db.scalar("SELECT json_extract(?,'$.gid')",[payload])
+                return ""
             if db.scalar("SELECT json_extract(?,'$._rails.pur')", [payload]) != purpose:
                 return ""
-            if db.scalar("SELECT CASE WHEN json_extract(?,'$._rails.exp') IS NULL THEN 0 WHEN julianday(json_extract(?,'$._rails.exp')) > julianday('now') THEN 0 ELSE 1 END", [payload,payload]) == "1":
+            if db.scalar("SELECT CASE WHEN json_extract(?,'$._rails.exp') IS NULL THEN 0 WHEN julianday(json_extract(?,'$._rails.exp')) > julianday(?) THEN 0 ELSE 1 END", [payload,payload,self.clock]) == "1":
                 return ""
             if db.scalar("SELECT json_type(?,'$._rails.data')", [payload]) != "":
                 return db.scalar("SELECT json_extract(?,'$._rails.data')", [payload])
             var data = unbase64(db.scalar("SELECT json_extract(?,'$._rails.message')", [payload]))
+            if not sha256 and data.startswith("\x04\x08"):
+                return marshal.load_string(data)
             return db.scalar("SELECT json_extract(?,'$')", [data])
         except:
             return ""

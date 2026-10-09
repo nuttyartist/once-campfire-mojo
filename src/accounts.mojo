@@ -1,10 +1,12 @@
 # Account, session, profile and administrator policies from the Rails controllers.
 from std.ffi import external_call
 from database import Database
-from crypto import Signer, session_token, json_string, base64
+from crypto import Signer, session_token, json_string, base64, url_encode
+from text import decode
 from http import Request, Response, html
 from parameters import Form
-from text import escape, token, positive
+from text import escape, token, positive, params
+import templates
 from runtime import password_hash
 import ui
 import views
@@ -21,7 +23,7 @@ def start_session(mut db: Database, mut signer: Signer, uid: String, req: Reques
     var now = stamp(db)
     _ = db.rows("INSERT INTO sessions(token,user_id,last_active_at,created_at,updated_at,ip_address,user_agent) VALUES(?,?,?,?,?,?,?)",[tok,uid,now,now,now,req.peer,req.header("user-agent")])
     var expiry = db.scalar("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now','+20 years')")
-    return html("",303,"Location: /\r\nSet-Cookie: session_token="+signer.cookie(tok,expiry)+"; Path=/; HttpOnly; SameSite=Lax; Max-Age=631152000"+("; Secure" if req.origin().startswith("https://") else "")+"\r\n")
+    return html("",303,"Location: "+post_login(db,signer,req)+"\r\nSet-Cookie: mojo_return_to=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0\r\nSet-Cookie: session_token="+signer.cookie(tok,expiry)+"; Path=/; HttpOnly; SameSite=Lax; Max-Age=631152000"+("; Secure" if req.origin().startswith("https://") else "")+"\r\n")
 
 
 def signup(mut db: Database, mut signer: Signer, req: Request, f: Form, first: Bool) raises -> Response:
@@ -32,7 +34,11 @@ def signup(mut db: Database, mut signer: Signer, req: Request, f: Form, first: B
         if db.scalar("SELECT 1 FROM accounts WHERE join_code=?",[code]) != "1":
             return html("Invitation not found",404)
     if req.method == "GET":
-        return ui.page(db,signer,"",req,"Set up Campfire" if first else "Join Campfire",ui.form(req.path,ui.input("user[name]","","Name")+ui.input("user[email_address]","","Email address","email")+ui.input("user[password]","","Password","password"),"post","Save"))
+        var title = "Set up Campfire" if first else "Join Campfire"
+        var v = views.context(db,signer,"",req,title)
+        var fields = ui.avatar_upload("user[avatar]",templates.asset("default-avatar.svg"),"Add your avatar")+ui.field("user[name]","","Name","person","text",'required autofocus autocomplete="name"')+ui.field("user[email_address]","","Email address","email","email",'required autocomplete="username"')+ui.field("user[password]","","Password","password","password",'required maxlength="72" autocomplete="new-password"')
+        v["content"] = '<div class="center max-width"><section class="nametag u-relative"><div class="flex justify-center align-center pad-block"><img class="nametag__lanyard" aria-hidden="true" src="'+templates.asset("lanyard.svg")+'"></div><div class="nametag__inner flex flex-column gap"><h1 class="txt-large txt-align-center">'+title+'</h1>'+ui.form(req.path,fields,"post","Save")+'</div></section></div>'
+        return html(views.layout(v,req))
     if req.method != "POST":
         return html("Not found",404)
     var name = String(f.fields.get("user[name]","").strip())
@@ -98,16 +104,40 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
             if password != "":
                 _ = db.rows("UPDATE users SET password_digest=?,updated_at=? WHERE id=?",[password_hash(password),now,uid])
             return ui.redirect(path)
-        var u = db.rows("SELECT name,coalesce(email_address,''),coalesce(bio,'') FROM users WHERE id=?",[uid])[0].copy()
-        var fields = ui.input("user[avatar]","","Upload avatar","file")+ui.input("user[name]",u[0],"Name")+ui.input("user[email_address]",u[1],"Email address","email")+ui.input("user[password]","","Change password","password")+ui.textarea("user[bio]",u[2],"Bio")
+        if verb!="GET":
+            return html("Not found",404)
+        var u = db.rows("SELECT name,coalesce(email_address,''),coalesce(bio,''),strftime('%Y%m%d%H%M%S',updated_at) FROM users WHERE id=?",[uid])[0].copy()
+        var v = views.context(db,signer,uid,req,u[0])
+        var fields = ui.avatar_upload("user[avatar]",signer.avatar(uid,u[3]),"Upload avatar")+ui.field("user[name]",u[0],"Enter your name","person","text",'required autocomplete="name"')+ui.field("user[email_address]",u[1],"Enter your email address","email","email",'autocomplete="username"')+ui.field("user[password]","","Change password","password","password",'maxlength="72" autocomplete="new-password"')+ui.textarea("user[bio]",u[2],"A few words about yourself…")
         var url = req.origin()+"/session/transfers/"+signer.signed_id(db,uid,"user/transfer",4)
-        var transfer_html = '<label>Use this link to login automatically on another device<input class="input" id="session_transfer_url" readonly value="'+escape(url)+'"></label><a href="/qr_code/'+base64(url,True,False)+'">Show auto-login QR code</a>'
-        return ui.page(db,signer,uid,req,u[0],ui.form(path,fields,"patch")+transfer_html+ui.form("/session","","delete","Log out"))
+        var transfer_html = '<fieldset><legend>'+ui.icon("laptop",36)+ui.icon("transfer",36)+ui.icon("mobile-phone",36)+'</legend><label class="for-screen-reader" for="session_transfer_url">Use this link to login automatically on another device</label><input class="input" id="session_transfer_url" readonly value="'+escape(url)+'">'+ui.share_link(url)+'</fieldset>'
+        var content = templates.install_instructions(v)+ui.form(path,fields,"patch")
+        if db.scalar("SELECT 1 FROM active_storage_attachments WHERE record_type='User' AND record_id=? AND name='avatar'",[uid])=="1":
+            content += ui.form("/users/"+uid+"/avatar","","delete","Delete avatar")
+        content += '<div class="margin-block pad-inline pad-block fill-shade border-radius"><menu class="flex flex-column gap margin-none pad">'
+        for room in db.rows("SELECT r.id,coalesce(r.name,''),r.type,m.involvement FROM rooms r JOIN memberships m ON m.room_id=r.id WHERE m.user_id=? ORDER BY (r.type='Rooms::Direct'),lower(r.name),r.id",[uid]):
+            var name = room[1]
+            if room[2]=="Rooms::Direct":
+                name = db.scalar("SELECT group_concat(name,', ') FROM (SELECT u.name FROM users u JOIN memberships m ON m.user_id=u.id WHERE m.room_id=? AND (u.id<>? OR (SELECT count(*) FROM memberships WHERE room_id=?)=1) ORDER BY lower(u.name))",[room[0],uid,room[0]])
+            content += '<li class="flex align-center gap margin-none min-width membership-item"><a class="overflow-ellipsis txt-primary txt-undecorated" href="/rooms/'+room[0]+'"><strong>'+escape(name)+'</strong></a><hr class="separator" aria-hidden="true"><turbo-frame id="involvement_'+room[2].replace("::","_").lower()+'_'+room[0]+'"><a href="/rooms/'+room[0]+'/involvement">Notifications: '+room[3]+'</a></turbo-frame></li>'
+        content += '</menu></div><a href="/users/me/push_subscriptions">Manage push subscriptions</a>'+transfer_html
+        v["content"] = '<section class="panel flex flex-column gap" style="view-transition-name: avatar-'+uid+'">'+content+'</section>'
+        v["nav"] = '<a class="btn" href="/">'+ui.icon("arrow-left")+'<span class="for-screen-reader">Back to Campfire</span></a>'+ui.form("/session",'<input type="hidden" name="push_subscription_endpoint" data-sessions-target="pushSubscriptionEndpoint">',"delete","Log out").replace('<form ', '<form data-controller="sessions" ').replace('type="submit" class=', 'type="submit" data-action="sessions#logout:prevent" class=')
+        return html(views.layout(v,req))
+    if path=="/account/users" or path=="/account/users.turbo_stream":
+        if verb!="GET":
+            return html("Not found",404)
+        var page = max(1,min(100000,Int(params(req.query).get("page","1"))))
+        var rows = member_rows(db,is_admin,page)
+        var body = ui.stream("replace","next_page_container",user_list(db,signer,rows,uid,is_admin))
+        if len(rows)==500:
+            body += ui.stream("append","account_users",next_members_page(page+1))
+        return Response(200,body,"text/vnd.turbo-stream.html; charset=utf-8","")
     if path == "/account/edit" or path == "/account":
         if verb == "PATCH" or verb == "PUT":
             if not is_admin:
                 return html("Forbidden",403)
-            var name = f.fields.get("account[name]","")
+            var name = f.fields.get("account[name]",db.scalar("SELECT name FROM accounts LIMIT 1"))
             if String(name.strip())=="":
                 return html("Name is required",422)
             storage.profile_upload(db,f,db.scalar("SELECT id FROM accounts LIMIT 1"),True)
@@ -116,30 +146,44 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
             if restricted != "":
                 _ = db.rows("UPDATE accounts SET settings=json_set(coalesce(settings,'{}'),'$.restrict_room_creation_to_administrators',json(?))",["true" if restricted=="1" or restricted=="true" else "false"])
             return ui.redirect("/account/edit")
-        var rows = db.rows("SELECT name,join_code FROM accounts LIMIT 1")
+        if verb!="GET":
+            return html("Not found",404)
+        var row = db.rows("SELECT name,join_code,coalesce(json_extract(settings,'$.restrict_room_creation_to_administrators'),0) FROM accounts LIMIT 1")[0].copy()
         var content = String()
         if is_admin:
-            content = ui.form("/account",ui.input("account[name]",rows[0][0],"Campfire name")+ui.input("account[logo]","","Upload logo","file"),"patch")
-            content += '<a href="/account/bots">Set up chat bots</a><a href="/account/custom_styles/edit">Custom styles</a><label>Invitation link<input class="input" id="invite_url" readonly value="http://'+escape(req.header("host"))+"/join/"+escape(rows[0][1])+'"></label>'
-        var users = db.rows("SELECT id,name,role,status FROM users WHERE role<>2 AND (status=0 OR ?='1') ORDER BY lower(name)",["1" if is_admin else "0"])
-        for user in users:
-            content += '<a href="/users/'+user[0]+'">'+escape(user[1])+'</a>'
-            if is_admin:
-                content += ui.form("/account/users/"+user[0],'<select name="user[role]"><option value="member">Member</option><option value="administrator"'+(' selected' if user[2]=="1" else '')+'>Administrator</option></select>',"patch","Change role")
-                content += ui.form("/account/users/"+user[0],"","delete","Deactivate "+user[1])
+            content = ui.form("/account",ui.avatar_upload("account[logo]","/account/logo","Upload logo")+ui.field("account[name]",row[0],"Name this account","person","text",'required'),"patch")
+            if db.scalar("SELECT 1 FROM active_storage_attachments WHERE record_type='Account' AND name='logo' LIMIT 1")=="1":
+                content += ui.form("/account/logo","","delete","Delete logo")
+            content += ui.form("/account",'<input type="hidden" name="account[settings][restrict_room_creation_to_administrators]" value="0"><label class="flex align-center gap"><input type="checkbox" name="account[settings][restrict_room_creation_to_administrators]" value="1"'+(' checked' if row[2]=="1" else '')+'>Must be admin to create new rooms</label>',"patch","Save room permissions")
+            content += '<div class="flex align-center gap"><a class="btn" href="/account/bots">'+ui.icon("bot")+'<span>Set up chat bots</span></a><a class="btn" href="/account/custom_styles/edit">'+ui.icon("art")+'<span>Custom styles</span></a></div>'
+        else:
+            content += '<img src="/account/logo" alt="Account logo" width="48" height="48"><h1>'+escape(row[0])+'</h1>'
+        var invite = req.origin()+"/join/"+row[1]
+        content += '<div class="margin-block pad-inline pad-block fill-shade border-radius"><label class="flex flex-column gap"><strong>Share to invite more people</strong><input class="input" id="invite_url" readonly value="'+escape(invite)+'"></label>'+ui.share_link(invite,True)
+        if is_admin:
+            content += ui.form("/account/join_code","","post","Regenerate join link")
+        content += '<hr class="separator full-width"><menu class="flex flex-column gap margin-none pad"><turbo-frame id="account_users">'
+        content += user_list(db,signer,db.rows("SELECT id,name,role,status,strftime('%Y%m%d%H%M%S',updated_at) FROM users WHERE role=1 AND (status=0 OR (?='1' AND status=2)) ORDER BY lower(name),id",["1" if is_admin else "0"]),uid,is_admin)
+        var members = member_rows(db,is_admin,1)
+        content += user_list(db,signer,members,uid,is_admin)
+        if len(members)==500:
+            content += next_members_page(2)
+        content += '</turbo-frame></menu></div>'
         return ui.page(db,signer,uid,req,"Account",content)
     if path=="/account/logo" and verb=="DELETE":
         if not is_admin:
             return html("Forbidden",403)
-        _ = db.rows("DELETE FROM active_storage_attachments WHERE record_type='Account' AND name='logo'")
+        storage.detach(db,"Account",db.scalar("SELECT id FROM accounts LIMIT 1"),"logo")
         return ui.redirect("/account/edit")
-    if path=="/users/me/avatar" and verb=="DELETE":
-        _ = db.rows("DELETE FROM active_storage_attachments WHERE record_type='User' AND name='avatar' AND record_id=?",[uid])
+    if path.startswith("/users/") and path.endswith("/avatar") and verb=="DELETE":
+        storage.detach(db,"User",uid,"avatar")
         return ui.redirect("/users/me/profile")
     if path.startswith("/account/users/"):
         if not is_admin:
             return html("Forbidden",403)
         var user_id = String(positive(String(path[byte=15:])))
+        if db.scalar("SELECT 1 FROM users WHERE id=? AND status=0",[user_id])!="1":
+            return html("Not found",404)
         if verb == "DELETE":
             deactivate(db,user_id)
         elif verb == "PATCH" or verb == "PUT":
@@ -184,6 +228,7 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
                 _ = db.rows("INSERT OR IGNORE INTO memberships(room_id,user_id,created_at,updated_at) SELECT id,?,?,? FROM rooms WHERE type='Rooms::Open'",[bid,now,now])
             else:
                 _ = db.rows("UPDATE users SET name=?,updated_at=? WHERE id=?",[name,now,bid])
+            storage.profile_upload(db,f,bid)
             if "user[webhook_url]" in f.fields:
                 _ = db.rows("DELETE FROM webhooks WHERE user_id=?",[bid])
                 var url = f.fields["user[webhook_url]"]
@@ -192,13 +237,14 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
             return ui.redirect("/account/bots")
         if path.endswith("/new") or path.endswith("/edit"):
             var name = db.scalar("SELECT name FROM users WHERE id=?",[bid])
-            var fields = ui.input("user[name]",name,"Name the bot")+ui.input("user[webhook_url]",db.scalar("SELECT url FROM webhooks WHERE user_id=?",[bid]),"Webhook URL")
+            var avatar = signer.avatar(bid,db.scalar("SELECT strftime('%Y%m%d%H%M%S',updated_at) FROM users WHERE id=?",[bid])) if bid!="" else templates.asset("default-bot-avatar.svg")
+            var fields = ui.avatar_upload("user[avatar]",avatar,"Upload bot avatar")+ui.field("user[name]",name,"Name the bot","bot","text","required")+ui.field("user[webhook_url]",db.scalar("SELECT url FROM webhooks WHERE user_id=?",[bid]),"Webhook URL","web","url")
             return ui.page(db,signer,uid,req,"Chat bot",ui.form("/account/bots"+("/"+bid if bid!="" else ""),fields,"patch" if bid!="" else "post"))
         var bots = db.rows("SELECT id,name,bot_token FROM users WHERE role=2 AND status=0 ORDER BY lower(name)")
         var body = String('<a href="/account/bots/new">Add a bot</a>')
         var rid = db.scalar("SELECT id FROM rooms WHERE type='Rooms::Open' ORDER BY id LIMIT 1")
         for bot in bots:
-            body += '<a href="/account/bots/'+bot[0]+'/edit">Edit '+escape(bot[1])+'</a>'+ui.input("command","curl -d 'Hello' http://"+req.header("host")+"/rooms/"+rid+"/"+bot[0]+"-"+bot[2]+"/messages","curl command for posting messages")
+            body += '<a href="/account/bots/'+bot[0]+'/edit">Edit '+escape(bot[1])+'</a>'+ui.input("command","curl -d 'Hello' "+req.origin()+"/rooms/"+rid+"/"+bot[0]+"-"+bot[2]+"/messages","curl command for posting messages")+ui.form("/account/bots/"+bot[0]+"/key","","patch","Regenerate bot key")+ui.form("/account/bots/"+bot[0],"","delete","Delete "+bot[1])
         return ui.page(db,signer,uid,req,"Chat bots",body)
     var segments = path.split("/")
     if len(segments)>=3 and String(segments[1])=="users" and String(segments[2])!="me":
@@ -213,13 +259,19 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
             body += ui.form("/rooms/directs",'<input type="hidden" name="user_ids[]" value="'+target+'">',"post","Ping "+users[0][0])
             if is_admin:
                 var url = req.origin()+"/session/transfers/"+signer.signed_id(db,target,"user/transfer",4)
-                body += ui.input("transfer",url,"Account recovery link")
+                body += ui.input("transfer",url,"Account recovery link")+ui.share_link(url)
+                var banned = db.scalar("SELECT status FROM users WHERE id=?",[target])=="2"
+                body += ui.form("/users/"+target+"/ban","","delete" if banned else "post","Unban "+users[0][0] if banned else "Ban "+users[0][0])
             return ui.page(db,signer,uid,req,users[0][0],body)
         if len(segments)==4 and String(segments[3])=="ban":
             if not is_admin:
                 return html("Forbidden",403)
+            if db.scalar("SELECT 1 FROM users WHERE id=?",[target])!="1":
+                return html("User not found",404)
             if verb=="POST":
-                _ = db.rows("INSERT INTO bans(user_id,ip_address,created_at,updated_at) SELECT user_id,coalesce(ip_address,''),?,? FROM sessions WHERE user_id=?",[now,now,target])
+                _ = db.rows("DELETE FROM bans WHERE user_id=?",[target])
+                _ = db.rows("INSERT INTO mojo_jobs(message_id,kind) VALUES(?,'remove_banned_content')",[target])
+                _ = db.rows("INSERT INTO bans(user_id,ip_address,created_at,updated_at) SELECT DISTINCT user_id,ip_address,?,? FROM sessions WHERE user_id=? AND trim(coalesce(ip_address,''))<>''",[now,now,target])
                 _ = db.rows("UPDATE users SET status=2,updated_at=? WHERE id=?",[now,target])
                 _ = db.rows("DELETE FROM sessions WHERE user_id=?",[target])
             elif verb=="DELETE":
@@ -229,3 +281,39 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
                 return html("Not found",404)
             return ui.redirect("/users/"+target)
     return html("",0)
+
+
+def member_rows(mut db: Database, admin: Bool, page: Int) raises -> List[List[String]]:
+    return db.rows("SELECT id,name,role,status,strftime('%Y%m%d%H%M%S',updated_at) FROM users WHERE role=0 AND (status=0 OR (?='1' AND status=2)) ORDER BY lower(name),id LIMIT 500 OFFSET ?",["1" if admin else "0",String((page-1)*500)])
+
+
+def next_members_page(page: Int) -> String:
+    return '<turbo-frame id="next_page_container" loading="lazy" src="/account/users.turbo_stream?page='+String(page)+'" class="flex center"><div class="spinner center"></div></turbo-frame>'
+
+
+def user_list(mut db: Database, mut signer: Signer, rows: List[List[String]], uid: String, admin: Bool) raises -> String:
+    var content = String()
+    for user in rows:
+        content += '<li class="flex align-center gap margin-none '+('banned' if user[3]=="2" else '')+'"><figure class="avatar flex-item-no-shrink" style="--avatar-size:3.75ch"><a href="/users/'+user[0]+'" data-turbo-frame="_top"><img loading="lazy" src="'+escape(signer.avatar(user[0],user[4]))+'" alt="'+escape(user[1])+'"></a></figure><a class="min-width overflow-ellipsis" href="/users/'+user[0]+'" data-turbo-frame="_top"><strong>'+escape(user[1])+'</strong></a><hr class="separator">'
+        if admin and user[3]=="0" and user[0]!=uid:
+            content += ui.form("/account/users/"+user[0],'<label class="for-screen-reader" for="role_user_'+user[0]+'">Role of '+escape(user[1])+'</label><select id="role_user_'+user[0]+'" name="user[role]"><option value="member">Member</option><option value="administrator"'+(' selected' if user[2]=="1" else '')+'>Administrator</option></select>',"patch","Change role")+ui.form("/account/users/"+user[0],"","delete","Delete "+user[1])
+        elif user[0]==uid:
+            content += '<a class="btn" href="/users/me/profile" data-turbo-frame="_top">My settings</a>'
+        content += '</li>'
+    return content^
+
+
+def request_login(mut db: Database, mut signer: Signer, req: Request) raises -> Response:
+    var target = req.target
+    if target.byte_length()>2048:
+        target = "/"
+    var expiry = db.scalar("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now','+30 minutes')")
+    var value = url_encode(signer.envelope("signed cookie",json_string(target),"cookie.mojo_return_to",expiry))
+    return html("",302,"Location: /session/new\r\nSet-Cookie: mojo_return_to="+value+"; Path=/; HttpOnly; SameSite=Lax; Max-Age=1800"+("; Secure" if req.origin().startswith("https://") else "")+"\r\n")
+
+
+def post_login(mut db: Database, mut signer: Signer, req: Request) raises -> String:
+    var path = signer.verify(db,"signed cookie",decode(req.cookie("mojo_return_to")),"cookie.mojo_return_to",False)
+    if not path.startswith("/") or path.startswith("//") or "\\" in path or "\r" in path or "\n" in path or path.startswith("/session"):
+        return "/"
+    return path
