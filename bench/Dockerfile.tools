@@ -1,0 +1,10 @@
+# Native ARM64 Linux tools on Apple silicon; no x86 emulation.
+FROM rust:1.98.1-trixie@sha256:a8a5f0a1e5fe7dfe1d352591e4a1c7dd2c08fd70475cae872cf3458ba0df0546
+RUN apt-get update -qq && apt-get install -y --no-install-recommends \
+    clang cmake perl autoconf automake libtool pkg-config zlib1g-dev \
+    libvips-dev ffmpeg ruby ruby-dev ruby-minitest sqlite3 python3 \
+    python3-venv curl unzip nodejs cloc && rm -rf /var/lib/apt/lists/*
+RUN rustup component add rustfmt clippy
+RUN python3 -m venv /opt/mojo && /opt/mojo/bin/pip install mojo==1.1.0
+ENV PATH="/opt/mojo/bin:${PATH}"
+WORKDIR /workspace
