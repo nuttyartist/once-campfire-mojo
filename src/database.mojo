@@ -8,10 +8,16 @@ def c_text[callee: StaticString](handle: Int) -> String:
 
 struct Database(Movable):
     var handle: Int
+    var request_host: String
+    var pending_files: List[String]
+    var pending_events: List[String]
     var statements: Dict[String, Int]
 
     def __init__(out self, var path: String) raises:
         self.handle = external_call["sql_open", Int](path.as_c_string_span())
+        self.request_host = ""
+        self.pending_files = List[String]()
+        self.pending_events = List[String]()
         self.statements = Dict[String, Int]()
         if self.handle == 0:
             raise Error("Cannot open database")

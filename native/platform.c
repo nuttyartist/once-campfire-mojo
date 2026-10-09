@@ -13,6 +13,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
+#include <sys/file.h>
 #include <time.h>
 #include <unistd.h>
 #include <zlib.h>
@@ -26,7 +28,9 @@ long os_listen(long port) {
   setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
   struct sockaddr_in a = {.sin_family = AF_INET,
                           .sin_port = htons((uint16_t)port)};
-  a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  const char *bind_address=getenv("BIND_ADDRESS");
+  if (!bind_address) bind_address="127.0.0.1";
+  if (inet_pton(AF_INET,bind_address,&a.sin_addr)!=1) { close(fd); return -1; }
   if (bind(fd, (void *)&a, sizeof(a)) || listen(fd, 256)) {
     close(fd);
     return -1;
@@ -59,7 +63,7 @@ long os_poll(const long *fds, const long *write_flags, long *ready, long n) {
   for (long i = 0; i < n; i++)
     p[i] = (struct pollfd){.fd = (int)fds[i],
                            .events = write_flags[i] ? POLLOUT : POLLIN};
-  int rc = poll(p, (nfds_t)n, 1000);
+  int rc = poll(p, (nfds_t)n, 50);
   for (long i = 0; i < n; i++)
     ready[i] = p[i].revents;
   return rc;
@@ -175,8 +179,29 @@ long base64_decode(const unsigned char *p,long n,void *out) {
 
 /* Read-only libxml2 DOM traversal. Sanitizing/rendering policy lives in Mojo. */
 #include <libxml/HTMLparser.h>
+#include "../vendor/gumbo/src/nokogiri_gumbo.h"
+/* Normalize an HTML5 parse tree into the existing traversal ABI. libxml2 is
+   only the node container here; Gumbo decides all HTML parsing semantics. */
+static xmlNodePtr html5_node(const GumboNode *node) {
+ if(node->type==GUMBO_NODE_TEXT || node->type==GUMBO_NODE_WHITESPACE || node->type==GUMBO_NODE_CDATA)return xmlNewText((const xmlChar*)node->v.text.text);
+ if(node->type!=GUMBO_NODE_ELEMENT && node->type!=GUMBO_NODE_TEMPLATE)return NULL;
+ const GumboElement *e=&node->v.element;
+ const char *name=gumbo_normalized_tagname(e->tag);char *allocated=NULL;
+ if(!*name){GumboStringPiece tag=e->original_tag;gumbo_tag_from_original_text(&tag);allocated=strndup(tag.data,tag.length);name=allocated;}
+ xmlNodePtr result=xmlNewNode(NULL,(const xmlChar*)name);free(allocated);
+ if(!result)return NULL;
+ for(unsigned i=0;i<e->attributes.length;i++){const GumboAttribute *a=e->attributes.data[i];xmlNewProp(result,(const xmlChar*)a->name,(const xmlChar*)a->value);}
+ for(unsigned i=0;i<e->children.length;i++){xmlNodePtr child=html5_node(e->children.data[i]);if(child)xmlAddChild(result,child);}
+ return result;
+}
 long dom_parse(const char *html, long n) {
-  return (long)(intptr_t)htmlReadMemory(html,(int)n,NULL,"UTF-8",HTML_PARSE_RECOVER|HTML_PARSE_NONET|HTML_PARSE_NOERROR|HTML_PARSE_NOWARNING);
+ GumboOptions options=kGumboDefaultOptions;options.max_tree_depth=128;options.max_attributes=128;options.max_errors=0;
+ GumboOutput *parsed=gumbo_parse_with_options(&options,html,n);
+ if(!parsed)return 0;
+ if(parsed->status!=GUMBO_STATUS_OK){gumbo_destroy_output(parsed);return 0;}
+ xmlDocPtr doc=xmlNewDoc((const xmlChar*)"1.0");
+ xmlDocSetRootElement(doc,html5_node(parsed->root));
+ gumbo_destroy_output(parsed);return (long)(intptr_t)doc;
 }
 void dom_free(long doc) { xmlFreeDoc((xmlDocPtr)(intptr_t)doc); }
 long dom_root(long doc) { return (long)(intptr_t)xmlDocGetRootElement((xmlDocPtr)(intptr_t)doc); }
@@ -230,3 +255,34 @@ long file_append(const char *path,const void *value,long length) {
   int fd=open(path,O_WRONLY|O_CREAT|O_APPEND|O_CLOEXEC,0600);if(fd<0)return -1;
   long n=write(fd,value,(size_t)length);close(fd);return n==length?0:-1;
 }
+
+long dom_replace_text(long address,const char *value) {
+ xmlNodePtr node=(void*)(intptr_t)address, replacement=xmlNewText((const xmlChar*)value);
+ if(!replacement)return -1;xmlReplaceNode(node,replacement);xmlFreeNode(node);return 0;
+}
+static xmlNodePtr find_body(xmlNodePtr node) {
+ for(;node;node=node->next){if(node->type==XML_ELEMENT_NODE&&!xmlStrcmp(node->name,(const xmlChar*)"body"))return node;xmlNodePtr found=find_body(node->children);if(found)return found;}return NULL;
+}
+long dom_replace_html(long address,const char *value,long length) {
+ xmlNodePtr node=(void*)(intptr_t)address;xmlDocPtr doc=(void*)(intptr_t)dom_parse(value,length);if(!doc)return -1;
+ xmlNodePtr body=find_body(xmlDocGetRootElement(doc));
+ if(body)for(xmlNodePtr child=body->children;child;child=child->next)xmlAddPrevSibling(node,xmlDocCopyNode(child,node->doc,1));
+ xmlUnlinkNode(node);xmlFreeNode(node);xmlFreeDoc(doc);return 0;
+}
+
+long peer_address(long fd,char *out,long capacity) {
+ struct sockaddr_storage address;socklen_t n=sizeof address;
+ if(getpeername(fd,(struct sockaddr*)&address,&n))return -1;
+ const void *src=address.ss_family==AF_INET?(void*)&((struct sockaddr_in*)&address)->sin_addr:(void*)&((struct sockaddr_in6*)&address)->sin6_addr;
+ return inet_ntop(address.ss_family,src,out,capacity)?0:-1;
+}
+long valid_ip(const char *text) { unsigned char bytes[16];return inet_pton(AF_INET,text,bytes)==1||inet_pton(AF_INET6,text,bytes)==1; }
+static volatile sig_atomic_t stopping;
+static void stop_requested(int sig) { (void)sig;stopping=1; }
+long os_signals(void) { struct sigaction a={0};a.sa_handler=stop_requested;sigemptyset(&a.sa_mask);return sigaction(SIGTERM,&a,NULL)||sigaction(SIGINT,&a,NULL); }
+long os_running(void) { return !stopping; }
+void os_sleep_ms(long ms) { poll(NULL,0,ms); }
+long os_wait_child(void) { int status;pid_t p=waitpid(-1,&status,WNOHANG);return p>0?p:0; }
+void os_kill(long pid,long sig) { kill(pid,sig); }
+
+long os_lock_file(const char *path) { int fd=open(path,O_RDWR|O_CREAT|O_CLOEXEC,0600);if(fd<0)return -1;if(flock(fd,LOCK_EX|LOCK_NB)){close(fd);return -1;}return fd; }

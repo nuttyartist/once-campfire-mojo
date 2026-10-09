@@ -18,6 +18,10 @@ def json_string(s: String) -> String:
             out += "\\r"
         elif c == "\t":
             out += "\\t"
+        elif c.byte_length()==1 and c.as_bytes()[0]<32:
+            var digits = String("0123456789abcdef")
+            var b = Int(c.as_bytes()[0])
+            out += "\\u00"+String(digits[byte=b//16:b//16+1])+String(digits[byte=b%16:b%16+1])
         elif c == "<":
             out += "\\u003c"
         elif c == ">":
@@ -64,7 +68,7 @@ def unbase64(var s: String) raises -> String:
     )
     if n < 0:
         raise Error("Invalid base64")
-    return String(from_utf8=Span(unsafe_ptr=buf.unsafe_ptr(), length=n))
+    return String(unsafe_from_utf8=Span(unsafe_ptr=buf.unsafe_ptr(), length=n))
 
 
 def url_encode(s: String) -> String:
@@ -177,6 +181,46 @@ struct Signer(Movable):
             + ',"pur":"cookie.session_token"}}'
         )
         return url_encode(self.sign("signed cookie", payload, False))
+
+    def envelope(mut self, salt: String, data: String, purpose: String, expiry: String = "", url: Bool = False) raises -> String:
+        var metadata = '{"_rails":{"data":'+data
+        if expiry != "":
+            metadata += ',"exp":'+json_string(expiry)
+        metadata += ',"pur":'+json_string(purpose)+'}}'
+        var encoded = base64(metadata,url,True)
+        return encoded+"--"+self.mac(salt,encoded,False)
+
+    def signed_id(mut self, mut db: Database, uid: String, purpose: String, hours: Int = 0) raises -> String:
+        var expiry = String()
+        if hours > 0:
+            expiry = ',"exp":' + json_string(db.scalar("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now',?)", ["+"+String(hours)+" hours"]))
+        return self.sign("active_record/signed_id", '{"_rails":{"data":'+uid+',"pur":'+json_string(purpose)+expiry+'}}', True, True)
+
+    def verify(mut self, mut db: Database, salt: String, wire: String, purpose: String = "", sha256: Bool = True) raises -> String:
+        if wire.byte_length() > 16384:
+            return ""
+        try:
+            var offset = wire.byte_length() - (66 if sha256 else 42)
+            if offset <= 0 or String(wire[byte=offset:offset+2]) != "--":
+                return ""
+            var encoded = String(wire[byte=:offset])
+            if not secure_equal(self.mac(salt, encoded, sha256), String(wire[byte=offset+2:])):
+                return ""
+            var payload = unbase64(encoded)
+            if db.scalar("SELECT json_valid(?)", [payload]) != "1":
+                return ""
+            if purpose == "" and db.scalar("SELECT json_type(?)", [payload]) == "text":
+                return db.scalar("SELECT json_extract(?,'$')", [payload])
+            if db.scalar("SELECT json_extract(?,'$._rails.pur')", [payload]) != purpose:
+                return ""
+            if db.scalar("SELECT CASE WHEN json_extract(?,'$._rails.exp') IS NULL THEN 0 WHEN julianday(json_extract(?,'$._rails.exp')) > julianday('now') THEN 0 ELSE 1 END", [payload,payload]) == "1":
+                return ""
+            if db.scalar("SELECT json_type(?,'$._rails.data')", [payload]) != "":
+                return db.scalar("SELECT json_extract(?,'$._rails.data')", [payload])
+            var data = unbase64(db.scalar("SELECT json_extract(?,'$._rails.message')", [payload]))
+            return db.scalar("SELECT json_extract(?,'$')", [data])
+        except:
+            return ""
 
     def verify_cookie(
         mut self, mut db: Database, wire: String

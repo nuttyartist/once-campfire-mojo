@@ -1020,6 +1020,58 @@ def browser_settings(v: Dict[String, String]) raises -> String:
     out += "\n"
     return out^
 
+def direct_new(v: Dict[String, String]) raises -> String:
+    var out = String()
+    out += "\n"
+    out += "\n"
+    out += "\n"
+    out += "\n"
+    out += "<turbo-frame id=\"direct_rooms_control\" target=\"_top\">\n"
+    out += "  <div class=\"directs directs--new flex flex-column gap\">\n"
+    out += "    <form class=\"flex gap flex-item-grow\" data-controller=\"form\" data-action=\"keydown.esc-&gt;form#cancel\" action=\"/rooms/directs\" accept-charset=\"UTF-8\" method=\"post\">\n"
+    out += "      <a class=\"btn flex-item-no-shrink\" data-turbo-frame=\"user_sidebar\" data-form-target=\"cancel\" href=\"/users/me/sidebar\">\n"
+    out += "        <img aria-hidden=\"true\" src=\""
+    out += asset("arrow-left.svg")
+    out += "\" />\n"
+    out += "        <span class=\"for-screen-reader\">Cancel changes</span>\n"
+    out += "</a>\n"
+    out += "      <section class=\"autocomplete__container unpad input input--actor\">\n"
+    out += "        <div class=\"autocomplete__input input flex flex-wrap position-relative flex-item-grow\"\n"
+    out += "            data-controller=\"autocomplete\" data-autocomplete-url-value=\"/autocompletable/users\">\n"
+    out += "          <select name=\"user_ids[]\" data-autocomplete-target=\"select\" data-template-id=\"autocompletable-user\" multiple=\"true\" hidden required></select>\n"
+    out += "\n"
+    out += "          <template id=\"autocompletable-user\">\n"
+    out += "  <div class=\"autocomplete__pill max-width\" data-value=\"\" tabindex=\"0\">\n"
+    out += "    <img class=\"avatar flex-item-no-shrink\" data-content=\"avatar\" src=\"\" />\n"
+    out += "    <span class=\"autocomplete-field__selected-value-text overflow-ellipsis flex-item-grow\" data-content=\"label\"></span>\n"
+    out += "\n"
+    out += "    <button type=\"button\" data-action=\"autocomplete#remove:prevent\" data-value=\"\" tabindex=\"-1\" class=\"btn btn--plain txt-small translucent flex-item-no-shrink\">\n"
+    out += "      <img src=\""
+    out += asset("remove-circle.svg")
+    out += "\" aria-hidden=\"true\" class=\"colorize--black\">\n"
+    out += "      <span class=\"for-screen-reader\">Remove <span data-content=\"screenReaderLabel\"></span></span>\n"
+    out += "    </button>\n"
+    out += "  </div>\n"
+    out += "</template>\n"
+    out += "\n"
+    out += "\n"
+    out += "\n"
+    out += "          <input autocomplete=\"off\" autocorrect=\"off\" data-1p-ignore=\"true\" class=\"autocomplete__input input flex flex-wrap position-relative\" data-autocomplete-target=\"input\" data-action=\"input-&gt;autocomplete#search keydown-&gt;autocomplete#didPressKey\" type=\"text\" name=\"rooms_direct[user_ids_input]\" id=\"rooms_direct_user_ids_input\" />\n"
+    out += "        </div>\n"
+    out += "      </section>\n"
+    out += "\n"
+    out += "      <button name=\"button\" type=\"submit\" class=\"btn btn--reversed flex-item-no-shrink\">\n"
+    out += "        <img aria-hidden=\"true\" src=\""
+    out += asset("check.svg")
+    out += "\" />\n"
+    out += "        <span class=\"for-screen-reader\">Start Ping</span>\n"
+    out += "</button></form>\n"
+    out += "    <span class=\"txt-small translucent pad-inline-half center\">Type names to ping someone…</span>\n"
+    out += "  </div>\n"
+    out += "</turbo-frame>\n"
+    out += "\n"
+    return out^
+
 def direct_placeholder(v: Dict[String, String]) raises -> String:
     var out = String()
     out += "<form class=\"button_to\" method=\"post\" action=\"/rooms/directs?user_ids%5B%5D="

@@ -7,6 +7,8 @@ from http import Request
 from text import escape
 import templates as t
 import richtext
+import storage
+import sounds
 
 
 def set_user(
@@ -81,7 +83,13 @@ def message(
     v["boosts_path"] = "/messages/" + row[0] + "/boosts"
     v["new_boost_path"] = v["boosts_path"] + "/new"
     v["all_emoji"] = "1" if emoji(richtext.convert(row[7], True)) else "0"
-    v["presentation"] = richtext.presentation(row[7])
+    v["presentation"] = storage.presentation(db,signer,row[0])
+    if v["presentation"] == "":
+        var plain = richtext.resolved(db,signer,row[7],True)
+        if plain.startswith("/play "):
+            v["presentation"] = sounds.presentation(String(plain[byte=6:]))
+        if v["presentation"] == "":
+            v["presentation"] = '<div class="lexxy-content">\n  '+richtext.resolved(db,signer,row[7])+"\n</div>\n"
     var reactions = List[String](["👍", "👏", "👋", "💪", "❤️", "😂", "🎉", "🔥"])
     var titles = List[String](
         [
@@ -240,7 +248,7 @@ def context(
     if v["ios"] == "1":
         v["operating_system"] = "iOS"
     v["searches_path"] = "/searches"
-    v["base_url"] = "http://" + req.header("host")
+    v["base_url"] = req.origin()
     return v^
 
 
@@ -273,11 +281,17 @@ def room(
     mut signer: Signer,
     uid: String,
     req: Request,
-    name: String,
+    var name: String,
     rid: String,
     kind: String,
     rows: List[List[String]],
 ) raises -> String:
+    if kind=="rooms_direct":
+        var members = db.rows("SELECT u.name FROM users u JOIN memberships mm ON mm.user_id=u.id WHERE mm.room_id=? AND u.id<>? ORDER BY u.name",[rid,uid])
+        var names = List[String]()
+        for member in members:
+            names.append(member[0])
+        name = ", ".join(names) if len(names)>0 else db.scalar("SELECT name FROM users WHERE id=?",[uid])
     var v = context(db, signer, uid, req, name, "sidebar")
     v["room_id"] = rid
     v["room_name"] = name
@@ -286,9 +300,9 @@ def room(
     v["messages_dom"] = "messages_" + kind + "_" + rid
     v["involvement_dom"] = "involvement_" + kind + "_" + rid
     v["messages_path"] = "/rooms/" + rid + "/messages"
-    v["messages_url"] = "http://" + req.header("host") + v["messages_path"]
+    v["messages_url"] = req.origin() + v["messages_path"]
     v["refresh_path"] = (
-        "http://" + req.header("host") + "/rooms/" + rid + "/refresh"
+        req.origin() + "/rooms/" + rid + "/refresh"
     )
     v["room_edit_path"] = (
         "/rooms/" + kind.replace("rooms_", "") + "s/" + rid + "/edit"
@@ -351,7 +365,7 @@ def search(
         links += t.recent_link(item)
     v["links"] = links^
     v["has_recents"] = "1" if len(recents) > 0 else "0"
-    v["clear_path"] = "http://" + req.header("host") + "/searches/clear"
+    v["clear_path"] = req.origin() + "/searches/clear"
     v["recents"] = t.recents(v)
     var rid = req.cookie("last_room_visited")
     if (
@@ -381,9 +395,9 @@ def first_name(name: String) -> String:
     return String(names[0]) if len(names) > 0 else ""
 
 
-def sidebar(
+def sidebar_values(
     mut db: Database, mut signer: Signer, uid: String, req: Request
-) raises -> String:
+) raises -> Dict[String,String]:
     var v = context(db, signer, uid, req, "Campfire")
     var shared = String()
     var directs = String()
@@ -499,7 +513,12 @@ def sidebar(
     v["directs"] = directs^
     v["placeholders"] = ph^
     v["content"] = t.sidebar(v)
-    return layout(v, req)
+    return v^
+
+
+def sidebar(mut db: Database, mut signer: Signer, uid: String, req: Request) raises -> String:
+    var v = sidebar_values(db,signer,uid,req)
+    return layout(v,req)
 
 
 def login() -> String:

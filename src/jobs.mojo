@@ -1,11 +1,17 @@
-# The five-workload notification path: room payload, recipients, badges, endpoint
-# guard. Permitted public delivery is deliberately rejected as outside this port;
-# the benchmark gate requires the same blocked local destinations in all apps.
+# Durable notification and bot webhook delivery. Routing and payload policy live in Mojo.
 from std.ffi import external_call
 from std.os import getenv
 from database import Database
-from crypto import json_string, base64
+from crypto import json_string, base64, Signer
 import richtext
+import pubsub
+import webpush
+import network
+import views
+import message_actions
+import storage
+from parameters import Upload
+from text import token
 
 
 def count(index: Int, delta: Int = 1):
@@ -91,7 +97,7 @@ def truncate_json(s: String, limit: Int) -> String:
     return out^
 
 
-def process(mut db: Database, mid: String) raises:
+def process(mut db: Database, mid: String, hooks: Bool = True) raises:
     var rows = db.rows(
         (
             "SELECT"
@@ -107,26 +113,27 @@ def process(mut db: Database, mid: String) raises:
         return
     var row = rows[0].copy()
     var title = row[4] if row[2] == "Rooms::Direct" else row[3]
-    var body = richtext.convert(row[5], True)
+    var signer = Signer()
+    var body = richtext.resolved(db,signer,row[5],True)
+    if body=="":
+        body = db.scalar("SELECT b.filename FROM active_storage_blobs b JOIN active_storage_attachments a ON a.blob_id=b.id WHERE a.record_type='Message' AND a.record_id=? AND a.name='attachment' LIMIT 1",[mid])
+    var mention_ids = richtext.mention_ids(db,signer,row[5])
+    var mention_json = "["+",".join(mention_ids)+"]"
     if row[2] != "Rooms::Direct":
         body = row[4] + ": " + body
     title = truncate_json(title, 256)
     body = truncate_json(body, 3072)
     var subscriptions = db.rows(
         (
-            "SELECT ps.id,ps.user_id,coalesce(ps.endpoint,'') FROM"
+            "SELECT ps.id,ps.user_id,coalesce(ps.endpoint,''),coalesce(ps.p256dh_key,''),coalesce(ps.auth_key,'') FROM"
             " push_subscriptions ps JOIN users u ON u.id=ps.user_id JOIN"
             " memberships mm ON mm.user_id=u.id WHERE mm.room_id=? AND"
-            " mm.user_id<>? AND mm.involvement='everything' AND"
+            " u.status=0 AND mm.user_id<>? AND (mm.involvement='everything' OR (mm.involvement='mentions' AND mm.user_id IN (SELECT value FROM json_each(?)))) AND"
             " (mm.connected_at IS NULL OR mm.connected_at<datetime('now','-60"
             " seconds')) ORDER BY ps.id"
         ),
-        [row[0], row[1]],
+        [row[0], row[1],mention_json],
     )
-    # Text benchmark messages have no Action Text mention attachments. Fail closed
-    # if a scenario starts exercising that unsupported notification branch.
-    if "action-text-attachment" in row[5]:
-        raise Error("Mention notification parity is not yet supported")
     for sub in subscriptions:
         var badge = db.scalar(
             (
@@ -146,6 +153,8 @@ def process(mut db: Database, mid: String) raises:
             + badge
             + "}}}"
         )
+        if delivered(db,mid,"push",sub[0]):
+            continue
         count(2)
         trace(
             "notification",
@@ -160,24 +169,41 @@ def process(mut db: Database, mid: String) raises:
         if not push_endpoint_permitted(sub[2]):
             count(3)
         else:
-            count(9)
-            raise Error(
-                "Public push transport is outside the measured workload scope"
-            )
+            webpush.deliver(db,sub[0],sub[2],sub[3],sub[4],notification)
+        receipt(db,mid,"push",sub[0])
+
+    if hooks:
+        deliver_webhooks(db,signer,mid,row,mention_ids)
+
+
+def enqueue(mut db: Database, mid: String, hooks: Bool = True) raises:
+    _ = db.rows("INSERT INTO mojo_jobs(message_id,hooks) VALUES(?,?)",[mid,"1" if hooks else "0"])
+
+
+def delivered(mut db: Database, mid: String, kind: String, target: String) raises -> Bool:
+    return db.scalar("SELECT 1 FROM mojo_deliveries WHERE message_id=? AND kind=? AND target_id=?",[mid,kind,target])=="1"
+
+
+def receipt(mut db: Database, mid: String, kind: String, target: String) raises:
+    _ = db.rows("INSERT OR IGNORE INTO mojo_deliveries(message_id,kind,target_id) VALUES(?,?,?)",[mid,kind,target])
 
 
 def run(path: String) raises:
     var db = Database(path)
-    while True:
-        var mid = external_call["work_pop", Int]()
-        if mid < 0:
-            raise Error("Background queue failed")
+    while external_call["os_running",Int]():
+        var rows = db.rows("UPDATE mojo_jobs SET lease_until=unixepoch()+600,attempts=attempts+1 WHERE id=(SELECT id FROM mojo_jobs WHERE failed=0 AND available_at<=unixepoch() AND lease_until<unixepoch() ORDER BY id LIMIT 1) RETURNING id,message_id,hooks,attempts")
+        if len(rows)==0:
+            external_call["os_sleep_ms",NoneType](50)
+            continue
+        var job = rows[0].copy()
         try:
-            process(db, String(mid))
+            process(db,job[1],job[2]=="1")
+            _ = db.rows("DELETE FROM mojo_jobs WHERE id=?",[job[0]])
+            count(1)
         except e:
             count(6)
-            print("Background job failed:", e)
-        count(1)
+            print("Background job failed:",e)
+            _ = db.rows("UPDATE mojo_jobs SET lease_until=0,available_at=unixepoch()+min(3600,attempts*attempts*5),failed=CASE WHEN attempts>=10 THEN 1 ELSE 0 END,error=? WHERE id=?",[String(e),job[0]])
 
 
 def broadcast(
@@ -189,6 +215,7 @@ def broadcast(
         base64("gid://campfire/" + kind + "/" + room_id, True, False)
         + ":messages"
     )
+    pubsub.publish(stream, json_string(body))
     count(4)
     trace(
         "broadcast",
@@ -206,6 +233,7 @@ def broadcast(
     for member in memberships:
         var name = "user_" + member[0] + "_unreads"
         var unread = '{"roomId":' + room_id + "}"
+        pubsub.publish(name, unread)
         count(5)
         trace(
             "broadcast",
@@ -232,7 +260,63 @@ def webhook_candidates(
             [room_id, creator_id],
         )
         count(8, len(bots))
-        if len(bots) > 0:
-            raise Error(
-                "Bot webhook delivery is outside the text benchmark scope"
-            )
+        # Delivery runs in the background worker, after the message commit.
+
+
+def deliver_webhooks(mut db: Database, mut signer: Signer, mid: String, row: List[String], mentions: List[String]) raises:
+    var bots = db.rows("SELECT u.id,u.name,u.bot_token,w.url FROM users u JOIN webhooks w ON w.user_id=u.id JOIN memberships mm ON mm.user_id=u.id WHERE mm.room_id=? AND u.role=2 AND u.status=0 AND u.id<>? AND (?='Rooms::Direct' OR u.id IN (SELECT value FROM json_each(?)))",[row[0],row[1],row[2],"["+",".join(mentions)+"]"])
+    for bot in bots:
+        if delivered(db,mid,"hook",bot[0]):
+            continue
+        var plain = String(richtext.resolved(db,signer,row[5],True).replace("@"+bot[1],"").strip())
+        var payload = '{"user":{"id":'+row[1]+',"name":'+json_string(row[4])+'},"room":{"id":'+row[0]+',"name":'+("null" if row[2]=="Rooms::Direct" else json_string(row[3]))+',"path":'+json_string("/rooms/"+row[0]+"/"+bot[0]+"-"+bot[2]+"/messages")+'},"message":{"id":'+mid+',"body":{"html":'+json_string(row[5])+',"plain":'+json_string(plain)+'},"path":'+json_string("/rooms/"+row[0]+"/@"+mid)+'}}'
+        var response = network.request(bot[3],"POST","Content-Type: application/json",payload,True)
+        var attachment = response.content_type!="" and not response.content_type.startswith("text/html") and not response.content_type.startswith("text/plain")
+        if response.status==-3:
+            response.body = "Failed to respond within 15 seconds"
+        elif response.status!=200:
+            continue
+        if response.body=="":
+            continue
+        _ = db.rows("BEGIN IMMEDIATE")
+        try:
+            # Membership can change while the remote endpoint is answering.
+            if db.scalar("SELECT 1 FROM memberships WHERE room_id=? AND user_id=?",[row[0],bot[0]])!="1":
+                _ = db.rows("ROLLBACK")
+                continue
+            var now = db.scalar("SELECT strftime('%Y-%m-%d %H:%M:%f','now')")
+            var cid = token()
+            _ = db.rows("INSERT INTO messages(client_message_id,creator_id,room_id,created_at,updated_at) VALUES(?,?,?,?,?)",[cid,bot[0],row[0],now,now])
+            var reply_id = db.last_id()
+            var body = String()
+            var plain = String()
+            if attachment:
+                var kind = String(response.content_type.split(";")[0])
+                var extensions: Dict[String,String] = {"image/png":"png","image/jpeg":"jpg","image/webp":"webp","application/pdf":"pdf","video/mp4":"mp4","audio/mpeg":"mp3"}
+                var file = Upload("attachment."+extensions.get(kind,""),kind,response.body)
+                var bid = storage.upload(db,file)
+                storage.attach(db,bid,"Message",reply_id,"attachment")
+                plain = file.filename
+            else:
+                body = richtext.convert(response.body)
+                plain = richtext.resolved(db,signer,body,True)
+            _ = db.rows("INSERT INTO action_text_rich_texts(name,record_type,record_id,body,created_at,updated_at) VALUES('body','Message',?,?,?,?)",[reply_id,body,now,now])
+            _ = db.rows("INSERT INTO message_search_index(rowid,body) VALUES(?,?)",[reply_id,plain])
+            _ = db.rows("UPDATE rooms SET updated_at=?,messages_count=messages_count+1 WHERE id=?",[now,row[0]])
+            _ = db.rows("UPDATE memberships SET unread_at=?,updated_at=? WHERE room_id=? AND user_id<>? AND involvement<>'invisible' AND (connected_at IS NULL OR connected_at<datetime('now','-60 seconds'))",[now,now,row[0],bot[0]])
+            enqueue(db,reply_id,False)
+            receipt(db,mid,"hook",bot[0])
+            _ = db.rows("COMMIT")
+            db.pending_files.clear()
+            var message = db.rows(message_actions.COLUMNS+"WHERE m.id=?",[reply_id])[0].copy()
+            var target = "messages_"+row[2].replace("::","_").lower()+"_"+row[0]
+            var html = '<turbo-stream action="append" target="'+target+'"><template>'+views.message(db,signer,message)+'</template></turbo-stream>'
+            broadcast(db,row[0],row[2],reply_id,html)
+            count(0)
+        except e:
+            storage.rollback(db)
+            try:
+                _ = db.rows("ROLLBACK")
+            except:
+                pass
+            raise e^

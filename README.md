@@ -1,10 +1,16 @@
-# Campfire in Mojo — five matched benchmark workloads
+# Campfire in Mojo
 
-A native, compiled Mojo 1.1 port of the five HTTP workloads in the Campfire README:
-room pages, paginated messages, sidebar, search, and posting a text message.
-This repository stays local. It is not a complete Campfire replacement.
+A local Mojo 1.1 application port of Basecamp Campfire. Application routing, permissions, SQL, rendering, Action Cable, delivery and storage policy are written in Mojo. Generic C adapters connect POSIX, SQLite, OpenSSL, curl, Gumbo and libvips.
 
-## What now matches
+**Full replacement work is in progress. This is not yet a drop-in production replacement.** See [PORT_STATUS.md](PORT_STATUS.md) for verified features and remaining gaps. Nothing has been published or pushed.
+
+The original five-workload benchmark implementation is preserved in Git commit `41edc39`. Historical numbers below describe that commit, not the expanded application. They must be rerun after the expanded implementation passes its gates.
+
+## Application coverage
+
+The application now supports first-run setup and invitations, account/profile/admin and room management, text messages and edits, boosts, search, live Action Cable delivery and presence, private-room authorization and revocation, static frontend assets, binary multipart/direct uploads and signed downloads, avatars and logos, verified mentions, sounds, link previews, bot API and webhook replies, and encrypted Web Push transport. The server supervises its workers and persists delivery jobs in SQLite. Feature presence does not establish complete upstream parity; the status file records the remaining differences and validation scope.
+
+## Historical benchmark contract
 
 The first version emitted much smaller HTML and used a separate session mechanism.
 That version's performance numbers are superseded for comparisons of equal work.
@@ -37,27 +43,6 @@ Normalization is limited to HTML whitespace, attribute order, asset build finger
 write timestamps. One existing C/Rust difference is recorded explicitly: group initials use
 `J+K+J` in C and `J, K, and J` in Rust. Mojo follows Rust. Integration tests add concurrent
 writes, malformed HTTP, CSRF, Unicode, cache invalidation and upstream load-generator checks.
-
-## Scope of the equality claim
-
-The matching claim covers **the measured fixture, requests and background branches**. It
-is an implementation comparison under those conditions, not a language-only test or full
-application parity. Rust and C still implement many more features, so KLOC is not comparable
-as equal-feature application size.
-
-There are zero Action Cable subscribers in the HTTP workload. Mojo prepares the same event
-payloads but does not implement WebSocket delivery. The measured plain text posts mention no
-bots, and the destination guard blocks all push endpoints. Public push transport, bot webhook
-delivery, attachment/media processing, general Action Text mentions/embeds, sound messages,
-administration, asset serving, TLS and a complete interactive frontend remain outside this
-port. The compiler includes the layout's asset references; the application does not yet serve
-those resources. This is a benchmark backend, not a production server.
-
-The rich-text path preserves basic formatting and sanitizes using a Mojo allowlist over a
-generic libxml2 DOM adapter; it does not claim full Rails HTML5/Action Text compatibility.
-The strict comparison gate is rerun before each benchmark so changed fixtures do not silently
-inherit a passing result. The historical abbreviated-body measurements remain in
-`bench/results/2026-10-09-m4/` for provenance.
 
 ## Build and reproduce
 

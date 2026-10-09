@@ -110,6 +110,7 @@ def server(app, destination, server_cpus="0-3", cache=True):
             "CAMPFIRE_DATABASE_PATH": str(db), "STORAGE_PATH": str(runtime / "files"),
             "CAMPFIRE_STORAGE_PATH": str(runtime), "CAMPFIRE_FILES_PATH": str(runtime / "files"),
             "CAMPFIRE_RESPONSE_CACHE_MB": "64" if cache else "0",
+            "PUBLIC_PATH": str(MOJO / "public"),
             "CF_CACHE_BYTES": "67108864" if cache else "0",
         }
         if app == "mojo":
