@@ -110,20 +110,31 @@ long fs_unlink(const char *path) { return unlink(path); }
 #include <vips/vips.h>
 static void image_initialize(void) {
   static int started=0;
-  if(!started){vips_init("campfire-mojo");vips_cache_set_max_mem(64*1024*1024);vips_cache_set_max(32);vips_concurrency_set(2);started=1;}
+  if(!started){vips_init("campfire-mojo");vips_block_untrusted_set(1);vips_operation_block_set("VipsForeignLoadOpenslide",1);vips_cache_set_max_mem(64*1024*1024);vips_cache_set_max(32);vips_concurrency_set(2);started=1;}
 }
 long image_dimensions(const void *bytes,long length,long *dimensions) {
   image_initialize();
   VipsImage *im=vips_image_new_from_buffer(bytes,length,"",NULL);
   if(!im){vips_error_clear();return -1;}
+  int orientation=1; if(vips_image_get_typeof(im,"orientation"))vips_image_get_int(im,"orientation",&orientation);
   dimensions[0]=vips_image_get_width(im);dimensions[1]=vips_image_get_height(im);
+  if(orientation>=5&&orientation<=8){long swap=dimensions[0];dimensions[0]=dimensions[1];dimensions[1]=swap;}
   g_object_unref(im);return 0;
 }
 long image_transform(const void *bytes,long length,long width,long height,long crop,const char *format,void **out,long *size) {
   image_initialize();long dims[2];
   if(width<1||height<1||width>4096||height>4096||image_dimensions(bytes,length,dims)||dims[0]<1||dims[1]<1||dims[0]>250000000/dims[1])return -1;
-  VipsImage *thumb=NULL;size_t n=0;
-  if(vips_thumbnail_buffer((void*)bytes,length,&thumb,width,"height",(int)height,"crop",crop?VIPS_INTERESTING_CENTRE:VIPS_INTERESTING_NONE,"size",VIPS_SIZE_DOWN,NULL)){vips_error_clear();return -1;}
+  VipsImage *input=vips_image_new_from_buffer(bytes,length,"",NULL),*rotated=NULL,*thumb=NULL;size_t n=0;
+  if(!input){vips_error_clear();return -1;}
+  int rc_load=vips_autorot(input,&rotated,NULL);g_object_unref(input);
+  if(rc_load){vips_error_clear();return -1;}
+  int rc_thumb=vips_thumbnail_image(rotated,&thumb,width,"height",(int)height,"crop",crop==1?VIPS_INTERESTING_CENTRE:VIPS_INTERESTING_NONE,"size",crop?VIPS_SIZE_BOTH:VIPS_SIZE_DOWN,"no_rotate",TRUE,NULL);g_object_unref(rotated);
+  if(rc_thumb){vips_error_clear();return -1;}
+  const double coefficients[]={-1,-1,-1,-1,32,-1,-1,-1,-1};
+  VipsImage *mask=vips_image_new_matrix_from_array(3,3,coefficients,9),*sharpened=NULL;
+  vips_image_set_double(mask,"scale",24);
+  int rc_sharp=vips_conv(thumb,&sharpened,mask,"precision",VIPS_PRECISION_INTEGER,NULL);g_object_unref(mask);g_object_unref(thumb);
+  if(rc_sharp){vips_error_clear();return -1;}thumb=sharpened;
   int rc=-1;
   if(!strcmp(format,"webp"))rc=vips_webpsave_buffer(thumb,out,&n,NULL);
   else if(!strcmp(format,"png"))rc=vips_pngsave_buffer(thumb,out,&n,NULL);

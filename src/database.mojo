@@ -1,4 +1,5 @@
 from std.ffi import external_call
+from file_transfer import FileTransfer
 
 
 def c_text[callee: StaticString](handle: Int) -> String:
@@ -9,6 +10,7 @@ def c_text[callee: StaticString](handle: Int) -> String:
 struct Database(Movable):
     var handle: Int
     var request_host: String
+    var pending_download: FileTransfer
     var pending_deletes: List[String]
     var pending_files: List[String]
     var pending_events: List[String]
@@ -17,6 +19,7 @@ struct Database(Movable):
     def __init__(out self, var path: String) raises:
         self.handle = external_call["sql_open", Int](path.as_c_string_span())
         self.request_host = ""
+        self.pending_download = FileTransfer()
         self.pending_deletes = List[String]()
         self.pending_files = List[String]()
         self.pending_events = List[String]()
@@ -28,6 +31,8 @@ struct Database(Movable):
         _ = self.rows("PRAGMA foreign_keys=ON")
 
     def __deinit__(deinit self):
+        if self.pending_download.fd>=0:
+            _ = external_call["os_close",Int](self.pending_download.fd)
         for stmt in self.statements.values():
             _ = external_call["sql_finalize", Int](stmt)
         _ = external_call["sql_close", Int](self.handle)

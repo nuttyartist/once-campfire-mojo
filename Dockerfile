@@ -8,7 +8,7 @@ RUN mkdir /mojo-runtime && cp /opt/mojo/lib/python3.13/site-packages/modular/lib
 
 FROM debian:trixie-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libcurl4t64 libcrypt1 libmagic1t64 libxml2 libvips42t64 ffmpeg \
+    libcurl4t64 libcrypt1 libmagic1t64 libxml2 libvips42t64 ffmpeg poppler-utils \
     ca-certificates openssl python3 tini caddy && rm -rf /var/lib/apt/lists/* \
     && useradd --system --uid 10001 --create-home campfire
 WORKDIR /app

@@ -11,7 +11,7 @@ import pubsub
 import ui
 import storage
 
-comptime COLUMNS = "SELECT m.id,m.client_message_id,m.created_at,m.creator_id,u.name,m.room_id,coalesce(r.name,'Direct message'),coalesce(rt.body,idx.body,'') FROM messages m JOIN users u ON u.id=m.creator_id JOIN rooms r ON r.id=m.room_id LEFT JOIN message_search_index idx ON idx.rowid=m.id LEFT JOIN action_text_rich_texts rt ON rt.record_id=m.id AND rt.record_type='Message' AND rt.name='body' "
+comptime COLUMNS = "SELECT m.id,m.client_message_id,m.created_at,m.creator_id,u.name,m.room_id,coalesce(r.name,'Direct message'),coalesce(rt.body,idx.body,'') FROM messages m LEFT JOIN users u ON u.id=m.creator_id JOIN rooms r ON r.id=m.room_id LEFT JOIN message_search_index idx ON idx.rowid=m.id LEFT JOIN action_text_rich_texts rt ON rt.record_id=m.id AND rt.record_type='Message' AND rt.name='body' "
 
 
 def wire_user(mut db: Database, mut signer: Signer, uid: String, req: Request) raises -> String:
@@ -21,7 +21,7 @@ def wire_user(mut db: Database, mut signer: Signer, uid: String, req: Request) r
 
 
 def wire_message(mut db: Database, mut signer: Signer, row: List[String], req: Request) raises -> String:
-    return '{"id":'+row[0]+',"created_at":'+json_string(row[2].replace(" ","T")+"Z")+',"body":{"plain_text":'+json_string(richtext.resolved(db,signer,row[7],True))+',"html":'+json_string('<div class="lexxy-content">'+richtext.resolved(db,signer,row[7],False,True)+'</div>')+'},"creator":'+wire_user(db,signer,row[3],req)+',"room":{"id":'+row[5]+'},"url":'+json_string(req.origin()+"/rooms/"+row[5]+"/messages/"+row[0])+'}'
+    return '{"id":'+row[0]+',"created_at":'+json_string(row[2].replace(" ","T")+"Z")+',"body":{"plain_text":'+json_string(richtext.resolved(db,signer,row[7],True))+',"html":'+json_string(richtext.body_html(db,signer,row[7]))+'},"creator":'+wire_user(db,signer,row[3],req)+',"room":{"id":'+row[5]+'},"url":'+json_string(req.origin()+"/rooms/"+row[5]+"/messages/"+row[0])+'}'
 
 
 def wire_boost(mut db: Database, mut signer: Signer, bid: String, req: Request) raises -> String:
@@ -66,6 +66,8 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
     elif len(parts)==4 and String(parts[1])=="rooms" and String(parts[3])=="refresh":
         rid = String(positive(String(parts[2])))
         if db.scalar("SELECT 1 FROM memberships WHERE room_id=? AND user_id=?",[rid,uid])!="1":
+            return html("Not found",404)
+        if req.method!="GET":
             return html("Not found",404)
         var since = params(req.query).get("since","0")
         var milliseconds = 0
@@ -118,6 +120,8 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
             var body = ui.stream("remove","boost_"+bid)
             pubsub.room(db,rid,body)
             return Response(200,body,"text/vnd.turbo-stream.html; charset=utf-8","")
+        if verb!="GET":
+            return html("Not found",404)
         if edit:
             return html('<turbo-frame id="new_boost_message_'+row[1]+'">'+ui.form("/messages/"+mid+"/boosts",ui.input("boost[content]","","Boost"),"post","Boost")+'</turbo-frame>')
         var boosts = db.rows("SELECT id FROM boosts WHERE message_id=? ORDER BY created_at",[mid])
@@ -132,13 +136,20 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
         var editor = '<lexxy-editor name="message[body]" value="'+escape(richtext.editable(db,signer,row[7]))+'" aria-label="Edit message" class="input lexxy-content" autofocus></lexxy-editor>'
         return html('<turbo-frame id="edit_message_'+row[1]+'">'+ui.form(action,editor,"patch")+ui.form(action,"","delete","Delete message")+'</turbo-frame>')
     if verb=="PATCH" or verb=="PUT":
-        var raw = f.fields.get("message[body]","")
+        var raw = f.fields.get("message[body]",row[7])
         var plain = richtext.resolved(db,signer,raw,True)
-        if String(plain.strip())=="" and "message[attachment]" not in f.files and db.scalar("SELECT 1 FROM active_storage_attachments WHERE record_type='Message' AND record_id=? AND name='attachment'",[mid])!="1":
+        if String(plain.strip())=="" and "message[attachment]" not in f.files and f.fields.get("message[attachment]","")=="" and db.scalar("SELECT 1 FROM active_storage_attachments WHERE record_type='Message' AND record_id=? AND name='attachment'",[mid])!="1":
             return html("Message is empty",422)
         if "message[attachment]" in f.files:
             var blob = storage.upload(db,f.files["message[attachment]"])
             storage.attach(db,blob,"Message",mid,"attachment")
+            storage.prepare(db,blob)
+        elif f.fields.get("message[attachment]","")!="":
+            var blob = signer.verify(db,"ActiveStorage",f.fields["message[attachment]"],"blob_id",False)
+            if blob=="" or db.scalar("SELECT 1 FROM active_storage_blobs WHERE id=?",[blob])!="1":
+                return html("Invalid attachment",422)
+            storage.attach(db,blob,"Message",mid,"attachment")
+            storage.prepare(db,blob)
         _ = db.rows("UPDATE action_text_rich_texts SET body=?,updated_at=? WHERE record_type='Message' AND record_id=? AND name='body'",[richtext.canonical(db,raw),now,mid])
         richtext.sync_embeds(db,signer,db.scalar("SELECT id FROM action_text_rich_texts WHERE record_type='Message' AND record_id=? AND name='body'",[mid]),raw)
         _ = db.rows("UPDATE message_search_index SET body=? WHERE rowid=?",[plain,mid])
@@ -146,6 +157,8 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
         _ = db.rows("UPDATE rooms SET updated_at=? WHERE id=?",[now,rid])
         var updated = db.rows(COLUMNS+"WHERE m.id=?",[mid])[0].copy()
         pubsub.room(db,rid,ui.stream("replace","message_"+row[1],views.message(db,signer,updated)))
+        if "application/json" in req.header("accept"):
+            return Response(200,wire_message(db,signer,updated,req),"application/json","")
         return ui.redirect("/rooms/"+rid+"/messages/"+mid)
     if verb=="DELETE":
         var body = destroy_message(db,mid)

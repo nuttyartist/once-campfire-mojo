@@ -20,7 +20,7 @@ from std.os import getenv
 comptime MESSAGE_COLUMNS = (
     "SELECT"
     " m.id,m.client_message_id,m.created_at,m.creator_id,u.name,m.room_id,coalesce(r.name,'Direct"
-    " message'),coalesce(rt.body,idx.body,'') FROM messages m JOIN users u ON"
+    " message'),coalesce(rt.body,idx.body,'') FROM messages m LEFT JOIN users u ON"
     " u.id=m.creator_id JOIN rooms r ON r.id=m.room_id LEFT JOIN"
     " message_search_index idx ON idx.rowid=m.id LEFT JOIN"
     " action_text_rich_texts rt ON rt.record_id=m.id AND"
@@ -86,6 +86,10 @@ struct App(Movable):
             return html('<html><body style="background-color: green"></body></html>').pack(False)
         if req.path == "/_bench/stats" and getenv("MOJO_BENCH_DIAGNOSTICS", "") == "1":
             return Response(200,jobs.stats(),"application/json","").pack(False)
+        # Rails scopes these resources to Current.user, regardless of the URL id.
+        var user_path = req.path.split("/")
+        if len(user_path)>=4 and String(user_path[1])=="users" and String(user_path[3]) in ["profile","sidebar","push_subscriptions"]:
+            req.path = "/users/me/"+"/".join(user_path[3:])
         var segments = req.path.split("/")
         if len(segments)>=5 and String(segments[1])=="rooms" and String(segments[4])=="messages":
             return self.bot(req.copy()).pack(req.gzip())

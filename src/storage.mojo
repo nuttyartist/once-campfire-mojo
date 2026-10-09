@@ -7,7 +7,9 @@ from http import Request, Response, html, validator
 from parameters import Upload, Form
 from runtime import read_file, digest
 import media
+import templates
 import marshal
+from file_transfer import FileTransfer, Segment
 from text import token, escape, params, decode
 
 
@@ -125,7 +127,7 @@ def blob_path(mut signer: Signer, id: String, filename: String) raises -> String
 
 
 def bytes_response(body: String, kind: String, filename: String, req: Request, force_download: Bool = False) raises -> Response:
-    var extra = "Accept-Ranges: bytes\r\nContent-Disposition: "+("attachment" if force_download or kind=="application/octet-stream" else "inline")+'; filename="'+safe_filename(filename)+'"\r\n'
+    var extra = "Accept-Ranges: bytes\r\nContent-Disposition: "+("attachment" if force_download or kind not in ["image/webp","image/avif","image/png","image/gif","image/jpeg","image/tiff","image/bmp","image/vnd.adobe.photoshop","image/vnd.microsoft.icon","application/pdf"] else "inline")+'; filename="'+safe_filename(filename)+'"\r\n'
     var tag = validator(body)
     extra += "ETag: "+tag+"\r\nCache-Control: public, max-age=300\r\n"
     if req.header("if-none-match")==tag or req.header("if-none-match")=="W/"+tag or req.header("if-none-match")=="*":
@@ -171,15 +173,90 @@ def bytes_response(body: String, kind: String, filename: String, req: Request, f
 
 
 def download(mut db: Database, blob: String, req: Request) raises -> Response:
-    var rows = db.rows("SELECT key,filename,coalesce(content_type,'application/octet-stream') FROM active_storage_blobs WHERE id=?",[blob])
+    var rows = db.rows("SELECT key,filename,coalesce(content_type,'application/octet-stream'),byte_size,coalesce(checksum,'') FROM active_storage_blobs WHERE id=?",[blob])
     if len(rows)==0:
         return html("File not found",404)
     var row = rows[0].copy()
-    var body = read_file(root(),relative(row[0]),134217728)
-    var kind = row[2]
-    if kind=="text/html" or kind=="image/svg+xml" or kind.endswith("xml"):
-        kind = "application/octet-stream"
-    return bytes_response(body,kind,row[1],req,params(req.query).get("disposition","")=="attachment")
+    var folder = root()
+    var path = relative(row[0])
+    var fd = external_call["fs_open_beneath",Int](folder.as_c_string_span(),path.as_c_string_span())
+    if fd<0:
+        return html("File not found",404)
+    var transfer = FileTransfer()
+    transfer.fd = fd
+    try:
+        var total = external_call["fs_size",Int](fd)
+        if total<0 or String(total)!=row[3]:
+            raise Error("Storage file size differs from its record")
+        var kind = row[2]
+        if kind in ["text/html","image/svg+xml","application/postscript","application/x-shockwave-flash","text/xml","application/xml","application/xhtml+xml","application/mathml+xml","text/cache-manifest"]:
+            kind = "application/octet-stream"
+        var force = params(req.query).get("disposition","")=="attachment" or kind not in ["image/webp","image/avif","image/png","image/gif","image/jpeg","image/tiff","image/bmp","image/vnd.adobe.photoshop","image/vnd.microsoft.icon","application/pdf"]
+        var filename = safe_filename(row[1])
+        var fallback = String()
+        for cp in filename.codepoints():
+            var letter = String(cp)
+            fallback += letter if letter.byte_length()==1 and Int(letter.as_bytes()[0])>=32 and Int(letter.as_bytes()[0])<127 else "_"
+        var tag = validator(row[0]+":"+row[3]+":"+row[4])
+        var extra = "Accept-Ranges: bytes\r\nContent-Disposition: "+("attachment" if force else "inline")+'; filename="'+fallback+'"; filename*=UTF-8'+"''"+url_encode(filename).replace("+","%20")+'\r\nETag: '+tag+"\r\nCache-Control: public, max-age=300\r\n"
+        if req.header("if-none-match")==tag or req.header("if-none-match")=="W/"+tag or req.header("if-none-match")=="*":
+            transfer.close()
+            return Response(304,"",kind,extra)
+        var range = req.header("range")
+        if req.header("if-range")!="" and req.header("if-range")!=tag:
+            range = ""
+        var spans = List[Tuple[Int,Int]]()
+        var partial = range.startswith("bytes=")
+        if partial:
+            var pieces = String(range[byte=6:]).split(",")
+            try:
+                if len(pieces)>16:
+                    raise Error("Too many ranges")
+                for piece in pieces:
+                    var bits = String(piece.strip()).split("-",maxsplit=1)
+                    if len(bits)!=2 or (String(bits[0])=="" and String(bits[1])==""):
+                        raise Error("Malformed range")
+                    for bit in bits:
+                        if bit.byte_length()>18:
+                            raise Error("Range too large")
+                        for c in bit.as_bytes():
+                            if c<48 or c>57:
+                                raise Error("Malformed range")
+                    var start = Int(bits[0]) if String(bits[0])!="" else max(0,total-Int(bits[1]))
+                    var end = Int(bits[1]) if String(bits[1])!="" and String(bits[0])!="" else total-1
+                    end = min(end,total-1)
+                    if start>=0 and start<total and end>=start:
+                        spans.append((start,end))
+            except:
+                spans.clear()
+            if len(spans)==0:
+                transfer.close()
+                return Response(416,"",kind,"Content-Range: bytes */"+String(total)+"\r\n")
+        else:
+            spans.append((0,total-1))
+        var length = 0
+        if len(spans)==1:
+            length = spans[0][1]-spans[0][0]+1
+            transfer.parts.append(Segment("",spans[0][0],length))
+            if partial:
+                extra += "Content-Range: bytes "+String(spans[0][0])+"-"+String(spans[0][1])+"/"+String(total)+"\r\n"
+        else:
+            var boundary = "campfire-"+token()
+            for span in spans:
+                var prefix = ("\r\n" if length>0 else "")+"--"+boundary+"\r\nContent-Type: "+kind+"\r\nContent-Range: bytes "+String(span[0])+"-"+String(span[1])+"/"+String(total)+"\r\n\r\n"
+                var size = span[1]-span[0]+1
+                length += prefix.byte_length()+size
+                transfer.parts.append(Segment(prefix,span[0],size))
+            var tail = "\r\n--"+boundary+"--\r\n"
+            length += tail.byte_length()
+            transfer.parts.append(Segment(tail,0,0))
+            kind = "multipart/byteranges; boundary="+boundary
+        db.pending_download.close()
+        db.pending_download = transfer^
+        return Response(206 if partial else 200,"",kind,extra,length)
+    except e:
+        transfer.close()
+        raise e^
 
 
 def variant(mut db: Database, blob: String, transformations: String, symbols: Bool = False) raises -> String:
@@ -224,11 +301,16 @@ def preview(mut db: Database, blob: String) raises -> String:
         return stored
     var row = db.rows("SELECT key,filename,content_type,metadata FROM active_storage_blobs WHERE id=?",[blob])[0].copy()
     var pixels = db.rows("SELECT coalesce(json_extract(?,'$.width'),0),coalesce(json_extract(?,'$.height'),0)",[row[3],row[3]])[0].copy()
-    if Int(pixels[0])<1 or Int(pixels[1])<1 or Int(pixels[0])>250000000//Int(pixels[1]):
+    if row[2]!="application/pdf" and (Int(pixels[0])<1 or Int(pixels[1])<1 or Int(pixels[0])>250000000//Int(pixels[1])):
         raise Error("Media too large or undecodable")
     var source = read_file(root(),relative(row[0]),134217728)
     if row[2].startswith("video/"):
         var data = media.poster(source,row[2])
+        stored = upload(db,Upload(row[1]+".jpg","image/jpeg",data))
+        attach(db,stored,"ActiveStorage::Blob",blob,"preview_image")
+        return stored^
+    if row[2]=="application/pdf":
+        var data = media.pdf_preview(source)
         stored = upload(db,Upload(row[1]+".png","image/png",data))
         attach(db,stored,"ActiveStorage::Blob",blob,"preview_image")
         return stored^
@@ -237,11 +319,11 @@ def preview(mut db: Database, blob: String) raises -> String:
 
 def prepare(mut db: Database, blob: String) raises:
     var kind = db.scalar("SELECT content_type FROM active_storage_blobs WHERE id=?",[blob])
-    if kind.startswith("image/") or kind.startswith("video/") or kind=="application/pdf":
+    if variable(kind) or kind.startswith("video/") or kind=="application/pdf":
         try:
-            var source = preview(db,blob) if kind.startswith("video/") else blob
-            var format = "webp" if kind.startswith("video/") else "jpg" if kind=="image/jpeg" else "gif" if kind=="image/gif" else "png"
-            _ = variant(db,source,'{"format":'+json_string(format)+',"resize_to_limit":[1200,800]}',True)
+            var source = preview(db,blob) if kind.startswith("video/") or kind=="application/pdf" else blob
+            var format = "webp" if kind.startswith("video/") else thumbnail_format(kind)
+            _ = variant(db,source,'{"format":'+json_string(format)+',"resize_to_limit":[1200,800]}',kind.startswith("video/"))
         except:
             # A file remains downloadable when the media decoder cannot preview it.
             pass
@@ -260,19 +342,53 @@ def representation_path(mut signer: Signer, id: String, filename: String, format
     return "/rails/active_storage/representations/proxy/"+url_encode(signed_id(signer,id))+"/"+url_encode(variation)+"/"+url_encode(safe_filename(filename))
 
 
+def variable(kind: String) -> Bool:
+    return kind in ["image/png","image/gif","image/jpeg","image/tiff","image/webp","image/avif","image/heic","image/heif"]
+
+
+def thumbnail_format(kind: String) -> String:
+    return "jpg" if kind=="image/jpeg" else "gif" if kind=="image/gif" else "webp" if kind=="image/webp" else "png"
+
+
+def attachment_icon(name: String, size: Int) raises -> String:
+    return '<img class="colorize--black" aria-hidden="true" src="'+templates.asset(name+".svg")+'" width="'+String(size)+'" height="'+String(size)+'">'
+
+
+def has_thumbnail(mut db: Database, bid: String, format: String) raises -> Bool:
+    var transform = '{"format":'+json_string(format)+',"resize_to_limit":[1200,800]}'
+    var expected = base64(digest(marshal.dump(db,transform),False))
+    var symbolic = base64(digest(marshal.dump(db,transform,True),False))
+    return db.scalar("SELECT 1 FROM active_storage_variant_records v JOIN active_storage_attachments a ON a.record_type='ActiveStorage::VariantRecord' AND a.record_id=v.id WHERE v.blob_id=? AND v.variation_digest IN (?,?) LIMIT 1",[bid,expected,symbolic])=="1"
+
+
 def presentation(mut db: Database, mut signer: Signer, mid: String) raises -> String:
-    var rows = db.rows("SELECT b.id,b.filename,b.content_type,b.byte_size FROM active_storage_blobs b JOIN active_storage_attachments a ON a.blob_id=b.id WHERE a.record_type='Message' AND a.record_id=? AND a.name='attachment' LIMIT 1",[mid])
+    var rows = db.rows("SELECT b.id,b.filename,b.content_type,b.metadata FROM active_storage_blobs b JOIN active_storage_attachments a ON a.blob_id=b.id WHERE a.record_type='Message' AND a.record_id=? AND a.name='attachment' LIMIT 1",[mid])
     if len(rows)==0:
         return ""
     var b = rows[0].copy()
     var url = blob_path(signer,b[0],b[1])
-    if b[2].startswith("image/") and b[2]!="image/svg+xml":
-        return '<figure class="attachment attachment--preview"><a href="'+escape(url)+'"><img src="'+escape(representation_path(signer,b[0],b[1],"jpg" if b[2]=="image/jpeg" else "gif" if b[2]=="image/gif" else "png"))+'" alt="'+escape(b[1])+'" loading="lazy" style="max-width:100%;max-height:800px"></a><figcaption>'+escape(b[1])+'</figcaption></figure>'
+    var download_url = url+"?disposition=attachment"
+    var dims = db.rows("SELECT coalesce(json_extract(?,'$.width'),0),coalesce(json_extract(?,'$.height'),0)",[b[3],b[3]])[0].copy()
+    var width = Float64(dims[0])
+    var height = Float64(dims[1])
+    if width>1200 or height>800:
+        var scale = min(1200/width,800/height)
+        width *= scale
+        height *= scale
+    var wrapper = '<div class="max-inline-size center '+("flex overflow-clip" if width>0 and height>0 else "overflow-clip")+'"'
+    if width>0 and height>0:
+        wrapper += ' style="width: '+String(width/2)+'px; aspect-ratio: '+String(width/height)+';"'
+    wrapper += ">"
+    var source = b[0]
+    if b[2].startswith("video/") or b[2]=="application/pdf":
+        source = db.scalar("SELECT blob_id FROM active_storage_attachments WHERE record_type='ActiveStorage::Blob' AND record_id=? AND name='preview_image'",[b[0]])
     if b[2].startswith("video/"):
-        return '<video controls preload="metadata" poster="'+escape(representation_path(signer,b[0],b[1],"webp"))+'" src="'+escape(url)+'"></video><a href="'+escape(url)+'">'+escape(b[1])+'</a>'
-    if b[2].startswith("audio/"):
-        return '<audio controls src="'+escape(url)+'"></audio><a href="'+escape(url)+'">'+escape(b[1])+'</a>'
-    return '<figure class="attachment"><a download href="'+escape(url)+'">'+escape(b[1])+'</a><figcaption>'+b[3]+' bytes</figcaption></figure>'
+        var poster = representation_path(signer,b[0],b[1],"webp") if source!="" and has_thumbnail(db,source,"webp") else String()
+        return wrapper+'<video src="'+escape(url)+'"'+(' poster="'+escape(poster)+'"' if poster!="" else '')+' controls="controls" preload="none" width="100%" height="100%" class="message__attachment"></video></div>'
+    if (variable(b[2]) or b[2]=="application/pdf") and source!="" and has_thumbnail(db,source,thumbnail_format(b[2])):
+        var dimensions = ' width="'+String(width)+'" height="'+String(height)+'"' if width>0 and height>0 else String()
+        return wrapper+'<a class="flex" data-lightbox-target="image" data-action="lightbox#open" data-lightbox-url-value="'+escape(download_url)+'" href="'+escape(url)+'"><img'+dimensions+' class="message__attachment" loading="lazy" src="'+escape(representation_path(signer,b[0],b[1],thumbnail_format(b[2])))+'"></a></div>'
+    return '<div class="flex-inline align-center gap-half">'+attachment_icon("common-file-text",22)+'<span>'+escape(b[1])+'</span><a class="btn message__action-btn hide-in-ios-pwa" style="--width: auto;" href="'+escape(download_url)+'">'+attachment_icon("download",20)+'<span class="for-screen-reader">Download '+escape(b[1])+'</span></a><button class="btn message__action-btn" style="--width: auto;" data-controller="web-share" data-action="web-share#share" data-web-share-files-value="'+escape(download_url)+'">'+attachment_icon("share",20)+'<span class="for-screen-reader">Share '+escape(b[1])+'</span></button></div>'
 
 
 def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Form) raises -> Response:
@@ -303,7 +419,7 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
         if blob=="" or transformations=="":
             return html("Not found",404)
         var kind = db.scalar("SELECT content_type FROM active_storage_blobs WHERE id=?",[blob])
-        if kind.startswith("video/"):
+        if kind.startswith("video/") or kind=="application/pdf":
             blob = preview(db,blob)
         return download(db,variant(db,blob,transformations),req)
     if len(parts)>=6 and String(parts[1])=="rails" and String(parts[2])=="active_storage" and String(parts[3])=="blobs":
@@ -358,6 +474,7 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
 
 
 def rollback(mut db: Database):
+    db.pending_download.close()
     db.pending_deletes.clear()
     for file in db.pending_files:
         var name = file.copy()

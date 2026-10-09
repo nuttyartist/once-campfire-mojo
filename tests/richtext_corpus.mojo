@@ -10,7 +10,7 @@ def main() raises:
     var db = Database(":memory:")
     schema.initialize(db)
     var signer = Signer()
-    var corpus = read_file(getenv("RICHTEXT_CORPUS_DIR","/workspace/once-campfire-rust/crates/richtext/tests/corpus"),"expected.json",16777216)
+    var corpus = read_file(getenv("RICHTEXT_CORPUS_DIR","tests/corpus"),"expected.json",16777216)
     var replacements = Dict[String,String]()
     var users = db.rows("SELECT json_extract(value,'$.id'),json_extract(value,'$.name'),json_extract(value,'$.avatar_path'),json_extract(value,'$.attachable_sgid'),json_extract(value,'$.title') FROM json_each(?,'$.users')",[corpus])
     for user in users:
@@ -47,7 +47,17 @@ def main() raises:
             mentions = '{"ok":['+",".join(richtext.mention_ids(db,signer,source))+']}'
         except e:
             mentions = '{"error":'+json_string(String(e))+'}'
-        print('{"case":'+expected+',"actual_plain":'+result+',"actual_html":'+rendered+',"actual_mentions":'+mentions+'}')
+        var body_html = String()
+        try:
+            body_html = '{"ok":'+json_string(richtext.body_html(db,signer,source))+'}'
+        except e:
+            body_html = '{"error":'+json_string(String(e))+'}'
+        var edited = String()
+        try:
+            edited = '{"ok":'+json_string(richtext.editable(db,signer,source))+'}'
+        except e:
+            edited = '{"error":'+json_string(String(e))+'}'
+        print('{"case":'+expected+',"actual_plain":'+result+',"actual_html":'+rendered+',"actual_mentions":'+mentions+',"actual_editable":'+edited+',"actual_body_html":'+body_html+'}')
     for item in db.rows("SELECT value,json_extract(value,'$.value'),json_extract(value,'$.host') FROM json_each(?,'$.web_urls')",[corpus]):
         var result = String()
         try:

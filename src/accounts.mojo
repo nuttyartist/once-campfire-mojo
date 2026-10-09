@@ -202,6 +202,8 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
         if verb == "PATCH" or verb == "PUT":
             _ = db.rows("UPDATE accounts SET custom_styles=?,updated_at=?",[f.fields.get("account[custom_styles]",""),now])
             return ui.redirect("/account/custom_styles/edit")
+        if verb!="GET":
+            return html("Not found",404)
         return ui.page(db,signer,uid,req,"Custom styles",ui.form("/account/custom_styles",ui.textarea("account[custom_styles]",db.scalar("SELECT coalesce(custom_styles,'') FROM accounts LIMIT 1"),"Custom CSS"),"patch"))
     if path.startswith("/account/bots"):
         if not is_admin:
@@ -235,6 +237,8 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
                 if url!="":
                     _ = db.rows("INSERT INTO webhooks(user_id,url,created_at,updated_at) VALUES(?,?,?,?)",[bid,url,now,now])
             return ui.redirect("/account/bots")
+        if verb!="GET":
+            return html("Not found",404)
         if path.endswith("/new") or path.endswith("/edit"):
             var name = db.scalar("SELECT name FROM users WHERE id=?",[bid])
             var avatar = signer.avatar(bid,db.scalar("SELECT strftime('%Y%m%d%H%M%S',updated_at) FROM users WHERE id=?",[bid])) if bid!="" else templates.asset("default-bot-avatar.svg")
@@ -249,7 +253,7 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
     var segments = path.split("/")
     if len(segments)>=3 and String(segments[1])=="users" and String(segments[2])!="me":
         var target = String(segments[2])
-        if len(segments)==3:
+        if len(segments)==3 and verb=="GET":
             var users = db.rows("SELECT name,coalesce(bio,''),role FROM users WHERE id=?",[target])
             if len(users)==0:
                 return html("User not found",404)

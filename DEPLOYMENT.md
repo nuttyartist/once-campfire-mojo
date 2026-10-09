@@ -28,7 +28,7 @@ python3 tools/manage.py import-rails \
   --data /path/to/new-mojo-data
 ```
 
-This supports the original `local` Active Storage Disk service and current shared Campfire schema. Remote storage objects must first be exported into a consistent local Disk installation. Missing referenced files, changed databases, corrupt checksums, symlinks, unsupported schemas, and existing destinations stop the import. Uncompleted, unattached direct-upload rows may lack a file.
+This supports the original `local` Active Storage Disk service and current shared Campfire schema. Remote storage objects must first be exported into a consistent local Disk installation. Missing referenced files, changed databases, corrupt checksums, symlinks, unsupported schemas, existing foreign-key violations, and existing destinations stop the import. If the original installation intentionally retains orphaned records (as the shared test fixture does), `--allow-existing-orphans` preserves those rows and records each existing violation in `import.json`; it does not fabricate missing records or repair corrupt files. Uncompleted, unattached direct-upload rows may lack a file.
 
 Mount the resulting directory at `/data` with ownership allowing container UID 10001 access. Verify login, room history, attachments, search, and bot integrations before changing the browser-facing origin. Keep the original installation stopped while the copy is active; this is not a replication or dual-writer setup. Rollback means stopping Mojo and restoring the original deployment; subsequent Mojo writes will not appear in that original copy.
 
@@ -47,4 +47,4 @@ Backups include a SHA-256 manifest, database, Disk files and keys. Restore verif
 
 Acknowledged messages and queued work survive process termination. Successful recipient deliveries have receipts, but HTTP side effects cannot be atomic with the local database: webhook consumers should tolerate retries. Worker exits are supervised and repeated crashes terminate the container for Compose to restart.
 
-Current size limits are 64 MiB per uploaded request, 128 MiB per buffered file, 128 MiB of connection buffers per HTTP worker, 1,024 connections per worker, bounded Cable queues, and 30-second incomplete-request/idle timeouts. Media decoding is restricted to bounded dimensions/pixel counts and time-limited subprocesses. These limits and the outstanding acceptance items in `PORT_STATUS.md` matter when evaluating an existing installation.
+Current size limits are 64 MiB per uploaded request, 64 KiB chunks per downloaded file, 128 MiB of connection buffers per HTTP worker, 1,024 connections per worker, bounded Cable queues, and 30-second incomplete-request/idle timeouts. Media decoding is restricted to bounded dimensions/pixel counts and time-limited subprocesses. These limits and the compatibility notes in `PORT_STATUS.md` apply when evaluating an existing installation.

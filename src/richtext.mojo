@@ -238,6 +238,8 @@ def web_url(value: String, host: String) raises -> String:
         if c<=32 or c>=127:
             return ""
     var path = String(value.split("?")[0])
+    if regex('[<>`"]',path)[0]>=0:
+        return ""
     var query = String(value.split("?",maxsplit=1)[1]) if "?" in value else String()
     if "\\" in value or regex("%(?![0-9a-fA-F]{2})",path)[0]>=0 or regex("%[^0-9a-fA-F][^0-9a-fA-F]",query)[0]>=0 or regex("#.*#",value)[0]>=0:
         return ""
@@ -294,21 +296,16 @@ def embed_content(node: Int, mut attrs: Dict[String,String], depth: Int = 0) rai
         var cls = values.get("class","")
         if "og-embed__title" in cls:
             attrs["filename"] = String(walk(external_call["dom_child",Int](current),True,False,0).strip())
-            var link = external_call["dom_child",Int](current)
-            while link!=0:
-                if c_text["dom_name"](link)=="a":
-                    attrs["href"] = attributes(link).get("href","")
-                    break
-                link = external_call["dom_next",Int](link)
+            var link = descendant(external_call["dom_child",Int](current),"a")
+            if link!=0:
+                attrs["filename"] = String(walk(external_call["dom_child",Int](link),True,False,0).strip())
+                attrs["href"] = attributes(link).get("href","")
         if "og-embed__description" in cls:
             attrs["caption"] = String(walk(external_call["dom_child",Int](current),True,False,0).strip())
         if "og-embed__image" in cls:
-            var img = external_call["dom_child",Int](current)
-            while img!=0:
-                if c_text["dom_name"](img)=="img":
-                    attrs["url"] = attributes(img).get("src","")
-                    break
-                img = external_call["dom_next",Int](img)
+            var img = descendant(external_call["dom_child",Int](current),"img")
+            if img!=0:
+                attrs["url"] = attributes(img).get("src","")
         embed_content(external_call["dom_child",Int](current),attrs,depth+1)
         current = external_call["dom_next",Int](current)
 
@@ -340,7 +337,7 @@ def embed(var attrs: Dict[String,String], host: String) raises -> String:
     return '<figure class="attachment attachment--content attachment--og"><div class="og-embed gap'+(' og-embed--twitter-avatar' if image.startswith("https://pbs.twimg.com/profile_images") else ' ')+'"><div class="og-embed__content"><div class="og-embed__title">'+title+'</div><div class="og-embed__description">'+escape(shortened(attrs.get("caption",""),560))+'</div></div>'+('<div class="og-embed__image"><img src="'+escape(image)+'" class="image center" alt=""></div>' if image!="" else '')+'</div></figure>'
 
 
-def resolve(mut db: Database, mut signer: Signer, node: Int, plain: Bool, mut mentions: List[String], depth: Int = 0, attachment_depth: Int = 0) raises:
+def resolve(mut db: Database, mut signer: Signer, node: Int, plain: Bool, mut mentions: List[String], depth: Int = 0, attachment_depth: Int = 0, wrap: Bool = False) raises:
     if depth>512:
         raise Error("Attachment nesting too deep")
     var current = node
@@ -348,6 +345,12 @@ def resolve(mut db: Database, mut signer: Signer, node: Int, plain: Bool, mut me
         var next = external_call["dom_next",Int](current)
         if c_text["dom_name"](current)=="action-text-attachment":
             var attrs = attributes(current)
+            if wrap and "content" in attrs:
+                var cleaned = action_sanitize(attrs["content"])
+                if String(cleaned.strip())=="":
+                    _ = attrs.pop("content")
+                else:
+                    attrs["content"] = cleaned^
             var has_attachment_attribute = False
             var escaped_attributes = False
             for key in attrs.keys():
@@ -356,6 +359,10 @@ def resolve(mut db: Database, mut signer: Signer, node: Int, plain: Bool, mut me
                         has_attachment_attribute = True
                 if " "+key+" " in ATTRS or key=="style":
                     escaped_attributes = True
+            if wrap:
+                for key in ["sgid","content-type","url","href","filename","filesize","width","height","previewable","presentation","caption","content"]:
+                    if key in attrs:
+                        has_attachment_attribute = True
             if not plain and not has_attachment_attribute:
                 raise Error("Attachment is missing its attributes")
             var sgid = attrs.get("sgid","")
@@ -365,7 +372,10 @@ def resolve(mut db: Database, mut signer: Signer, node: Int, plain: Bool, mut me
                 gid = display_user_gid(db,sgid)
             var replacement = attrs.get("caption","") if plain else String("☒")
             if regex("application/vnd.actiontext.opengraph-embed",attrs.get("content-type",""))[0]>=0:
-                var preview = embed(attrs.copy(),db.request_host if db.request_host!="" else network.component(getenv("PUBLIC_ORIGIN","")))
+                var preview_attrs = attrs.copy()
+                if not wrap and "href" in preview_attrs:
+                    preview_attrs["href"] = uri_escape(preview_attrs["href"])
+                var preview = embed(preview_attrs^,db.request_host if db.request_host!="" else network.component(getenv("PUBLIC_ORIGIN","")))
                 replacement = "" if plain else preview^
             elif gid.startswith("gid://campfire/User/"):
                 var uid = String(String(gid[byte=20:]).split("?")[0])
@@ -373,11 +383,13 @@ def resolve(mut db: Database, mut signer: Signer, node: Int, plain: Bool, mut me
                 if len(rows)>0:
                     if verified!="" and uid not in mentions:
                         mentions.append(uid)
+                    if wrap:
+                        attrs["content-type"] = "application/vnd.campfire.mention"
                     replacement = "@"+rows[0][0]
                     if plain:
                         replacement = content_plain(replacement)
                     if not plain:
-                        replacement = '<span class="mention" sgid="'+escape(sgid)+'"><a title="'+escape(rows[0][0]+(' – '+rows[0][2] if rows[0][2]!="" else ""))+'" class="btn avatar" href="/users/'+uid+'"><img src="'+escape(signer.avatar(uid,rows[0][1]))+'" width="48" height="48"></a> '+escape(rows[0][0])+'</span>'
+                        replacement = '<span class="mention" sgid="'+escape(signer.envelope("signed_global_ids",json_string("gid://campfire/User/"+uid+"?expires_in"),"attachable","",True) if wrap else sgid)+'"><a title="'+escape(rows[0][0]+(' – '+rows[0][2] if rows[0][2]!="" else ""))+'" class="btn avatar" href="/users/'+uid+'"><img src="'+escape(signer.avatar(uid,rows[0][1]))+'" width="48" height="48"></a> '+escape(rows[0][0])+'</span>'
             elif gid.startswith("gid://campfire/ActiveStorage::Blob/"):
                 var bid = String(String(gid[byte=35:]).split("?")[0])
                 var rows = db.rows("SELECT filename,content_type FROM active_storage_blobs WHERE id=?",[bid])
@@ -394,10 +406,12 @@ def resolve(mut db: Database, mut signer: Signer, node: Int, plain: Bool, mut me
                     replacement = content_plain(content)
                 elif attachment_depth<8:
                     var sanitized = sanitize_content(content)
-                    replacement = resolved(db,signer,sanitized,False,True,attachment_depth+1) if sanitized!="" else "☒"
+                    replacement = (body_inner(db,signer,sanitized,attachment_depth+1) if wrap else resolved(db,signer,sanitized,False,True,attachment_depth+1)) if sanitized!="" else "☒"
                 else:
                     replacement = ""
-            elif attrs.get("url","")!="" and (attrs.get("content-type","").startswith("image/") or attrs.get("content-type","")=="image"):
+                if not plain and replacement!="☒":
+                    replacement = '<figure class="attachment attachment--content">'+replacement+'</figure>'
+            elif "url" in attrs and (attrs.get("content-type","").startswith("image/") or attrs.get("content-type","")=="image"):
                 var caption = attrs.get("caption","")
                 replacement = "["+(caption if caption!="" else "Image")+"]"
                 if not plain:
@@ -409,15 +423,31 @@ def resolve(mut db: Database, mut signer: Signer, node: Int, plain: Bool, mut me
                         if key in attrs:
                             dimensions += " "+key+'="'+escape(attrs[key])+'"'
                     replacement = '<figure class="attachment attachment--preview">\n  <img'+dimensions+' src="'+escape(url)+'">\n'+('    <figcaption class="attachment__caption">\n      '+escape(caption)+'\n    </figcaption>\n' if caption!="" else '')+'</figure>'
-            elif attrs.get("url","")!="" and (attrs.get("content-type","").startswith("video/") or attrs.get("content-type","")=="video"):
+            elif "url" in attrs and (attrs.get("content-type","").startswith("video/") or attrs.get("content-type","")=="video"):
                 var caption = attrs.get("caption","")
                 replacement = "["+(caption if caption!="" else attrs.get("filename","Video"))+"]" if plain else '<figure class="attachment attachment--preview"><video controls src="'+escape(attrs["url"])+'"></video>'+('<figcaption>'+escape(caption)+'</figcaption>' if caption!="" else '')+'</figure>'
+                if wrap:
+                    var dimensions = String()
+                    for key in ["width","height"]:
+                        if key in attrs:
+                            dimensions += " "+key+'="'+escape(attrs[key])+'"'
+                    replacement = '<figure class="attachment attachment--preview attachment--video"><video controls="controls"'+dimensions+'><source src="'+escape(attrs["url"])+'"></video>'+('<figcaption class="attachment__caption">'+escape(caption)+'</figcaption>' if caption!="" else '')+'</figure>'
+            if wrap:
+                var full = String("<action-text-attachment")
+                var count = 0
+                for key in ["sgid","content-type","url","href","filename","filesize","width","height","previewable","presentation","caption","content"]:
+                    if key in attrs:
+                        full += " "+key+'="'+escape(attrs[key])+'"'
+                        count += 1
+                if count==0:
+                    raise Error("Attachment is missing its attributes")
+                replacement = full+">"+replacement+"</action-text-attachment>"
             if plain:
                 _ = external_call["dom_replace_text",Int](current,replacement.as_c_string_span())
             else:
                 _ = external_call["dom_replace_html",Int](current,replacement.as_c_string_span(),replacement.byte_length())
         else:
-            resolve(db,signer,external_call["dom_child",Int](current),plain,mentions,depth+1,attachment_depth)
+            resolve(db,signer,external_call["dom_child",Int](current),plain,mentions,depth+1,attachment_depth,wrap)
         current = next
 
 
@@ -491,25 +521,26 @@ def editable_nodes(mut db: Database, mut signer: Signer, node: Int, depth: Int =
             var content = String()
             var content_type = String()
             if regex("application/vnd.actiontext.opengraph-embed",attrs.get("content-type",""))[0]>=0:
-                content = embed(attrs.copy(),db.request_host)
+                content = embed(attrs.copy(),db.request_host).replace('<figure class="attachment attachment--content attachment--og">','<figure class="attachment attachment--content attachment--og"><actiontext-opengraph-embed>').replace("</figure>","</actiontext-opengraph-embed></figure>")
                 content_type = "application/vnd.actiontext.opengraph-embed"
             else:
                 var sgid = attrs.get("sgid","")
                 var gid = signer.verify(db,"signed_global_ids",sgid,"attachable",False)
                 if gid=="" and sgid!="":
-                    try:
-                        gid = display_user_gid(db,sgid)
-                    except:
-                        pass
+                    gid = display_user_gid(db,sgid)
                 if gid.startswith("gid://campfire/User/"):
                     var uid = String(String(gid[byte=20:]).split("?")[0])
                     var users = db.rows("SELECT name,coalesce(bio,''),strftime('%Y%m%d%H%M%S',updated_at) FROM users WHERE id=?",[uid])
                     if len(users)>0:
                         var user = users[0].copy()
                         var fresh = signer.envelope("signed_global_ids",json_string("gid://campfire/User/"+uid+"?expires_in"),"attachable","",True)
-                        content = '<span class="mention" sgid="'+escape(fresh)+'"><a title="'+escape(user[0]+(" – "+user[1] if user[1]!="" else ""))+'" class="btn avatar" data-turbo-frame="_top" href="/users/'+uid+'"><img aria-hidden="true" src="'+escape(signer.avatar(uid,user[2]))+'" width="48" height="48"></a> '+escape(user[0])+'</span>'
+                        content = '<span class="mention" sgid="'+escape(fresh)+'"><a title="'+escape(user[0]+(" – "+user[1] if user[1]!="" else ""))+'" class="btn avatar" data-turbo-frame="_top" href="/users/'+uid+'"><img aria-hidden="true" src="'+escape(signer.avatar(uid,user[2]))+'" width="48" height="48" /></a> '+escape(user[0])+'</span>'
                         content_type = "application/vnd.campfire.mention"
             if content_type=="":
+                # Rails cannot edit these custom attachment types. Missing records,
+                # like the Rust port, are omitted so the surrounding text survives.
+                if ("html" in attrs.get("content-type","") and String(attrs.get("content","").strip())!="") or ("url" in attrs and (attrs.get("content-type","").startswith("image") or attrs.get("content-type","").startswith("video"))):
+                    raise Error("Unsupported editable attachment type")
                 external_call["dom_remove",NoneType](current)
             else:
                 var key = String("content-type")
@@ -523,6 +554,33 @@ def editable_nodes(mut db: Database, mut signer: Signer, node: Int, depth: Int =
         current = next
 
 
+def editor_html(node: Int, depth: Int = 0, raw_text: Bool = False) raises -> String:
+    # Editor values are data, escaped into an HTML attribute by the caller.
+    # Preserve Lexxy/Trix metadata here; presentation sanitization happens on read.
+    if depth>512:
+        raise Error("Editor nesting too deep")
+    var out = String()
+    var current = node
+    while current!=0:
+        var kind = external_call["dom_type",Int](current)
+        if kind==3:
+            out += c_text["dom_text"](current) if raw_text else text_html(c_text["dom_text"](current))
+        elif kind==8:
+            out += "<!--"+c_text["dom_text"](current)+"-->"
+        elif kind==1:
+            var name = c_text["dom_name"](current)
+            out += "<"+name
+            var attr = external_call["dom_attrs",Int](current)
+            while attr!=0:
+                out += " "+c_text["dom_attr_name"](attr)+'="'+escape(c_text["dom_attr_text"](attr))+'"'
+                attr = external_call["dom_attr_next",Int](attr)
+            out += ">"+editor_html(external_call["dom_child",Int](current),depth+1,external_call["dom_foreign",Int](current)==0 and name in ["script","style","xmp","iframe","noembed","noframes","plaintext","noscript"])
+            if name not in ["area","base","br","col","embed","hr","img","input","link","meta","param","source","track","wbr"]:
+                out += "</"+name+">"
+        current = external_call["dom_next",Int](current)
+    return out^
+
+
 def editable(mut db: Database, mut signer: Signer, var source: String) raises -> String:
     source = ruby_strip(source)
     var doc = external_call["dom_parse_fragment",Int](source.as_c_string_span(),source.byte_length())
@@ -530,9 +588,13 @@ def editable(mut db: Database, mut signer: Signer, var source: String) raises ->
         raise Error("Cannot parse editable message")
     try:
         var root = external_call["dom_root",Int](doc)
-        normalize_legacy(db,root)
         editable_nodes(db,signer,root)
-        var result = walk(root,False,True,0,True)
+        var serialized = editor_html(external_call["dom_child",Int](root))
+        var second = external_call["dom_parse_fragment",Int](serialized.as_c_string_span(),serialized.byte_length())
+        if second==0:
+            raise Error("Cannot parse rebuilt editor value")
+        var result = editor_html(external_call["dom_child",Int](external_call["dom_root",Int](second)))
+        external_call["dom_free",NoneType](second)
         external_call["dom_free",NoneType](doc)
         return result^
     except e:
@@ -664,6 +726,8 @@ def normalize_legacy(mut db: Database, node: Int, depth: Int = 0) raises:
                     external_call["dom_remove",NoneType](current)
                     current = next
                     continue
+                if mapped.get("sgid","")!="":
+                    _ = display_user_gid(db,mapped["sgid"])
                 external_call["dom_clear_node",NoneType](current)
                 var tag = String("action-text-attachment")
                 external_call["dom_set_name",NoneType](current,tag.as_c_string_span())
@@ -1039,3 +1103,113 @@ def autolink_html(source: String) -> String:
             out += '<a target="_blank" href="mailto:'+escape(url_encode(value).replace("%40","@"))+'">'+escape(value)+'</a>'
         copied = found[1]
     return out+String(html[byte=copied:])
+
+
+comptime ACTION_TAGS = FINAL_TAGS+" action-text-attachment figure figcaption video audio source embed "
+comptime ACTION_ATTRS = FINAL_ATTRS+" sgid content-type url href filename filesize width height previewable presentation caption content controls poster style value start "
+
+
+def action_style(value: String) -> String:
+    var out = String()
+    for declaration in value.split(";"):
+        var pair = declaration.split(":",maxsplit=1)
+        if len(pair)!=2:
+            continue
+        var key = String(pair[0].strip()).lower()
+        var val = String(pair[1].strip())
+        if ((key=="color" or key=="background-color") and plain_color(val)) or (key=="white-space" and val in ["normal","pre","nowrap","pre-wrap","pre-line","break-spaces"]):
+            out += key+":"+val+";"
+    return out^
+
+
+def action_nodes(node: Int, depth: Int = 0) raises -> String:
+    if depth>512:
+        raise Error("Rich text nesting too deep")
+    var out = String()
+    var current = node
+    while current!=0:
+        var kind = external_call["dom_type",Int](current)
+        var name = c_text["dom_name"](current)
+        if kind==3:
+            out += text_html(c_text["dom_text"](current))
+        elif kind==1 and name not in ["svg","math"]:
+            var inside = action_nodes(external_call["dom_child",Int](current),depth+1)
+            if " "+name+" " in ACTION_TAGS:
+                out += "<"+name
+                var attr = external_call["dom_attrs",Int](current)
+                var escaped_urls = False
+                while attr!=0:
+                    var key = c_text["dom_attr_name"](attr)
+                    var value = c_text["dom_attr_text"](attr)
+                    if " "+key+" " in ACTION_ATTRS:
+                        if key=="style":
+                            value = action_style(value)
+                            out += ' style="'+escape(value)+'"'
+                        else:
+                            var uri = key in ["href","src","cite","poster"]
+                            if escaped_urls and key in ["href","src"]:
+                                value = uri_escape(value)
+                            if (not uri or safe_url(value)) and (key!="src" or String(value.strip())!=""):
+                                if key in ["href","src"]:
+                                    value = uri_escape(value)
+                                out += " "+key+'="'+escape(value)+'"'
+                        escaped_urls = True
+                    attr = external_call["dom_attr_next",Int](attr)
+                out += ">"+inside
+                if name not in ["br","hr","img","source","embed"]:
+                    out += "</"+name+">"
+            else:
+                out += inside
+        current = external_call["dom_next",Int](current)
+    return out^
+
+
+def action_sanitize(var source: String) raises -> String:
+    var doc = external_call["dom_parse_fragment",Int](source.as_c_string_span(),source.byte_length())
+    if doc==0:
+        raise Error("Cannot parse Action Text HTML")
+    try:
+        var result = action_nodes(external_call["dom_root",Int](doc))
+        external_call["dom_free",NoneType](doc)
+        return result^
+    except e:
+        external_call["dom_free",NoneType](doc)
+        raise e^
+
+
+def body_inner(mut db: Database, mut signer: Signer, var source: String, depth: Int = 0) raises -> String:
+    source = ruby_strip(source)
+    var doc = external_call["dom_parse_fragment",Int](source.as_c_string_span(),source.byte_length())
+    if doc==0:
+        raise Error("Cannot parse Action Text body")
+    try:
+        var root = external_call["dom_root",Int](doc)
+        normalize_legacy(db,root)
+        var mentions = List[String]()
+        resolve(db,signer,root,False,mentions,0,depth,True)
+        galleries(root)
+        var raw = editor_html(external_call["dom_child",Int](root))
+        var result = action_sanitize(raw)
+        external_call["dom_free",NoneType](doc)
+        return result^
+    except e:
+        external_call["dom_free",NoneType](doc)
+        raise e^
+
+
+def body_html(mut db: Database, mut signer: Signer, source: String) raises -> String:
+    return '<div class="lexxy-content">\n  '+body_inner(db,signer,source)+'\n</div>\n'
+
+
+def descendant(node: Int, name: String, depth: Int = 0) raises -> Int:
+    if depth>512:
+        raise Error("Attachment nesting too deep")
+    var current = node
+    while current!=0:
+        if c_text["dom_name"](current)==name:
+            return current
+        var found = descendant(external_call["dom_child",Int](current),name,depth+1)
+        if found!=0:
+            return found
+        current = external_call["dom_next",Int](current)
+    return 0

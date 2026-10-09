@@ -300,7 +300,7 @@ def deliver_webhook(mut db: Database, mut signer: Signer, mid: String, row: List
     if delivered(db,mid,"hook",bot[0]):
         return
     var plain = String(richtext.resolved(db,signer,row[5],True).replace("@"+bot[1],"").strip())
-    var payload = '{"user":{"id":'+row[1]+',"name":'+json_string(row[4])+'},"room":{"id":'+row[0]+',"name":'+("null" if row[2]=="Rooms::Direct" else json_string(row[3]))+',"path":'+json_string("/rooms/"+row[0]+"/"+bot[0]+"-"+bot[2]+"/messages")+'},"message":{"id":'+mid+',"body":{"html":'+json_string('<div class="lexxy-content">'+richtext.resolved(db,signer,row[5],False,True)+'</div>')+',"plain":'+json_string(plain)+'},"path":'+json_string("/rooms/"+row[0]+"/@"+mid)+'}}'
+    var payload = '{"user":{"id":'+row[1]+',"name":'+json_string(row[4])+'},"room":{"id":'+row[0]+',"name":'+("null" if row[2]=="Rooms::Direct" else json_string(row[3]))+',"path":'+json_string("/rooms/"+row[0]+"/"+bot[0]+"-"+bot[2]+"/messages")+'},"message":{"id":'+mid+',"body":{"html":'+json_string(richtext.body_html(db,signer,row[5]))+',"plain":'+json_string(plain)+'},"path":'+json_string("/rooms/"+row[0]+"/@"+mid)+'}}'
     var response = network.request(bot[3],"POST","Content-Type: application/json",payload,True,7000)
     var attachment = response.content_type!="" and not response.content_type.startswith("text/html") and not response.content_type.startswith("text/plain")
     if response.status==-3:

@@ -50,7 +50,7 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
                 return html("Not found",404)
             webpush.deliver(db,sub[0][0],sub[0][1],sub[0][2],sub[0][3],'{"title":"Campfire Test","options":{"body":'+json_string(token())+',"icon":"/account/logo","data":{"path":'+json_string(req.origin()+"/users/me/push_subscriptions")+'}}}')
             return ui.redirect("/users/me/push_subscriptions")
-        if req.method=="POST":
+        if req.method=="POST" and len(parts)==4:
             var endpoint = f.fields.get("push_subscription[endpoint]","")
             if not jobs.push_endpoint_permitted(endpoint):
                 return html("Invalid push endpoint",422)
@@ -72,6 +72,8 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
                 return html("Not found",404)
             _ = db.rows("DELETE FROM push_subscriptions WHERE id=? AND user_id=?",[String(segments[4]),uid])
             return ui.redirect("/users/me/push_subscriptions")
+        if req.method!="GET" or len(parts)!=4:
+            return html("Not found",404)
         var subscriptions = db.rows("SELECT id,endpoint FROM push_subscriptions WHERE user_id=?",[uid])
         var body = String()
         for sub in subscriptions:
@@ -85,7 +87,7 @@ def public(mut db: Database, mut signer: Signer, req: Request, f: Form) raises -
         return accounts.signup(db,signer,req,f,req.path=="/first_run")
     if req.path.startswith("/session/transfers/"):
         return accounts.transfer(db,signer,req)
-    if req.path.startswith("/qr_code/"):
+    if req.path.startswith("/qr_code/") and req.method=="GET":
         var text = unbase64(String(req.path[byte=9:]))
         var qr = List[UInt8](length=3918,fill=0)
         var size = external_call["qr_encode",Int](text.as_c_string_span(),qr.unsafe_ptr())
@@ -97,7 +99,7 @@ def public(mut db: Database, mut signer: Signer, req: Request, f: Form) raises -
                 if external_call["qr_module",Int](qr.unsafe_ptr(),x,y):
                     paths += "M"+String(x+4)+" "+String(y+4)+"h1v1h-1z "
         return Response(200,'<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 '+String(size+8)+' '+String(size+8)+'"><rect width="100%" height="100%" fill="white"/><path d="'+paths+'" fill="black"/></svg>',"image/svg+xml","")
-    if req.path=="/webmanifest" or req.path=="/webmanifest.json":
+    if req.path in ["/webmanifest","/webmanifest.json"] and req.method=="GET":
         var values = Dict[String,String]()
         var name = db.scalar("SELECT name FROM accounts LIMIT 1")
         values["name"] = json_string(name if name!="" else "Campfire")
@@ -109,7 +111,7 @@ def public(mut db: Database, mut signer: Signer, req: Request, f: Form) raises -
         for key in ["android-chat","android-sidebar","android-dark-mode"]:
             values[key.replace("-","_")+"_url"] = json_string(req.origin()+templates.asset("screenshots/"+key+".png"))
         return Response(200,templates.manifest(values),"application/manifest+json","")
-    if req.path=="/service-worker" or req.path=="/service-worker.js":
+    if req.path in ["/service-worker","/service-worker.js"] and req.method=="GET":
         return Response(200,runtime.read_file(getenv("PUBLIC_PATH","public"),"service-worker.js"),"text/javascript; charset=utf-8","Service-Worker-Allowed: /\r\n")
     if req.path=="/account/logo" and req.method=="GET":
         var blob = db.scalar("SELECT blob_id FROM active_storage_attachments WHERE record_type='Account' AND name='logo' LIMIT 1")

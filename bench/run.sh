@@ -8,5 +8,5 @@ if [ "$#" -eq 0 ]; then
 fi
 docker run --rm --init --name campfire-local-benchmark \
     -v "$workspace:/workspace" \
-    campfire-local-tools:latest \
+    "${TOOLCHAIN_IMAGE:-campfire-local-tools:latest}" \
     python3 /workspace/once-campfire-mojo/bench/local.py "$@"

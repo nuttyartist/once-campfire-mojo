@@ -73,8 +73,9 @@ def restore(source,data):
     with connect(data/'production.sqlite3') as db:
         if db.execute('PRAGMA integrity_check').fetchone()[0]!='ok':raise SystemExit('Restored database failed its integrity check.')
 
-def verify_database(db,files=None):
-    if db.execute('PRAGMA integrity_check').fetchall()!=[('ok',)] or db.execute('PRAGMA foreign_key_check').fetchall():
+def verify_database(db,files=None,allow_existing_orphans=False):
+    foreign=db.execute('PRAGMA foreign_key_check').fetchall()
+    if db.execute('PRAGMA integrity_check').fetchall()!=[('ok',)] or (foreign and not allow_existing_orphans):
         raise SystemExit('Database integrity check failed.')
     required={'accounts','users','rooms','memberships','messages','sessions','action_text_rich_texts','active_storage_blobs','active_storage_attachments','message_search_index'}
     tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
@@ -91,7 +92,15 @@ def verify_database(db,files=None):
             with path.open('rb') as stream:actual=base64.b64encode(hashlib.file_digest(stream,'md5').digest()).decode()
             if actual!=checksum:raise SystemExit('An attachment checksum does not match the database.')
 
-def import_rails(source,files,data,config=None):
+def source_state(database):
+    state={}
+    for path in [database,Path(str(database)+'-wal')]:
+        if path.exists():
+            with path.open('rb') as stream:state[path.name]=hashlib.file_digest(stream,'sha256').hexdigest()
+        else:state[path.name]=None
+    return state
+
+def import_rails(source,files,data,config=None,allow_existing_orphans=False):
     """Copy a stopped Rails/C/Rust installation; never migrate the source in place."""
     if data.exists():raise SystemExit('Import requires a new destination; existing data will not be overwritten.')
     if not source.is_file() or not files.is_dir():raise SystemExit('Supply an existing database and local Disk storage directory.')
@@ -110,10 +119,13 @@ def import_rails(source,files,data,config=None):
     temporary=Path(tempfile.mkdtemp(prefix='.campfire-import-',dir=data.parent))
     try:
         # Read-only SQLite backup includes committed WAL data without writing or
-        # checkpointing the source. data_version detects concurrent writers.
+        # checkpointing the source. Hash both data files to detect concurrent
+        # writers. SQLite data_version can change spuriously when a read-only
+        # WAL index is rebuilt on a macOS/Docker shared filesystem.
         with connect(source.as_uri()+'?mode=ro',uri=True) as original:
-            version=original.execute('PRAGMA data_version').fetchone()[0]
-            verify_database(original)
+            version=source_state(source)
+            verify_database(original,allow_existing_orphans=allow_existing_orphans)
+            source_orphans=original.execute('PRAGMA foreign_key_check').fetchall()
             subscriptions=original.execute('SELECT count(*) FROM push_subscriptions').fetchone()[0]
             if subscriptions and not (keys.get('VAPID_PRIVATE_KEY') and keys.get('VAPID_PUBLIC_KEY')):
                 raise SystemExit('Existing push subscriptions require both original VAPID keys.')
@@ -121,9 +133,11 @@ def import_rails(source,files,data,config=None):
             with connect(temporary/'production.sqlite3') as target:original.backup(target)
             shutil.copytree(files,temporary/'files')
             with connect(temporary/'production.sqlite3') as target:
-                verify_database(target,temporary/'files')
+                verify_database(target,temporary/'files',allow_existing_orphans)
+                if target.execute('PRAGMA foreign_key_check').fetchall()!=source_orphans:
+                    raise SystemExit('Foreign key state changed during import.')
                 counts={table:target.execute('SELECT count(*) FROM '+table).fetchone()[0] for table in ['users','rooms','messages','active_storage_blobs']}
-            if original.execute('PRAGMA data_version').fetchone()[0]!=version:
+            if source_state(source)!=version:
                 raise SystemExit('Source database changed during import. Stop all source writers and retry.')
         previous=os.environ.copy()
         try:
@@ -131,9 +145,10 @@ def import_rails(source,files,data,config=None):
             init(temporary)
         finally:
             os.environ.clear();os.environ.update(previous)
-        private_write(temporary/'import.json',json.dumps({'format':1,'source_database_sha256':hashlib.sha256((temporary/'production.sqlite3').read_bytes()).hexdigest(),'counts':counts},indent=2)+'\n')
+        private_write(temporary/'import.json',json.dumps({'format':1,'source_database_sha256':hashlib.sha256((temporary/'production.sqlite3').read_bytes()).hexdigest(),'counts':counts,'preserved_source_foreign_key_violations':source_orphans},indent=2)+'\n')
         if data.exists():raise SystemExit('Import destination appeared during copying; refusing to overwrite it.')
         temporary.rename(data)
+        if source_orphans:print('Preserved existing foreign-key violations:',len(source_orphans),'; details are recorded in import.json.')
     finally:
         if temporary.exists():shutil.rmtree(temporary)
 
@@ -144,6 +159,7 @@ def main():
     parser.add_argument('--destination',type=Path);parser.add_argument('--source',type=Path)
     parser.add_argument('--files',type=Path,help='Original Rails storage/files directory for import-rails')
     parser.add_argument('--config-env',type=Path,help='Original signing and VAPID keys, as KEY=value assignments')
+    parser.add_argument('--allow-existing-orphans',action='store_true',help='Preserve and report existing foreign-key violations during import instead of rejecting the source')
     args=parser.parse_args();data=args.data.resolve()
     if args.command=='init':init(data)
     elif args.command=='backup':
@@ -154,7 +170,7 @@ def main():
         restore(args.source.resolve(),data)
     elif args.command=='import-rails':
         if not args.source or not args.files:parser.error('--source (database) and --files (Disk root) are required')
-        import_rails(args.source.resolve(),args.files.resolve(),data,args.config_env)
+        import_rails(args.source.resolve(),args.files.resolve(),data,args.config_env,args.allow_existing_orphans)
     elif args.command=='check':
         with connect(data/'production.sqlite3') as db:
             result=db.execute('PRAGMA integrity_check').fetchall();foreign=db.execute('PRAGMA foreign_key_check').fetchall()

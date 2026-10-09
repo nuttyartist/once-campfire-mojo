@@ -3,6 +3,7 @@ from std.os import getenv
 from app import App
 import jobs
 import cable
+from file_transfer import FileTransfer
 from http import parse_headers, html, chunked
 
 
@@ -17,8 +18,10 @@ struct Connection(Copyable, Movable):
     var continued: Bool
     var started: Int
     var websocket: cable.Cable
+    var download: FileTransfer
 
     def close(mut self):
+        self.download.close()
         _ = external_call["os_close", Int](self.fd)
         self.fd = -1
         self.incoming = ""
@@ -88,13 +91,19 @@ struct Connection(Copyable, Movable):
             self.sent = 0
             return
         self.close_after = req.header("connection").lower() == "close"
+        app.db.pending_download.close()
         try:
             self.outgoing = app.handle(req.copy())
+            self.download = app.db.pending_download^
+            app.db.pending_download = FileTransfer()
             if req.method == "HEAD":
+                self.download.close()
                 var header_end = self.outgoing.find("\r\n\r\n")
                 var head = String(self.outgoing[byte = : header_end + 4])
                 self.outgoing = head^
         except e:
+            app.db.pending_download.close()
+            self.download.close()
             print("Request failed:", e)
             self.outgoing = html("Request could not be processed", 400).pack(
                 False
@@ -118,7 +127,7 @@ def serve(listener: Int, db_path: String, cache_limit: Int) raises:
         var writes = List[Int]([0])
         for conn in connections:
             fds.append(conn.fd)
-            writes.append(1 if conn.outgoing != "" else 0)
+            writes.append(1 if conn.outgoing != "" or conn.download.fd>=0 else 0)
         var ready = List[Int](length=len(fds), fill=0)
         _ = external_call["os_poll", Int](
             fds.unsafe_ptr(), writes.unsafe_ptr(), ready.unsafe_ptr(), len(fds)
@@ -132,7 +141,7 @@ def serve(listener: Int, db_path: String, cache_limit: Int) raises:
                     if connections[i].fd < 0:
                         slot = i
                         break
-                var conn = Connection(fd, "", "", 0, now, False, False, 0, cable.Cable())
+                var conn = Connection(fd, "", "", 0, now, False, False, 0, cable.Cable(), FileTransfer())
                 if slot >= 0:
                     connections[slot] = conn^
                 elif len(connections) < 1024:
@@ -158,12 +167,26 @@ def serve(listener: Int, db_path: String, cache_limit: Int) raises:
                 connections[i].websocket.finish(app.db)
                 connections[i].close()
                 continue
-            if ready[i + 1] == 0 and connections[i].outgoing == "":
+            if ready[i + 1] == 0 and connections[i].outgoing == "" and connections[i].download.fd<0:
                 continue
             if ready[i + 1] & (8 | 16 | 32):
                 connections[i].websocket.finish(app.db)
                 connections[i].close()
                 continue
+            if connections[i].outgoing=="" and connections[i].download.fd>=0:
+                try:
+                    connections[i].outgoing = connections[i].download.next()
+                    connections[i].sent = 0
+                    if connections[i].outgoing=="":
+                        if connections[i].close_after:
+                            connections[i].close()
+                            continue
+                        if connections[i].incoming!="":
+                            connections[i].dispatch(app)
+                            continue
+                except:
+                    connections[i].close()
+                    continue
             if connections[i].outgoing == "":
                 var n = external_call["os_recv", Int](
                     connections[i].fd, buffer.unsafe_ptr(), len(buffer)
@@ -223,6 +246,8 @@ def serve(listener: Int, db_path: String, cache_limit: Int) raises:
                 if connections[i].sent == connections[i].outgoing.byte_length():
                     connections[i].outgoing = ""
                     connections[i].sent = 0
+                    if connections[i].download.fd>=0:
+                        continue
                     if connections[i].close_after:
                         connections[i].websocket.finish(app.db)
                         connections[i].close()

@@ -194,8 +194,8 @@ static xmlNodePtr html5_node(const GumboNode *node) {
  const char *name=gumbo_normalized_tagname(e->tag);char *allocated=NULL;
  if(!*name){GumboStringPiece tag=e->original_tag;gumbo_tag_from_original_text(&tag);allocated=strndup(tag.data,tag.length);name=allocated;}
  xmlNodePtr result=xmlNewNode(NULL,(const xmlChar*)name);free(allocated);
- if(!result)return NULL;
- for(unsigned i=0;i<e->attributes.length;i++){const GumboAttribute *a=e->attributes.data[i];xmlNewProp(result,(const xmlChar*)a->name,(const xmlChar*)a->value);}
+ if(!result)return NULL;result->_private=(void*)(uintptr_t)e->tag_namespace;
+ for(unsigned i=0;i<e->attributes.length;i++){const GumboAttribute *a=e->attributes.data[i];char key[512];const char *prefix=a->attr_namespace==GUMBO_ATTR_NAMESPACE_XLINK?"xlink:":a->attr_namespace==GUMBO_ATTR_NAMESPACE_XML?"xml:":a->attr_namespace==GUMBO_ATTR_NAMESPACE_XMLNS?"xmlns:":"";snprintf(key,sizeof key,"%s%s",prefix,a->name);xmlNewProp(result,(const xmlChar*)key,(const xmlChar*)a->value);}
  for(unsigned i=0;i<e->children.length;i++){xmlNodePtr child=html5_node(e->children.data[i]);if(child)xmlAddChild(result,child);}
  return result;
 }
@@ -218,6 +218,7 @@ void dom_free(long doc) { xmlFreeDoc((xmlDocPtr)(intptr_t)doc); }
 long dom_root(long doc) { return (long)(intptr_t)xmlDocGetRootElement((xmlDocPtr)(intptr_t)doc); }
 long dom_child(long node) { return (long)(intptr_t)((xmlNodePtr)(intptr_t)node)->children; }
 long dom_next(long node) { return (long)(intptr_t)((xmlNodePtr)(intptr_t)node)->next; }
+long dom_foreign(long node) { return ((xmlNodePtr)(intptr_t)node)->_private!=NULL; }
 long dom_type(long node) { return ((xmlNodePtr)(intptr_t)node)->type; }
 const char *dom_name(long node) { const char *p=(const char*)((xmlNodePtr)(intptr_t)node)->name;return p?p:""; }
 const char *dom_text(long node) { const char *p=(const char*)((xmlNodePtr)(intptr_t)node)->content;return p?p:""; }

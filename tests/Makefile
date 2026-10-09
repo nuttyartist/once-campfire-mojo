@@ -6,11 +6,11 @@ vectors: build/push-fixture build/push-vector build/compat-vectors
 	build/push-vector
 	build/compat-vectors
 	python3 tests/push_receiver.py
-build/push-fixture: tests/push_fixture.mojo src/webpush.mojo
+build/push-fixture: tests/push_fixture.mojo $(wildcard src/*.mojo native/*) build/runtime.o build/platform.o build/process.o
 	$(MOJO) build -O3 -I src $< -o $@ $(ABI)
-build/push-vector: tests/push_vector.mojo src/webpush.mojo
+build/push-vector: tests/push_vector.mojo $(wildcard src/*.mojo native/*) build/runtime.o build/platform.o build/process.o
 	$(MOJO) build -O3 -I src $< -o $@ $(ABI)
-build/compat-vectors: tests/compat_vectors.mojo src/marshal.mojo
+build/compat-vectors: tests/compat_vectors.mojo $(wildcard src/*.mojo native/*) build/runtime.o build/platform.o build/process.o
 	$(MOJO) build -O3 -I src $< -o $@ $(ABI)
 
 build/richtext-corpus: tests/richtext_corpus.mojo $(wildcard src/*.mojo)

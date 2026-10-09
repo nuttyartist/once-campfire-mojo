@@ -82,17 +82,24 @@ def parse_headers(head: String) raises -> Request:
     )
 
 
-@fieldwise_init
 struct Response(Copyable, Movable):
     var status: Int
     var body: String
     var content_type: String
     var extra: String
+    var content_length: Int
+
+    def __init__(out self, status: Int, body: String, content_type: String, extra: String, content_length: Int = -1):
+        self.status = status
+        self.body = body
+        self.content_type = content_type
+        self.extra = extra
+        self.content_length = content_length
 
     def pack(self, gzip: Bool) raises -> String:
         var body = self.body
         var encoding = String()
-        if gzip and self.status==200 and body.byte_length()>128 and (self.content_type.startswith("text/") or "json" in self.content_type or "xml" in self.content_type):
+        if gzip and self.content_length<0 and self.status==200 and body.byte_length()>128 and (self.content_type.startswith("text/") or "json" in self.content_type or "xml" in self.content_type):
             var buf = List[UInt8](
                 length=body.byte_length() + body.byte_length() // 100 + 128,
                 fill=0,
@@ -151,7 +158,7 @@ struct Response(Copyable, Movable):
             + reason
             + "\r\nContent-Type: "
             + self.content_type
-            + ("\r\nContent-Length: "+String(body.byte_length()) if self.status!=204 and self.status!=304 else "")
+            + ("\r\nContent-Length: "+String(self.content_length if self.content_length>=0 else body.byte_length()) if self.status!=204 and self.status!=304 else "")
             + "\r\nVary: Accept-Encoding\r\n"
             + ("Cache-Control: no-store\r\n" if "Cache-Control:" not in self.extra else "")
             + "X-Content-Type-Options: nosniff\r\n"

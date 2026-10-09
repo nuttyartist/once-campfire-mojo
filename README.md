@@ -2,15 +2,15 @@
 
 A local Mojo 1.1 application port of Basecamp Campfire. Application routing, permissions, SQL, rendering, Action Cable, delivery and storage policy are written in Mojo. Generic C adapters connect POSIX, SQLite, OpenSSL, curl, Gumbo and libvips.
 
-**Full replacement work is in progress. This is not yet a drop-in production replacement.** See [PORT_STATUS.md](PORT_STATUS.md) for verified features and remaining gaps. Nothing has been published or pushed.
+**The application scope is implemented and the local acceptance gates pass.** See [PORT_STATUS.md](PORT_STATUS.md) for evidence, compatibility differences and deployment limits, and [DEPLOYMENT.md](DEPLOYMENT.md) to run or migrate an installation. Nothing has been published or pushed.
 
-The original five-workload benchmark implementation is preserved in Git commit `41edc39`. Historical numbers below describe that commit, not the expanded application. They must be rerun after the expanded implementation passes its gates.
+The original five-workload benchmark implementation is preserved in Git commit `41edc39`. Its historical measurements remain under `bench/results/2026-10-09-m4-matched/`. A fresh comparison of the expanded application is recorded below.
 
 ## Application coverage
 
-The application now supports first-run setup and invitations, account/profile/admin and room management, text messages and edits, boosts, search, live Action Cable delivery and presence, private-room authorization and revocation, static frontend assets, binary multipart/direct uploads and signed downloads, avatars and logos, verified mentions, sounds, link previews, bot API and webhook replies, and encrypted Web Push transport. The server supervises its workers and persists delivery jobs in SQLite. Feature presence does not establish complete upstream parity; the status file records the remaining differences and validation scope.
+The application now supports first-run setup and invitations, account/profile/admin and room management, text messages and edits, boosts, search, live Action Cable delivery and presence, private-room authorization and revocation, static frontend assets, binary multipart/direct uploads and signed downloads, avatars and logos, verified mentions, sounds, link previews, bot API and webhook replies, and encrypted Web Push transport. The server supervises its workers and persists delivery jobs in SQLite. The status file records the independent tests, reference-version differences and validation scope.
 
-## Historical benchmark contract
+## Matched benchmark contract
 
 The first version emitted much smaller HTML and used a separate session mechanism.
 That version's performance numbers are superseded for comparisons of equal work.
@@ -90,18 +90,4 @@ source expressions are mapped in `tools/import_templates.py`; regular builds use
 
 ## Local matched-workload results
 
-| HTTP workload (requests/sec) | Rust | C | Mojo |
-|---|---:|---:|---:|
-| Room page | 59,248 | 71,809 | 120,025 |
-| Messages page | 52,539 | 69,406 | 121,129 |
-| Sidebar | 65,428 | 73,096 | 127,186 |
-| Search | 64,584 | 69,028 | 110,914 |
-| Post a message | 5,545 | 3,375 | 3,592 |
-| Backend KLOC | 30.7 | 94.8 | 2.4 |
-
-Median of three rounds on this Mac. All nine parity-gated runs passed; 379,185 writes were individually audited.
-Mojo completed 104,518 notification jobs without errors or drops.
-
-Backend KLOC: 1,979 Mojo + 224 generic C ABI + 245 executable template lines = 2,448. Generated code and plain HTML are excluded, following the upstream counting rule. This remains a smaller feature scope than the full Rust/C applications.
-
-Raw receipts, parity comparisons, per-round rates and source hashes: `bench/results/2026-10-09-m4-matched/`.
+The final expanded-build benchmark is being recorded. The earlier 2.4 KLOC benchmark-only implementation and its numbers are not a measurement of this application.

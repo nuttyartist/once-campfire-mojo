@@ -429,6 +429,93 @@ class Full(unittest.TestCase):
    time.sleep(.03)
   self.assertEqual(set(replies),{(ids[0],'bad isolated reply'),(ids[1],'good isolated reply')});self.assertEqual(hits,{'bad':2,'good':1})
 
+ def test_26_large_file_streaming_head_ranges_and_keepalive(self):
+  size=160*1024*1024;tail=b'end of large imported file'
+  res=self.multipart(f'/rooms/{self.rid}/messages',{}, {'message[attachment]':('large.bin','application/octet-stream',b'initial')});self.assertEqual(res[0],200)
+  url=re.findall(rb'href="(/rails/active_storage/blobs/proxy/[^\"]+)"',res[2])[0].decode().replace('&amp;','&')
+  with local.connection(self.db) as db:bid,key=db.execute("SELECT b.id,b.key FROM active_storage_blobs b JOIN active_storage_attachments a ON a.blob_id=b.id WHERE a.record_type='Message' ORDER BY a.id DESC LIMIT 1").fetchone()
+  path=self.runtime/'files'/key[:2]/key[2:4]/key
+  with path.open('wb') as file:file.seek(size-len(tail));file.write(tail)
+  with path.open('rb') as file:digest=hashlib.file_digest(file,'md5').digest()
+  with local.connection(self.db) as db:db.execute('UPDATE active_storage_blobs SET byte_size=?,checksum=? WHERE id=?',(size,base64.b64encode(digest).decode(),bid))
+  head=self.request(url,'HEAD',cookie='');self.assertEqual(head[0],200);self.assertEqual(int(head[1]['Content-Length']),size);self.assertEqual(head[2],b'')
+  self.assertEqual(self.request(url,cookie='',headers={'Range':f'bytes=-{len(tail)}'})[2],tail)
+  conn=http.client.HTTPConnection('127.0.0.1',local.PORT,timeout=15);self.addCleanup(conn.close)
+  conn.request('GET',url);response=conn.getresponse();self.assertEqual(response.status,200)
+  actual=hashlib.md5();received=0
+  while chunk:=response.read(65536):actual.update(chunk);received+=len(chunk)
+  self.assertEqual(received,size);self.assertEqual(actual.digest(),digest)
+  conn.request('GET','/up');response=conn.getresponse();self.assertEqual(response.status,200);response.read()
+
+ def test_27_media_previews_lightbox_and_safe_fallback(self):
+  import subprocess
+  fixtures=local.WORKSPACE/'once-campfire/test/fixtures/files'
+  for name,kind in [('moon.jpg','image/jpeg'),('earth.png','image/png'),('pixel.bmp','image/bmp')]:
+   raw=(fixtures/name).read_bytes()
+   res=self.multipart(f'/rooms/{self.rid}/messages',{}, {'message[attachment]':(name,kind,raw)});self.assertEqual(res[0],200,res[2])
+   if name.endswith('.bmp'):
+    self.assertNotIn(b'data-lightbox-target',res[2]);self.assertIn(b'Download pixel.bmp',res[2]);continue
+   self.assertIn(b'data-action="lightbox#open"',res[2]);self.assertIn(b'data-lightbox-url-value=',res[2])
+   preview=re.search(rb'src="(/rails/active_storage/representations/[^\"]+)"',res[2]).group(1).decode().replace('&amp;','&')
+   response=self.request(preview,cookie='');self.assertEqual(response[0],200)
+   decode=subprocess.run(['ffmpeg','-v','error','-i','pipe:0','-f','null','-'],input=response[2],capture_output=True);self.assertEqual(decode.returncode,0,decode.stderr)
+  objects=[b'<< /Type /Catalog /Pages 2 0 R >>',b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Contents 4 0 R >>',b'<< /Length 22 >>\nstream\n0 0 1 rg 0 0 150 100 re f\nendstream']
+  # Generate a small independent PDF fixture with a real xref table.
+  stream=b'0 0 1 rg 0 0 150 100 re f\n';objects[-1]=b'<< /Length '+str(len(stream)).encode()+b' >>\nstream\n'+stream+b'endstream'
+  pdf=b'%PDF-1.4\n';offsets=[]
+  for i,obj in enumerate(objects,1):offsets.append(len(pdf));pdf+=f'{i} 0 obj\n'.encode()+obj+b'\nendobj\n'
+  xref=len(pdf);pdf+=b'xref\n0 5\n0000000000 65535 f \n'+b''.join(f'{offset:010} 00000 n \n'.encode() for offset in offsets)+f'trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n'.encode()
+  res=self.multipart(f'/rooms/{self.rid}/messages',{}, {'message[attachment]':('preview.pdf','application/pdf',pdf)});self.assertEqual(res[0],200,res[2]);self.assertIn(b'data-lightbox-target',res[2])
+  url=re.search(rb'src="(/rails/active_storage/representations/[^\"]+)"',res[2]).group(1).decode().replace('&amp;','&')
+  preview=self.request(url,cookie='');self.assertEqual(preview[0],200);self.assertTrue(preview[2].startswith(b'\x89PNG'))
+  broken=self.multipart(f'/rooms/{self.rid}/messages',{}, {'message[attachment]':('broken.png','image/png',b'\x89PNG\r\n\x1a\ncorrupt')});self.assertEqual(broken[0],200)
+  self.assertNotIn(b'data-lightbox-target',broken[2]);self.assertIn(b'Download broken.png',broken[2])
+
+ def test_28_current_user_aliases_and_method_guards(self):
+  target=self.labels['users.kevin']
+  for suffix in ['profile','sidebar','push_subscriptions']:
+   self.assertEqual(self.request(f'/users/{target}/{suffix}')[0],200,suffix)
+  marker='Current user route alias'
+  self.assertEqual(self.request(f'/users/{target}/profile','PATCH',fields={'user[bio]':marker})[0],303)
+  with local.connection(self.db) as db:
+   self.assertEqual(db.execute('SELECT bio FROM users WHERE id=?',(self.uid,)).fetchone()[0],marker)
+   self.assertNotEqual(db.execute('SELECT bio FROM users WHERE id=?',(target,)).fetchone()[0],marker)
+  for path in [f'/rooms/{self.rid}/refresh',f'/rooms/{self.rid}/settings',f'/rooms/{self.rid}/involvement','/users/me/push_subscriptions','/autocompletable/users',f'/users/{target}']:
+   self.assertEqual(self.request(path,'DELETE')[0],404,path)
+ def test_29_missing_creator_history_remains_visible(self):
+  with local.connection(self.db) as db:
+   row=db.execute('SELECT id,room_id FROM messages WHERE creator_id NOT IN (SELECT id FROM users) LIMIT 1').fetchone()
+   self.assertIsNotNone(row)
+  res=self.request(f'/rooms/{row[1]}/messages/{row[0]}')
+  self.assertEqual(res[0],200,res[2]);self.assertIn(b'Failed to load message content',res[2])
+
+ def test_30_signed_attachment_update_and_unicode_filename(self):
+  first=self.request(f'/rooms/{self.rid}/messages','POST',fields={'message[body]':'keep this body'})
+  self.assertEqual(first[0],200)
+  with local.connection(self.db) as db:mid=db.execute('SELECT id FROM messages ORDER BY id DESC LIMIT 1').fetchone()[0]
+  data=b'updated file bytes';name='Résumé שלום.txt'
+  blob={'blob':{'filename':name,'content_type':'text/plain','byte_size':len(data),'checksum':base64.b64encode(hashlib.md5(data).digest()).decode()}}
+  created=self.request('/rails/active_storage/direct_uploads','POST',body=json.dumps(blob),headers={'Content-Type':'application/json'})
+  self.assertEqual(created[0],200);blob=json.loads(created[2]);url=urllib.parse.urlsplit(blob['direct_upload']['url']).path
+  self.assertEqual(self.request(url,'PUT',body=data,headers={'Content-Type':'text/plain'})[0],204)
+  updated=self.request(f'/rooms/{self.rid}/messages/{mid}','PATCH',fields={'message[attachment]':blob['signed_id']},headers={'Accept':'application/json'})
+  self.assertEqual(updated[0],200,updated[2]);self.assertIn('keep this body',json.loads(updated[2])['body']['plain_text'])
+  page=self.request(f'/rooms/{self.rid}/messages/{mid}')
+  url=re.search(rb'href="(/rails/active_storage/blobs/proxy/[^"]+)"',page[2]).group(1).decode().replace('&amp;','&')
+  downloaded=self.request(url,cookie='');self.assertEqual(downloaded[2],data)
+  disposition=downloaded[1]['Content-Disposition'];self.assertTrue(disposition.startswith('attachment;'))
+  self.assertIn("filename*=UTF-8''"+urllib.parse.quote(name),disposition)
+ def test_31_seek_required_mp4_poster(self):
+  import subprocess
+  path=self.output/'seek-required.mp4'
+  subprocess.run(['ffmpeg','-v','error','-threads','2','-f','lavfi','-i','testsrc2=size=320x240:rate=24','-t','3','-an','-c:v','mpeg4','-q:v','2','-y',str(path)],check=True)
+  data=path.read_bytes();self.assertGreater(data.index(b'moov'),data.index(b'mdat'))
+  response=self.multipart(f'/rooms/{self.rid}/messages',{'message[body]':'seekable MP4'},{'message[attachment]':('ordinary.mp4','video/mp4',data)})
+  self.assertEqual(response[0],200,response[2]);self.assertIn(b'<video',response[2]);self.assertIn(b'poster=',response[2])
+  with local.connection(self.db) as db:
+   row=db.execute("SELECT b.metadata FROM active_storage_blobs b JOIN active_storage_attachments a ON a.blob_id=b.id WHERE a.record_type='Message' AND b.filename='ordinary.mp4' ORDER BY a.id DESC LIMIT 1").fetchone()
+   self.assertEqual(json.loads(row[0])['width'],320)
+
  def test_99_login_limit_shared_across_workers(self):
   statuses=[self.request('/session','POST',cookie='',fields={'email_address':'nobody@invalid.test','password':'incorrect'})[0] for _ in range(12)]
   self.assertEqual(statuses[:9],[401]*9);self.assertEqual(statuses[9:],[429]*3)

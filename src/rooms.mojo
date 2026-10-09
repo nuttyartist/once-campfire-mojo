@@ -36,7 +36,7 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
     if req.path=="/rooms" and verb=="GET":
         var last = db.scalar("SELECT room_id FROM memberships WHERE user_id=? ORDER BY room_id DESC LIMIT 1",[uid])
         return ui.redirect("/rooms/"+last if last!="" else "/")
-    if req.path.startswith("/autocompletable/users"):
+    if req.path in ["/autocompletable/users","/autocompletable/users.json"] and verb=="GET":
         var q = params(req.query)
         var rid = q.get("room_id","")
         if rid!="" and db.scalar("SELECT 1 FROM memberships WHERE room_id=? AND user_id=?",[rid,uid])!="1":
@@ -141,7 +141,7 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
         return destroy(db,rid,uid)
     if db.scalar("SELECT 1 FROM memberships WHERE room_id=? AND user_id=?",[rid,uid])!="1":
         return html("Room not found",404)
-    if len(parts)==4 and String(parts[3])=="settings":
+    if len(parts)==4 and String(parts[3])=="settings" and verb=="GET":
         var kind = db.scalar("SELECT type FROM rooms WHERE id=?",[rid]).replace("Rooms::","").lower()
         return ui.redirect("/rooms/"+kind+"s/"+rid+"/edit")
     if len(parts)==4 and String(parts[3])=="involvement":
@@ -151,6 +151,8 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
                 return html("Invalid involvement",422)
             _ = db.rows("UPDATE memberships SET involvement=?,updated_at=? WHERE room_id=? AND user_id=?",[value,now,rid,uid])
             return ui.redirect(req.path)
+        if verb!="GET":
+            return html("Not found",404)
         var current = db.scalar("SELECT involvement FROM memberships WHERE room_id=? AND user_id=?",[rid,uid])
         var content = String()
         for value in ["everything","mentions","nothing","invisible"]:

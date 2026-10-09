@@ -17,6 +17,22 @@ class DOM(HTMLParser):
   if value:self.events.append(('text',value))
 def dom(html):
  p=DOM();p.feed(html);return p.events
+def tree(value):
+ if value is None:return []
+ result=[]
+ for event in dom(value):
+  if event[0]=='open':
+   attrs=[]
+   for key,v in event[2]:
+    if key=='content' and v:
+     try:v=json.loads(v)
+     except ValueError:pass
+     if isinstance(v,str):v=tree(v)
+    attrs.append((key,v))
+   event=('open',event[1],attrs)
+  result.append(event)
+ return result
+
 def port_divergences(rails):
  out='';state='text';rest=rails
  inserted='<a target="_blank" href="'
@@ -66,6 +82,18 @@ def main():
   case=row['case'];name=case['name'];counts['cases']+=1
   for actual,expected in [('actual_plain','plain_text'),('actual_mentions','mentioned')]:
    if not equal(row[actual],case[expected]):failures.append((expected,name))
+  editor_expected=case['editable'];editor_actual=row['actual_editable']
+  if 'error' in editor_expected and 'MissingAttachable' in editor_expected.get('message','') and 'ok' in editor_actual:
+   counts['documented_missing_editor_divergences']+=1
+  elif not (('error' in editor_expected and 'error' in editor_actual) or ('ok' in editor_expected and 'ok' in editor_actual and tree(editor_expected['ok'])==tree(editor_actual['ok']))):
+   failures.append(('editable',name))
+  if 'body_html' in case:
+   counts['body_html']+=1;expected_body=case['body_html'];actual_body=row['actual_body_html']
+   if 'to_missing_attachable_partial_path' in expected_body.get('message',''):
+    matches='ok' in actual_body and '☒' in actual_body['ok'];counts['documented_missing_body_divergences']+=1
+   else:
+    matches=('error' in expected_body and 'error' in actual_body) or ('ok' in expected_body and 'ok' in actual_body and tree(re.sub(r' name="[^"]*"','',expected_body['ok']))==tree(actual_body['ok']))
+   if not matches:failures.append(('body_html',name))
   expected=case['presentation'];actual=row['actual_html']
   missing_partial='to_missing_attachable_partial_path' in (case.get('presentation_raised_message') or '')
   if 'error' in actual:
@@ -80,5 +108,5 @@ def main():
  if counts['cases']!=658 or counts['web_urls']!=54:failures.append(('corpus_size',dict(counts)))
  print(json.dumps({'counts':dict(counts),'failures':failures,'results_sha256':hashlib.sha256(args.results.read_bytes()).hexdigest()},indent=2))
  if failures:raise SystemExit(1)
- print('PASS: Rails plain text, rendered DOM, verified mentions, preview URLs, and security invariants')
+ print('PASS: Rails plain text, presentation, editor, API body HTML, verified mentions, preview URLs, and security invariants')
 if __name__=='__main__':main()
