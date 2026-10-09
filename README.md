@@ -80,14 +80,29 @@ WebSocket fanout are different workloads.
 Routing, request parsing, sessions, SQL, render models, rich-text policy, job policy and the
 nonblocking HTTP loop are Mojo. No Python runtime, Rust Campfire library or C Campfire
 application is linked into or launched by the server. `native/platform.c` supplies generic
-POSIX, process-shared queue, SQLite, zlib, libxml2 and OpenSSL ABI adapters. The same SQLite
-3.53.4 archive as the C build is linked. Python is used only for build-time template generation,
-benchmark orchestration and tests.
+POSIX, process-shared queue, SQLite, zlib, libxml2 and OpenSSL ABI adapters. The same vendored SQLite
+3.53.4 source as the C build is used. Python is used only for build-time template generation,
+benchmark orchestration, tests and offline import/backup tools.
 
 Templates are adapted from the MIT-licensed Basecamp Rust/Rails implementations. Their
 source expressions are mapped in `tools/import_templates.py`; regular builds use the vendored
 `templates/` and `assets/` inputs through `tools/compile_templates.py`. Retain `MIT-LICENSE`.
 
+Source counts can be reproduced in the toolchain container with `python3 bench/count_source.py bench/results/recount` (requires all three sibling checkouts and the shared verification repository).
+
 ## Local matched-workload results
 
-The final expanded-build benchmark is being recorded. The earlier 2.4 KLOC benchmark-only implementation and its numbers are not a measurement of this application.
+| HTTP workload (requests/sec) | Rust | C | Mojo |
+|---|---:|---:|---:|
+| Room page | 64,210 | 77,241 | 107,296 |
+| Messages page | 61,190 | 77,626 | 123,218 |
+| Sidebar | 67,116 | 80,770 | 131,318 |
+| Search | 68,367 | 79,781 | 127,550 |
+| Post a message | 5,805 | 3,669 | 1,869 |
+| Backend KLOC | 30.7 | 94.7 | 6.7 |
+
+Median of three rounds on Apple M4 (24 GiB RAM), native ARM64 Linux in Docker Desktop. All nine runs passed the parity/response gates; 341,625 writes were individually audited. Mojo completed 54,921 jobs without errors or drops.
+
+Locally recounted backend source: 5,835 Mojo + 637 generic C adapters + 260 executable template lines = 6,732. Rust and C were recounted from the measured checkouts too; these supersede the source counts quoted from older upstream README revisions. See `source-count.json` for the common counting method and exclusions.
+
+Raw receipts, all rounds, compiler/image/source hashes and acceptance logs: `bench/results/2026-10-09-m4-full/`. This table measures five warm HTTP workloads, not every implemented feature.
