@@ -117,7 +117,7 @@ index 6278d1c..375d9c1 100644
          &self.inner.vapid
      }
 diff --git a/crates/campfire/src/jobs.rs b/crates/campfire/src/jobs.rs
-index 6388ddf..0320ff4 100644
+index 6388ddf..0471a5c 100644
 --- a/crates/campfire/src/jobs.rs
 +++ b/crates/campfire/src/jobs.rs
 @@ -213,9 +213,75 @@ pub fn start(queue: Queue, app: App, registry: Registry, concurrency: usize) ->
@@ -152,7 +152,7 @@ index 6388ddf..0320ff4 100644
 +}
 +async fn durable_one(app: App, registry: &Registry) -> anyhow::Result<bool> {
 +    let job = app.db.write(|tx| {
-+        let mut stmt = tx.conn().prepare_cached("UPDATE campfire_jobs SET lease_until=unixepoch()+600,attempts=attempts+1 WHERE id=(SELECT id FROM campfire_jobs WHERE completed_at IS NULL AND attempts<10 AND available_at<=unixepoch() AND lease_until<unixepoch() ORDER BY id LIMIT 1) RETURNING id,kind,a,b")?;
++        let mut stmt = tx.conn().prepare_cached("UPDATE campfire_jobs SET lease_until=unixepoch()+600,attempts=attempts+1 WHERE id=(SELECT id FROM campfire_jobs INDEXED BY campfire_jobs_pending WHERE completed_at IS NULL AND attempts<10 AND available_at<=unixepoch() AND lease_until<unixepoch() ORDER BY id LIMIT 1) RETURNING id,kind,a,b")?;
 +        let mut rows = stmt.query([])?;
 +        Ok(match rows.next()? {
 +            Some(row) => Some((row.get::<_,i64>(0)?,row.get::<_,String>(1)?,row.get::<_,i64>(2)?,row.get::<_,i64>(3)?)),
@@ -238,7 +238,7 @@ index 8b8e950..e26a591 100644
          conn.wal_hook(Some(note_wal_size));
 diff --git a/crates/db/src/durable.rs b/crates/db/src/durable.rs
 new file mode 100644
-index 0000000..021f8ad
+index 0000000..80c42b1
 --- /dev/null
 +++ b/crates/db/src/durable.rs
 @@ -0,0 +1,22 @@
@@ -250,7 +250,7 @@ index 0000000..021f8ad
 +    *ENABLED
 +}
 +pub fn prepare(conn: &Connection) -> Result<()> {
-+    conn.execute_batch("CREATE TABLE IF NOT EXISTS campfire_jobs(id INTEGER PRIMARY KEY AUTOINCREMENT,kind TEXT NOT NULL,a INTEGER NOT NULL,b INTEGER NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,available_at INTEGER NOT NULL DEFAULT 0,lease_until INTEGER NOT NULL DEFAULT 0,completed_at INTEGER,error TEXT NOT NULL DEFAULT ''); CREATE INDEX IF NOT EXISTS campfire_jobs_ready ON campfire_jobs(completed_at,available_at,lease_until,id); CREATE TABLE IF NOT EXISTS campfire_delivery_receipts(message_id INTEGER NOT NULL,target_id INTEGER NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(message_id,target_id,kind)); UPDATE campfire_jobs SET lease_until=0 WHERE completed_at IS NULL;")?;
++    conn.execute_batch("CREATE TABLE IF NOT EXISTS campfire_jobs(id INTEGER PRIMARY KEY AUTOINCREMENT,kind TEXT NOT NULL,a INTEGER NOT NULL,b INTEGER NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,available_at INTEGER NOT NULL DEFAULT 0,lease_until INTEGER NOT NULL DEFAULT 0,completed_at INTEGER,error TEXT NOT NULL DEFAULT ''); DROP INDEX IF EXISTS campfire_jobs_ready; CREATE INDEX IF NOT EXISTS campfire_jobs_pending ON campfire_jobs(id) WHERE completed_at IS NULL; CREATE INDEX IF NOT EXISTS campfire_jobs_message ON campfire_jobs(kind,b) WHERE completed_at IS NULL; CREATE TABLE IF NOT EXISTS campfire_delivery_receipts(message_id INTEGER NOT NULL,target_id INTEGER NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(message_id,target_id,kind)); UPDATE campfire_jobs SET lease_until=0 WHERE completed_at IS NULL;")?;
 +    Ok(())
 +}
 +pub fn enqueue(conn: &Connection, event: &Event) -> Result<bool> {

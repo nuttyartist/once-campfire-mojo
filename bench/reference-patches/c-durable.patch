@@ -73,7 +73,7 @@ index 9e56f2e..e31274d 100644
          free(w->queue);
 diff --git a/src/jobs/durable.h b/src/jobs/durable.h
 new file mode 100644
-index 0000000..e1918b0
+index 0000000..5c3a74e
 --- /dev/null
 +++ b/src/jobs/durable.h
 @@ -0,0 +1,39 @@
@@ -88,7 +88,7 @@ index 0000000..e1918b0
 +    const char *v=getenv("CAMPFIRE_DURABLE_JOBS"); return v && strcmp(v,"1")==0;
 +}
 +static inline int cf_durable_prepare(sqlite3 *db) {
-+    return sqlite3_exec(db,"CREATE TABLE IF NOT EXISTS campfire_jobs(id INTEGER PRIMARY KEY AUTOINCREMENT,kind INTEGER NOT NULL,user_id INTEGER NOT NULL DEFAULT 0,room_id INTEGER NOT NULL DEFAULT 0,message_id INTEGER NOT NULL DEFAULT 0,blob_id INTEGER NOT NULL DEFAULT 0,task_type TEXT,variation TEXT,attempts INTEGER NOT NULL DEFAULT 0,available_at INTEGER NOT NULL DEFAULT 0,lease_until INTEGER NOT NULL DEFAULT 0,completed_at INTEGER,error TEXT NOT NULL DEFAULT ''); CREATE INDEX IF NOT EXISTS campfire_jobs_ready ON campfire_jobs(kind,completed_at,available_at,lease_until,id); CREATE TABLE IF NOT EXISTS campfire_delivery_receipts(message_id INTEGER NOT NULL,target_id INTEGER NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(message_id,target_id,kind));",NULL,NULL,NULL);
++    return sqlite3_exec(db,"CREATE TABLE IF NOT EXISTS campfire_jobs(id INTEGER PRIMARY KEY AUTOINCREMENT,kind INTEGER NOT NULL,user_id INTEGER NOT NULL DEFAULT 0,room_id INTEGER NOT NULL DEFAULT 0,message_id INTEGER NOT NULL DEFAULT 0,blob_id INTEGER NOT NULL DEFAULT 0,task_type TEXT,variation TEXT,attempts INTEGER NOT NULL DEFAULT 0,available_at INTEGER NOT NULL DEFAULT 0,lease_until INTEGER NOT NULL DEFAULT 0,completed_at INTEGER,error TEXT NOT NULL DEFAULT ''); DROP INDEX IF EXISTS campfire_jobs_ready; CREATE INDEX IF NOT EXISTS campfire_jobs_pending ON campfire_jobs(kind,id) WHERE completed_at IS NULL; CREATE INDEX IF NOT EXISTS campfire_jobs_message ON campfire_jobs(kind,message_id) WHERE completed_at IS NULL; CREATE TABLE IF NOT EXISTS campfire_delivery_receipts(message_id INTEGER NOT NULL,target_id INTEGER NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(message_id,target_id,kind));",NULL,NULL,NULL);
 +}
 +static inline int cf_durable_open(const char *path, sqlite3 **out) {
 +    int rc=sqlite3_open_v2(path,out,SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE|SQLITE_OPEN_NOMUTEX,NULL);
@@ -191,7 +191,7 @@ index 10eb11f..9dde4f4 100644
          } else {
              fprintf(stderr,"campfire: push disabled: %s\n",cf_push_vapid_error_name(detail));
 diff --git a/src/jobs/queue.c b/src/jobs/queue.c
-index 8532dee..8c55b95 100644
+index 8532dee..599d3ca 100644
 --- a/src/jobs/queue.c
 +++ b/src/jobs/queue.c
 @@ -10,6 +10,8 @@
@@ -228,7 +228,7 @@ index 8532dee..8c55b95 100644
 +        const char *paused=getenv("CAMPFIRE_JOBS_PAUSED");
 +        if(!fn || (paused && strcmp(paused,"1")==0)) { struct timespec t={0,10000000}; nanosleep(&t,NULL); continue; }
 +        sqlite3_stmt *s=NULL;
-+        int rc=sqlite3_prepare_v2(db,"UPDATE campfire_jobs SET lease_until=unixepoch()+600,attempts=attempts+1 WHERE id=(SELECT id FROM campfire_jobs WHERE kind=? AND completed_at IS NULL AND attempts<10 AND available_at<=unixepoch() AND lease_until<unixepoch() ORDER BY id LIMIT 1) RETURNING id,user_id,room_id,message_id,blob_id,task_type,variation",-1,&s,NULL);
++        int rc=sqlite3_prepare_v2(db,"UPDATE campfire_jobs SET lease_until=unixepoch()+600,attempts=attempts+1 WHERE id=(SELECT id FROM campfire_jobs INDEXED BY campfire_jobs_pending WHERE kind=? AND completed_at IS NULL AND attempts<10 AND available_at<=unixepoch() AND lease_until<unixepoch() ORDER BY id LIMIT 1) RETURNING id,user_id,room_id,message_id,blob_id,task_type,variation",-1,&s,NULL);
 +        if(rc==SQLITE_OK) { sqlite3_bind_int(s,1,(int)q->kind); rc=sqlite3_step(s); }
 +        cf_job job={.kind=q->kind}; int64_t id=0;
 +        if(rc==SQLITE_ROW) {

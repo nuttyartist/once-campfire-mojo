@@ -7,3 +7,5 @@ The harness explicitly enables CAMPFIRE_DURABLE_JOBS=1, CAMPFIRE_SQLITE_SYNCHRON
 The benchmark requires exact acknowledged message IDs, bodies, FTS rows and three subscription receipts per message, drains every queue, and rejects drop/failure logs. Crash acceptance pauses workers before 160 posts, kills the full process group, and checks recovery and a second restart. External delivery remains at-least-once; remote acceptance and local receipt cannot form one atomic transaction.
 
 Reference unit checks: Rust formatting and Clippy pass. The full seeded Rust suite and C bench unit suite each retain a video-preview golden-byte mismatch with pinned FFmpeg on ARM64 (11790-byte JPEG versus a 11788-byte golden). The unchanged media path in both ports gives the same mismatch; no golden or test assertion was altered. Text-workload parity, database integrity and forced-crash completion gates pass independently.
+
+Pending claims use a partial index ordered by job ID, and lease renewal has a message lookup index. tests/durable_indexes.py checks the actual source query plans before timing, preventing backlog-wide sorting and lease scans in these comparison extensions.
