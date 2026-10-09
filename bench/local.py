@@ -308,7 +308,7 @@ def main():
                 "parity_gate":parity,"log_requests":False,"rust_log_filter":"warn",
                 "topology":{"rust":{"processes":1,"readers":5,"job_workers":3},"c":{"processes":1,"loops":4,"readers":5},"mojo":{"http_processes":4,"job_processes":3,"sqlite_connections_per_process":1}},
                 "loadgen_sha256":hashlib.sha256(LOADGEN.read_bytes()).hexdigest(),"revisions":{}}
-    for name in ["once-campfire","once-campfire-c","once-campfire-rust","once-campfire-verification"]:
+    for name in ["once-campfire","once-campfire-c","once-campfire-rust","once-campfire-verification","once-campfire-mojo"]:
         metadata["revisions"][name] = command(["git","-C",WORKSPACE/name,"rev-parse","HEAD"]).strip()
     write_json(args.output/"metadata.json",metadata)
     results = []
@@ -321,6 +321,7 @@ def main():
                           "runs":[v["rps"] for r in results if r["app"]==app for v in r["http"] if v["route"]==route]}
                     for route in ROUTES} for app in apps}
     metadata["complete"] = True
+    write_json(args.output/"metadata.json",metadata)
     write_json(args.output/"summary.json",{"metadata":metadata,"results":summary})
     print(json.dumps(summary,indent=2))
 
