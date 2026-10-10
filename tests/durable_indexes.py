@@ -12,9 +12,13 @@ for name in ['rust','c']:
  renew=re.search(r'"(UPDATE campfire_jobs SET lease_until=unixepoch\(\)\+600 WHERE[^"\n]+)"',handler)[1]
  conn=sqlite3.connect(':memory:');conn.executescript(schema)
  plans={}
- for label,sql,args in [('claim',query,() if name=='rust' else (0,)),('renew',renew,(123,))]:
+ queries=[('claim',query,() if name=='rust' else (0,)),('renew',renew,(123,))]
+ if name=='c':
+  ready=re.search(r'"(SELECT 1 FROM campfire_jobs INDEXED BY campfire_jobs_pending[^"\n]+)"',queue)[1]
+  queries.append(('readiness',ready,(0,)))
+ for label,sql,args in queries:
   plans[label]=[r[3] for r in conn.execute('EXPLAIN QUERY PLAN '+sql,args)]
   assert not any('TEMP B-TREE' in x for x in plans[label]),plans[label]
-  assert any(('campfire_jobs_pending' if label=='claim' else 'campfire_jobs_message') in x for x in plans[label]),plans[label]
+  assert any(('campfire_jobs_message' if label=='renew' else 'campfire_jobs_pending') in x for x in plans[label]),plans[label]
  evidence[name]=plans
-print(json.dumps(evidence,indent=2));print('PASS: both reference claim and lease-renewal queries use bounded pending-job indexes without temporary sorting')
+print(json.dumps(evidence,indent=2));print('PASS: reference readiness, claim and lease-renewal queries use bounded pending-job indexes without temporary sorting')

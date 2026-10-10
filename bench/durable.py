@@ -83,6 +83,7 @@ def main():
  args=parser.parse_args();assert not args.output.exists();args.output.mkdir(parents=True)
  os.environ.update(ENV);os.environ.pop('CAMPFIRE_JOBS_PAUSED',None)
  (args.output/'index-plans.log').write_text(b.command(['python3',b.MOJO/'tests/durable_indexes.py']))
+ (args.output/'idle-workers.log').write_text(b.command(['python3',b.MOJO/'tests/durable_idle.py']))
  gate=b.command(['python3',b.MOJO/'tests/parity.py'],env=os.environ|{'PARITY_RESULTS':str((args.output/'parity').resolve())})
  (args.output/'parity.log').write_text(gate)
  parity=json.loads((args.output/'parity/comparison.json').read_text());assert parity['passed']

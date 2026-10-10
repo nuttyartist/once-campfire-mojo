@@ -191,7 +191,7 @@ index 10eb11f..9dde4f4 100644
          } else {
              fprintf(stderr,"campfire: push disabled: %s\n",cf_push_vapid_error_name(detail));
 diff --git a/src/jobs/queue.c b/src/jobs/queue.c
-index 8532dee..599d3ca 100644
+index 8532dee..263616a 100644
 --- a/src/jobs/queue.c
 +++ b/src/jobs/queue.c
 @@ -10,6 +10,8 @@
@@ -211,7 +211,7 @@ index 8532dee..599d3ca 100644
      cf_job *slots;          /* ring buffer, capacity entries */
      size_t capacity;
      size_t head;            /* index of the oldest pending job */
-@@ -100,8 +103,47 @@ static void cf_job_dispose(cf_job *job) {
+@@ -100,8 +103,57 @@ static void cf_job_dispose(cf_job *job) {
  
  /* -------------------------------------------------------- worker loop --- */
  
@@ -227,8 +227,18 @@ index 8532dee..599d3ca 100644
 +        if(stopping) break;
 +        const char *paused=getenv("CAMPFIRE_JOBS_PAUSED");
 +        if(!fn || (paused && strcmp(paused,"1")==0)) { struct timespec t={0,10000000}; nanosleep(&t,NULL); continue; }
++        /* Most per-kind pools are idle. Do not take the global SQLite writer
++         * lock merely to discover an empty queue. Finalize this read before the
++         * atomic UPDATE, which rechecks eligibility against competing workers. */
 +        sqlite3_stmt *s=NULL;
-+        int rc=sqlite3_prepare_v2(db,"UPDATE campfire_jobs SET lease_until=unixepoch()+600,attempts=attempts+1 WHERE id=(SELECT id FROM campfire_jobs INDEXED BY campfire_jobs_pending WHERE kind=? AND completed_at IS NULL AND attempts<10 AND available_at<=unixepoch() AND lease_until<unixepoch() ORDER BY id LIMIT 1) RETURNING id,user_id,room_id,message_id,blob_id,task_type,variation",-1,&s,NULL);
++        int rc=sqlite3_prepare_v2(db,"SELECT 1 FROM campfire_jobs INDEXED BY campfire_jobs_pending WHERE kind=? AND completed_at IS NULL AND attempts<10 AND available_at<=unixepoch() AND lease_until<unixepoch() ORDER BY id LIMIT 1",-1,&s,NULL);
++        if(rc==SQLITE_OK) { sqlite3_bind_int(s,1,(int)q->kind); rc=sqlite3_step(s); }
++        sqlite3_finalize(s);s=NULL;
++        if(rc!=SQLITE_ROW) {
++            if(rc!=SQLITE_DONE) fprintf(stderr,"campfire: durable worker readiness failed; jobs retained (%d)\n",rc);
++            struct timespec t={0,10000000}; nanosleep(&t,NULL); continue;
++        }
++        rc=sqlite3_prepare_v2(db,"UPDATE campfire_jobs SET lease_until=unixepoch()+600,attempts=attempts+1 WHERE id=(SELECT id FROM campfire_jobs INDEXED BY campfire_jobs_pending WHERE kind=? AND completed_at IS NULL AND attempts<10 AND available_at<=unixepoch() AND lease_until<unixepoch() ORDER BY id LIMIT 1) RETURNING id,user_id,room_id,message_id,blob_id,task_type,variation",-1,&s,NULL);
 +        if(rc==SQLITE_OK) { sqlite3_bind_int(s,1,(int)q->kind); rc=sqlite3_step(s); }
 +        cf_job job={.kind=q->kind}; int64_t id=0;
 +        if(rc==SQLITE_ROW) {
@@ -259,7 +269,7 @@ index 8532dee..599d3ca 100644
  
      for (;;) {
          pthread_mutex_lock(&q->mu);
-@@ -143,6 +185,18 @@ static void *cf_job_worker_main(void *arg) {
+@@ -143,6 +195,18 @@ static void *cf_job_worker_main(void *arg) {
  /* Append one payload, taking ownership of its owned strings on CF_OK only.
   * Caller performs no allocation while the queue lock is held. */
  static cf_err cf_job_queue_push(struct cf_job_queue *q, const cf_job *job) {
@@ -278,7 +288,7 @@ index 8532dee..599d3ca 100644
      pthread_mutex_lock(&q->mu);
      if (q->stopping) {
          pthread_mutex_unlock(&q->mu);
-@@ -318,6 +372,7 @@ cf_err cf_jobs_stats_get(const cf_jobs *jobs, cf_job_kind kind,
+@@ -318,6 +382,7 @@ cf_err cf_jobs_stats_get(const cf_jobs *jobs, cf_job_kind kind,
  
  static void cf_job_queue_dispose(struct cf_job_queue *q) {
      if (!q->initialized) return;
@@ -286,7 +296,7 @@ index 8532dee..599d3ca 100644
      free(q->slots);
      free(q->threads);
      q->slots = NULL;
-@@ -344,9 +399,18 @@ cf_err cf_jobs_start(const cf_config *config, cf_jobs **out) {
+@@ -344,9 +409,18 @@ cf_err cf_jobs_start(const cf_config *config, cf_jobs **out) {
      if (jobs == NULL) return CF_NOMEM;
  
      cf_err rc = CF_OK;
