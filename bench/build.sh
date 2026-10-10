@@ -9,7 +9,9 @@ done
 make deps-build
 make MODE=bench build-app -j3
 cd "$root/once-campfire-rust"
-git submodule update --init
+# The host checkout can have a different UID from this container. Limit trust
+# to this user-selected repository and this invocation.
+git -c safe.directory="$PWD" submodule update --init
 cargo build --release --locked -p campfire -j3
 cd "$root/once-campfire-verification"
 cargo build --release --locked --manifest-path loadgen/Cargo.toml -j3

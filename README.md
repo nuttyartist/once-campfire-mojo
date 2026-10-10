@@ -6,7 +6,22 @@ The ten findings from the local replacement audit have regression tests and fixe
 
 ## Local comparison — 2026-10-10
 
-<!-- FINAL_BENCHMARK_TABLE -->
+<!-- BENCHMARK_BEGIN -->
+| Workload (completed requests/sec) | Rust* | C* | Mojo |
+|---|---:|---:|---:|
+| Room page | 44,009 | 58,828 | 55,287 |
+| Messages page | 40,509 | 60,794 | 61,141 |
+| Sidebar | 53,012 | 62,175 | 70,846 |
+| Search | 52,277 | 60,057 | 64,161 |
+| Post a message | 1,135 | 386 | 852 |
+| Backend KLOC | 30.9 | 94.8 | 7.5 |
+
+**237,343 messages and 712,029 recipient completions** audited across timed runs and warmups, with no missing messages/FTS rows/receipts and no pending, failed or dropped jobs. Posting rounds (completed messages/sec): Rust: 1,361, 983, 1,135; C: 367, 387, 386; Mojo: 852, 871, 685. Raw metadata, every round, acknowledgement audits and logs: `bench/results/2026-10-10-m4-upstream/`.
+
+Measured commits: Rust `ff8fe2efa45e`, C `889530164ff9`, Mojo `ec9d2c2258ef`. Mojo application source is `d294123`; later commits change comparison tooling, tests and documentation only.
+<!-- BENCHMARK_END -->
+
+The tracked [comparison summary](bench/acceptance/2026-10-10-comparison.json) records all rounds, binary hashes and completion audits. Raw acknowledgement files are kept locally and excluded from Git.
 
 These are **local durability-patched Rust and C builds**, not stock upstream performance claims. Every application uses SQLite WAL `synchronous=FULL`, atomic message/outbox admission, persisted retry state and recipient receipts. Posting throughput includes the final queue drain. The harness requires every acknowledged message, exact body, FTS entry and expected recipient receipt, and rejects failed, pending or dropped work.
 

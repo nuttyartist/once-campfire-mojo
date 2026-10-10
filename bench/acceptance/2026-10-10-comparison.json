@@ -1,0 +1,414 @@
+{
+  "application_revision": "d294123",
+  "measurement": {
+    "metadata": {
+      "complete": true,
+      "started_at_utc": "2026-10-10T10:27:43Z",
+      "platform": [
+        "Linux",
+        "ef32fb994a67",
+        "6.10.14-linuxkit",
+        "#1 SMP Wed Sep  3 15:35:15 UTC 2025",
+        "aarch64"
+      ],
+      "server_cpus": "0-3",
+      "client_cpus": "4-7",
+      "rounds": 3,
+      "order": "rotating Latin-square order: Rust/C/Mojo, C/Mojo/Rust, Mojo/Rust/C",
+      "duration_seconds": 8,
+      "warmup_seconds": 2,
+      "concurrency": 16,
+      "response_cache_mib": 64,
+      "seed_sha256": "f09f39eda2ef1e1e5d8ce7f4fd510fcdfc5324d329744c4993c32459bdd16da5",
+      "durability": "SQLite WAL synchronous=FULL; atomic message/outbox; persisted retries and receipts; at-least-once recovery",
+      "completion": "Post rate includes HTTP plus final job drain, exact message IDs and subscription receipt sets required",
+      "notifications": "Three selected subscriptions/message; canonical notification preparation and identical endpoint-policy rejection; no remote push network in timed workloads",
+      "active_cable_subscribers": 0,
+      "parity_gate": {
+        "passed": true,
+        "normalization": [
+          "HTML whitespace",
+          "attribute order",
+          "asset fingerprints",
+          "write timestamps",
+          "verified database ID to legacy client-ID DOM convention; new pending-only attributes"
+        ],
+        "failures": [],
+        "scenarios": [
+          "room",
+          "messages",
+          "sidebar",
+          "search",
+          "room_frame",
+          "sidebar_frame",
+          "search_frame",
+          "mutated_room",
+          "post"
+        ],
+        "mojo_jobs": {
+          "queued": 1,
+          "completed": 1,
+          "notifications": 3,
+          "rejected_endpoints": 3,
+          "broadcasts": 1,
+          "unread_broadcasts": 5,
+          "errors": 0,
+          "queue_full": 0,
+          "webhook_candidates": 0,
+          "unsupported_deliveries": 0
+        },
+        "upstream_differences": [
+          {
+            "app": "c",
+            "scenario": "sidebar",
+            "difference": "C joins the three direct-room initials with +; Rust uses an English sentence."
+          },
+          {
+            "app": "c",
+            "scenario": "sidebar_frame",
+            "difference": "C joins the three direct-room initials with +; Rust uses an English sentence."
+          }
+        ]
+      },
+      "local_reference_patches": true,
+      "environment": {
+        "CAMPFIRE_DURABLE_JOBS": "1",
+        "CAMPFIRE_SQLITE_SYNCHRONOUS": "FULL",
+        "CAMPFIRE_JOB_RECEIPTS": "1",
+        "CF_JOB_WORKERS": "3"
+      },
+      "revisions": {
+        "rust": "ff8fe2efa45ecbd281509cdc865acdeb11dbafcc",
+        "c": "889530164ff926aae14ffda20a18ae624b25aa5b",
+        "mojo": "ec9d2c2258ef0f12738964a056286c53b1a474a2"
+      },
+      "patch_sha256": {
+        "rust": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "c": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "mojo": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "loadgen_sha256": "0380ab98e89d931fec59f37fcb0ae86dc06d9fb18e4d68a167c579bce4ed7dc5",
+      "acknowledged_and_completed_messages": 237343,
+      "completed_notification_receipts": 712029
+    },
+    "results": {
+      "rust": {
+        "room_show": {
+          "median_rps": 44008.6,
+          "runs": [
+            62356.2,
+            44008.6,
+            39740.2
+          ]
+        },
+        "messages_page": {
+          "median_rps": 40509.0,
+          "runs": [
+            59627.7,
+            40509.0,
+            39415.0
+          ]
+        },
+        "sidebar": {
+          "median_rps": 53011.6,
+          "runs": [
+            66626.5,
+            50475.7,
+            53011.6
+          ]
+        },
+        "search": {
+          "median_rps": 52277.0,
+          "runs": [
+            65488.6,
+            45304.8,
+            52277.0
+          ]
+        },
+        "post_message": {
+          "median_rps": 1134.777904190619,
+          "runs": [
+            1361.4275563779854,
+            982.6893802310192,
+            1134.777904190619
+          ]
+        }
+      },
+      "c": {
+        "room_show": {
+          "median_rps": 58828.2,
+          "runs": [
+            65899.5,
+            58828.2,
+            52935.5
+          ]
+        },
+        "messages_page": {
+          "median_rps": 60793.7,
+          "runs": [
+            65411.6,
+            60793.7,
+            57914.6
+          ]
+        },
+        "sidebar": {
+          "median_rps": 62175.4,
+          "runs": [
+            67087.7,
+            62175.4,
+            59875.4
+          ]
+        },
+        "search": {
+          "median_rps": 60057.3,
+          "runs": [
+            62825.5,
+            60057.3,
+            59577.6
+          ]
+        },
+        "post_message": {
+          "median_rps": 385.77039005349695,
+          "runs": [
+            367.0992192975424,
+            387.0851354187304,
+            385.77039005349695
+          ]
+        }
+      },
+      "mojo": {
+        "room_show": {
+          "median_rps": 55286.7,
+          "runs": [
+            57597.0,
+            55286.7,
+            53770.4
+          ]
+        },
+        "messages_page": {
+          "median_rps": 61141.3,
+          "runs": [
+            61141.3,
+            64252.6,
+            58276.7
+          ]
+        },
+        "sidebar": {
+          "median_rps": 70846.0,
+          "runs": [
+            70846.0,
+            72121.8,
+            63762.5
+          ]
+        },
+        "search": {
+          "median_rps": 64161.1,
+          "runs": [
+            64161.1,
+            69239.0,
+            59948.2
+          ]
+        },
+        "post_message": {
+          "median_rps": 852.0665005712232,
+          "runs": [
+            852.0665005712232,
+            870.5554109224535,
+            685.1722525555551
+          ]
+        }
+      }
+    }
+  },
+  "source_counts": {
+    "rust": {
+      "backend": 30052,
+      "template": 873,
+      "total": 30925
+    },
+    "c": {
+      "backend": 94794,
+      "template": 0,
+      "total": 94794
+    },
+    "mojo": {
+      "mojo": 6508,
+      "c": 727,
+      "template": 261,
+      "total": 7496
+    }
+  },
+  "run_completion": [
+    {
+      "app": "c",
+      "round": 1,
+      "binary_sha256": "516d0fe7b84e2d05b9090968325c2f7949194515c9d5281d8fe569a1c185d12c",
+      "post_write_audit": {
+        "verified": true,
+        "acknowledged": 39469
+      },
+      "completed": {
+        "pending": 0,
+        "failed": 0,
+        "completed_messages": 39469,
+        "completed_notifications": 118407,
+        "drain_seconds": 0.08043404100044427
+      },
+      "server_log_gate": {
+        "passed": true
+      }
+    },
+    {
+      "app": "c",
+      "round": 2,
+      "binary_sha256": "516d0fe7b84e2d05b9090968325c2f7949194515c9d5281d8fe569a1c185d12c",
+      "post_write_audit": {
+        "verified": true,
+        "acknowledged": 39606
+      },
+      "completed": {
+        "pending": 0,
+        "failed": 0,
+        "completed_messages": 39606,
+        "completed_notifications": 118818,
+        "drain_seconds": 0.08031845799996518
+      },
+      "server_log_gate": {
+        "passed": true
+      }
+    },
+    {
+      "app": "c",
+      "round": 3,
+      "binary_sha256": "516d0fe7b84e2d05b9090968325c2f7949194515c9d5281d8fe569a1c185d12c",
+      "post_write_audit": {
+        "verified": true,
+        "acknowledged": 35195
+      },
+      "completed": {
+        "pending": 0,
+        "failed": 0,
+        "completed_messages": 35195,
+        "completed_notifications": 105585,
+        "drain_seconds": 0.06840883299992129
+      },
+      "server_log_gate": {
+        "passed": true
+      }
+    },
+    {
+      "app": "mojo",
+      "round": 1,
+      "binary_sha256": "2a4274ab0765c061eca6af2926bde975ece7da5c592341b8704437f866aaa711",
+      "post_write_audit": {
+        "verified": true,
+        "acknowledged": 8730
+      },
+      "completed": {
+        "pending": 0,
+        "failed": 0,
+        "completed_messages": 8730,
+        "completed_notifications": 26190,
+        "drain_seconds": 0.015112582999790902
+      },
+      "server_log_gate": {
+        "passed": true
+      }
+    },
+    {
+      "app": "mojo",
+      "round": 2,
+      "binary_sha256": "2a4274ab0765c061eca6af2926bde975ece7da5c592341b8704437f866aaa711",
+      "post_write_audit": {
+        "verified": true,
+        "acknowledged": 8644
+      },
+      "completed": {
+        "pending": 0,
+        "failed": 0,
+        "completed_messages": 8644,
+        "completed_notifications": 25932,
+        "drain_seconds": 0.01357895900036965
+      },
+      "server_log_gate": {
+        "passed": true
+      }
+    },
+    {
+      "app": "mojo",
+      "round": 3,
+      "binary_sha256": "2a4274ab0765c061eca6af2926bde975ece7da5c592341b8704437f866aaa711",
+      "post_write_audit": {
+        "verified": true,
+        "acknowledged": 6746
+      },
+      "completed": {
+        "pending": 0,
+        "failed": 0,
+        "completed_messages": 6746,
+        "completed_notifications": 20238,
+        "drain_seconds": 0.010976417000165384
+      },
+      "server_log_gate": {
+        "passed": true
+      }
+    },
+    {
+      "app": "rust",
+      "round": 1,
+      "binary_sha256": "0497abcbcf7e7a9cfef0f06b0981aead1a09a2d9161e081ad1ded85f858ccb69",
+      "post_write_audit": {
+        "verified": true,
+        "acknowledged": 41707
+      },
+      "completed": {
+        "pending": 0,
+        "failed": 0,
+        "completed_messages": 41707,
+        "completed_notifications": 125121,
+        "drain_seconds": 0.07943629100009275
+      },
+      "server_log_gate": {
+        "passed": true
+      }
+    },
+    {
+      "app": "rust",
+      "round": 2,
+      "binary_sha256": "0497abcbcf7e7a9cfef0f06b0981aead1a09a2d9161e081ad1ded85f858ccb69",
+      "post_write_audit": {
+        "verified": true,
+        "acknowledged": 26606
+      },
+      "completed": {
+        "pending": 0,
+        "failed": 0,
+        "completed_messages": 26606,
+        "completed_notifications": 79818,
+        "drain_seconds": 0.051791916000183846
+      },
+      "server_log_gate": {
+        "passed": true
+      }
+    },
+    {
+      "app": "rust",
+      "round": 3,
+      "binary_sha256": "0497abcbcf7e7a9cfef0f06b0981aead1a09a2d9161e081ad1ded85f858ccb69",
+      "post_write_audit": {
+        "verified": true,
+        "acknowledged": 30640
+      },
+      "completed": {
+        "pending": 0,
+        "failed": 0,
+        "completed_messages": 30640,
+        "completed_notifications": 91920,
+        "drain_seconds": 0.06021220799993898
+      },
+      "server_log_gate": {
+        "passed": true
+      }
+    }
+  ]
+}
