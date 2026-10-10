@@ -35,7 +35,7 @@ class PostingOptimizations(unittest.TestCase):
             before = db.execute('SELECT count(*) FROM messages').fetchone()
         for headers in [{'Sec-Fetch-Site': 'cross-site'}, {'Origin': 'https://foreign.invalid'}]:
             self.assertEqual(self.request(path, 'POST', {'message[body]': 'forged'}, headers=headers)[0], 422)
-        self.assertEqual(self.request(path, 'POST', {'message[body]': 'anonymous'}, cookie='')[0], 302)
+        self.assertEqual(self.request(path, 'POST', {'message[body]': 'anonymous'}, cookie='')[0], 401)
         self.assertEqual(self.request(path, 'POST', {'_method': 'delete', 'message[body]': 'not a create'})[0], 404)
         with local.connection(self.db) as db:
             self.assertEqual(db.execute('SELECT count(*) FROM messages').fetchone(), before)
