@@ -33,3 +33,9 @@ byte-safety: build/byte-safety
 	python3 tests/byte_safety.py
 build/byte-safety: tests/byte_safety.mojo $(wildcard src/*.mojo native/*) build/platform.o build/runtime.o
 	$(MOJO) build -O3 -I src $< -o $@ $(ABI)
+
+.PHONY: job-leases
+job-leases: build/job-leases
+	build/job-leases
+build/job-leases: tests/job_leases.mojo $(wildcard src/*.mojo native/*) build/platform.o build/runtime.o
+	$(MOJO) build -O3 -I src $< -o $@ $(ABI)

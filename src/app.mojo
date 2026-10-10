@@ -113,6 +113,9 @@ struct App(Movable):
             if self.user(req)=="":
                 return accounts.request_login(self.db,self.signer,req).pack(False)
             return controllers.preview(form).pack(req.gzip())
+        # Posting owns its transaction; reuse the already validated form.
+        if len(segments)==4 and String(segments[1])=="rooms" and String(segments[3])=="messages" and req.method=="POST":
+            return self.post(req,form).pack(req.gzip())
         # Slow cryptography and remote validation do not own the SQLite writer.
         # Authorization and uniqueness are checked again in the write transaction.
         var preflight_uid = self.user(req) if req.method!="GET" else String()
@@ -133,9 +136,7 @@ struct App(Movable):
         if req.method=="GET" and (req.path.startswith("/rails/active_storage/representations/") or req.path.endswith("/avatar") or req.path=="/account/logo"):
             storage.preflight_get(self.db,self.signer,req,self.user(req)!="")
         elif req.method!="GET" and (preflight_uid!="" or form.password_digest!=""):
-            # New message creation prepares its separately parsed form in post().
-            if not (len(segments)==4 and String(segments[1])=="rooms" and String(segments[3])=="messages" and req.method=="POST"):
-                storage.preflight_form(self.db,self.signer,form)
+            storage.preflight_form(self.db,self.signer,form)
         var mutation = req.method != "GET"
         _ = self.db.rows("BEGIN IMMEDIATE" if mutation or req.path.startswith("/rails/active_storage/") or req.path.endswith("/avatar") or req.path=="/account/logo" else "BEGIN")
         try:
@@ -171,9 +172,6 @@ struct App(Movable):
                 var wire = self.read(req)
                 _ = self.db.rows("COMMIT")
                 return wire^
-            if len(segments)==4 and String(segments[1])=="rooms" and String(segments[3])=="messages" and req.method=="POST":
-                _ = self.db.rows("COMMIT")
-                return self.post(req).pack(req.gzip())
             var uid = self.user(req)
             if uid=="":
                 _ = self.db.rows("ROLLBACK")
@@ -267,7 +265,7 @@ struct App(Movable):
             form.fields["message[body]"] = raw
         if req.method=="POST" and len(segments)==5:
             var cid = token()
-            var response = self.post(req.copy(),uid,cid,String(bot_key[1]))
+            var response = self.post(req,form,uid,cid,String(bot_key[1]))
             if response.status==200:
                 return html("",201,"Location: "+req.origin()+"/rooms/"+rid+"/messages/"+self.db.scalar("SELECT id FROM messages WHERE creator_id=? AND client_message_id=?",[uid,cid])+"\r\n")
             return response^
@@ -545,7 +543,7 @@ struct App(Movable):
             self.cache[key] = wire
         return wire^
 
-    def post(mut self, req: Request, uid_override: String = "", cid_override: String = "", bot_token: String = "") raises -> Response:
+    def post(mut self, req: Request, var parsed: parameters.Form, uid_override: String = "", cid_override: String = "", bot_token: String = "") raises -> Response:
         var segments = req.path.split("/")
         if (
             len(segments) != 4
@@ -554,7 +552,6 @@ struct App(Movable):
         ):
             return html("Not found", 404)
         var rid = String(positive(String(segments[2])))
-        var parsed = parameters.parse(self.db,req)
         if uid_override!="":
             if "attachment" in parsed.files:
                 parsed.files["message[attachment]"] = parsed.files["attachment"].copy()

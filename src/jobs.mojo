@@ -205,13 +205,21 @@ def receipt(mut db: Database, mid: String, kind: String, target: String) raises:
         raise e
 
 
+def claim(mut db: Database) raises -> List[List[String]]:
+    # An empty worker must not acquire SQLite's writer lock. The atomic
+    # claim rechecks eligibility because another worker can win the race.
+    if db.scalar("SELECT 1 FROM mojo_jobs INDEXED BY mojo_jobs_ready WHERE failed=0 AND available_at<=unixepoch() AND lease_until<unixepoch() ORDER BY id LIMIT 1")!="1":
+        return List[List[String]]()
+    return db.rows("UPDATE mojo_jobs SET lease_until=unixepoch()+600,attempts=attempts+1 WHERE id=(SELECT id FROM mojo_jobs INDEXED BY mojo_jobs_ready WHERE failed=0 AND available_at<=unixepoch() AND lease_until<unixepoch() ORDER BY id LIMIT 1) RETURNING id,message_id,hooks,attempts,kind")
+
+
 def run(path: String) raises:
     var db = Database(path)
     while native.os_running():
         if getenv("CAMPFIRE_JOBS_PAUSED","0")=="1":
             native.os_sleep_ms(50)
             continue
-        var rows = db.rows("UPDATE mojo_jobs SET lease_until=unixepoch()+600,attempts=attempts+1 WHERE id=(SELECT id FROM mojo_jobs WHERE failed=0 AND available_at<=unixepoch() AND lease_until<unixepoch() ORDER BY id LIMIT 1) RETURNING id,message_id,hooks,attempts,kind")
+        var rows = claim(db)
         if len(rows)==0:
             try:
                 storage.retry_cleanup(db)
@@ -398,5 +406,7 @@ def remove_history(mut db: Database, subject: String, job_id: String, room: Bool
 
 
 def renew(mut db: Database, job_id: String) raises:
-    if job_id!="":
+    # Keep at least five minutes before starting bounded external work. Reading
+    # first avoids a write transaction even when an UPDATE would change no rows.
+    if job_id!="" and db.scalar("SELECT 1 FROM mojo_jobs WHERE id=? AND lease_until<=unixepoch()+300",[job_id])=="1":
         _ = db.rows("UPDATE mojo_jobs SET lease_until=unixepoch()+600 WHERE id=?",[job_id])

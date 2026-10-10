@@ -63,6 +63,7 @@ def migrate(mut db: Database) raises:
     _ = db.rows("CREATE TABLE IF NOT EXISTS campfire_completed_jobs(message_id INTEGER NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(message_id,kind))")
     _ = db.rows("CREATE TABLE IF NOT EXISTS campfire_delivery_receipts(message_id INTEGER NOT NULL,target_id INTEGER NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(message_id,target_id,kind))")
     _ = db.rows("CREATE INDEX IF NOT EXISTS mojo_jobs_available ON mojo_jobs(failed,available_at,lease_until)")
+    _ = db.rows("CREATE INDEX IF NOT EXISTS mojo_jobs_ready ON mojo_jobs(id) WHERE failed=0")
     _ = db.rows("CREATE TABLE IF NOT EXISTS mojo_deliveries (message_id INTEGER NOT NULL, kind TEXT NOT NULL, target_id INTEGER NOT NULL, PRIMARY KEY(message_id,kind,target_id))")
     _ = db.rows("CREATE TABLE IF NOT EXISTS mojo_file_purges (key TEXT PRIMARY KEY, attempts INTEGER NOT NULL DEFAULT 0, available_at INTEGER NOT NULL DEFAULT (unixepoch()), error TEXT)")
     var has_kind = False
