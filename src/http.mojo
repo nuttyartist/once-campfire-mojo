@@ -1,4 +1,5 @@
-from std.ffi import external_call
+import native_boundary as native
+from byte_buffer import Bytes
 from text import decode
 from crypto import base64
 from std.os import getenv
@@ -11,7 +12,7 @@ struct Request(Copyable, Movable):
     var path: String
     var query: String
     var headers: Dict[String, String]
-    var body: String
+    var body: Bytes
     var peer: String
     var body_fd: Int
     var body_size: Int
@@ -86,19 +87,19 @@ def parse_headers(head: String) raises -> Request:
 
 struct Response(Copyable, Movable):
     var status: Int
-    var body: String
+    var body: Bytes
     var content_type: String
     var extra: String
     var content_length: Int
 
-    def __init__(out self, status: Int, body: String, content_type: String, extra: String, content_length: Int = -1):
+    def __init__(out self, status: Int, body: Bytes, content_type: String, extra: String, content_length: Int = -1):
         self.status = status
         self.body = body
         self.content_type = content_type
         self.extra = extra
         self.content_length = content_length
 
-    def pack(self, gzip: Bool) raises -> String:
+    def pack(self, gzip: Bool) raises -> Bytes:
         var body = self.body
         var encoding = String()
         if gzip and self.content_length<0 and self.status==200 and body.byte_length()>128 and (self.content_type.startswith("text/") or "json" in self.content_type or "xml" in self.content_type):
@@ -106,16 +107,10 @@ struct Response(Copyable, Movable):
                 length=body.byte_length() + body.byte_length() // 100 + 128,
                 fill=0,
             )
-            var n = external_call["gzip_encode", Int](
-                body.as_bytes().unsafe_ptr(),
-                body.byte_length(),
-                buf.unsafe_ptr(),
-                len(buf),
-            )
+            var n = native.gzip_encode(body.as_bytes(), body.byte_length(), buf, len(buf))
             if n < 0:
                 raise Error("gzip failed")
-            body = String(
-                unsafe_from_utf8=Span(unsafe_ptr=buf.unsafe_ptr(), length=n)
+            body = Bytes(Span(buf)[:n]
             )
             encoding = "Content-Encoding: gzip\r\n"
         var reason = String("OK")
@@ -175,17 +170,19 @@ def html(body: String, status: Int = 200, extra: String = "") -> Response:
     return Response(status, body, "text/html; charset=utf-8", extra)
 
 
-def chunked(source: String) raises -> Tuple[String,Int]:
-    var body = String()
+def chunked(source: Bytes) raises -> Tuple[Bytes,Int]:
+    var body = Bytes()
     var offset = 0
     while True:
-        var tail = String(unsafe_from_utf8=source.as_bytes()[offset:])
+        var tail = Bytes(source.as_bytes()[offset:])
         var end = tail.find("\r\n")
         if end<0:
             if tail.byte_length()>8192:
                 raise Error("Chunk line too large")
             return ("",0)
-        var line = String(tail[byte=:end])
+        if end>8192:
+            raise Error("Chunk line too large")
+        var line = tail.slice(0,end).text()
         var fields = line.split(";",maxsplit=1)
         var raw = String(fields[0])
         if raw=="" or raw.byte_length()>8:
@@ -200,7 +197,7 @@ def chunked(source: String) raises -> Tuple[String,Int]:
             raise Error("Body too large")
         offset += end+2
         if size==0:
-            var rest = String(unsafe_from_utf8=source.as_bytes()[offset:])
+            var rest = Bytes(source.as_bytes()[offset:])
             if rest.startswith("\r\n"):
                 return (body^,offset+2)
             var finish = rest.find("\r\n\r\n")
@@ -208,7 +205,9 @@ def chunked(source: String) raises -> Tuple[String,Int]:
                 if rest.byte_length()>32768:
                     raise Error("Trailers too large")
                 return ("",0)
-            var trailers = parse_headers("GET / HTTP/1.1\r\nHost: "+getenv("PUBLIC_ORIGIN","http://localhost").replace("http://","").replace("https://","")+"\r\n"+String(rest[byte=:finish]))
+            if finish>32768:
+                raise Error("Trailers too large")
+            var trailers = parse_headers("GET / HTTP/1.1\r\nHost: "+getenv("PUBLIC_ORIGIN","http://localhost").replace("http://","").replace("https://","")+"\r\n"+rest.slice(0,finish).text())
             for forbidden in ["content-length","transfer-encoding","authorization","cookie"]:
                 if trailers.header(forbidden)!="":
                     raise Error("Forbidden trailer")
@@ -217,15 +216,15 @@ def chunked(source: String) raises -> Tuple[String,Int]:
             return ("",0)
         if source.as_bytes()[offset+size]!=13 or source.as_bytes()[offset+size+1]!=10:
             raise Error("Invalid chunk delimiter")
-        body += String(unsafe_from_utf8=source.as_bytes()[offset:offset+size])
+        body += Bytes(source.as_bytes()[offset:offset+size])
         offset += size+2
 
 
-def validator(data: String) raises -> String:
+def validator(data: Bytes) raises -> String:
     var hash = List[UInt8](length=32,fill=0)
-    if external_call["crypto_hash",Int](data.as_bytes().unsafe_ptr(),data.byte_length(),1,hash.unsafe_ptr())!=32:
+    if native.crypto_hash(data.as_bytes(), data.byte_length(), 1, hash)!=32:
         raise Error("Cannot hash response")
-    return '"'+base64(String(unsafe_from_utf8=Span(unsafe_ptr=hash.unsafe_ptr(),length=32)),True,False)+'"'
+    return '"'+base64(Bytes(Span(hash)[:32]),True,False)+'"'
 
 
 def conditional(var response: Response, req: Request, policy: String = "private, no-cache") raises -> Response:

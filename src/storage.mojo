@@ -1,5 +1,6 @@
+import native_boundary as native
+from byte_buffer import Bytes
 # Active Storage-compatible records, signed URLs, disk layout and image variants.
-from std.ffi import external_call
 from std.os import getenv
 from database import Database
 from crypto import Signer, base64, json_string, url_encode
@@ -27,11 +28,11 @@ def relative(key: String) raises -> String:
     return String(key[byte=:2])+"/"+String(key[byte=2:4])+"/"+key
 
 
-def checksum(data: String) raises -> String:
+def checksum(data: Bytes) raises -> String:
     var result = List[UInt8](length=16,fill=0)
-    if external_call["crypto_md5",Int](data.as_bytes().unsafe_ptr(),data.byte_length(),result.unsafe_ptr())!=16:
+    if native.crypto_md5(data.as_bytes(), data.byte_length(), result)!=16:
         raise Error("Checksum failed")
-    return base64(String(unsafe_from_utf8=Span(unsafe_ptr=result.unsafe_ptr(),length=16)))
+    return base64(Bytes(Span(result)[:16]))
 
 
 def safe_filename(var name: String) -> String:
@@ -42,22 +43,22 @@ def safe_filename(var name: String) -> String:
     return result if result!="" else "file"
 
 
-def store_bytes(mut db: Database, key: String, data: String) raises:
+def store_bytes(mut db: Database, key: String, data: Bytes) raises:
     var rel = relative(key)
     var directory = root()+"/"+String(rel[byte=:5])
-    if external_call["fs_mkdirs",Int](directory.as_c_string_span())!=0:
+    if native.fs_mkdirs(directory)!=0:
         raise Error("Cannot create storage directory")
     var path = root()+"/"+rel
-    if external_call["fs_write_new",Int](path.as_c_string_span(),data.as_bytes().unsafe_ptr(),data.byte_length())!=0:
+    if native.fs_write_new(path, data.as_bytes(), data.byte_length())!=0:
         raise Error("Cannot save upload")
     db.pending_files.append(path)
 
 
-def identify(data: String) -> String:
+def identify(data: Bytes) raises -> String:
     var detected = List[UInt8](length=256,fill=0)
-    var n = external_call["mime_detect",Int](data.as_bytes().unsafe_ptr(),data.byte_length(),detected.unsafe_ptr(),len(detected))
+    var n = native.mime_detect(data.as_bytes(), data.byte_length(), detected, len(detected))
     if n>0:
-        var kind = String(unsafe_from_utf8=Span(unsafe_ptr=detected.unsafe_ptr(),length=n))
+        var kind = String(from_utf8=Span(detected)[:n])
         if kind!="application/octet-stream":
             return kind
     var b = data.as_bytes()
@@ -67,11 +68,11 @@ def identify(data: String) -> String:
         return "image/jpeg"
     if data.startswith("GIF87a") or data.startswith("GIF89a"):
         return "image/gif"
-    if len(b)>=12 and data.startswith("RIFF") and String(unsafe_from_utf8=b[8:12])=="WEBP":
+    if len(b)>=12 and data.startswith("RIFF") and Bytes(b[8:12])=="WEBP":
         return "image/webp"
     if data.startswith("%PDF-"):
         return "application/pdf"
-    if len(b)>=12 and String(unsafe_from_utf8=b[4:8])=="ftyp":
+    if len(b)>=12 and Bytes(b[4:8])=="ftyp":
         return "video/mp4"
     if data.startswith("ID3"):
         return "audio/mpeg"
@@ -83,16 +84,16 @@ def identify(data: String) -> String:
         return "image/bmp"
     if data.startswith("OggS"):
         return "audio/ogg"
-    if len(b)>=12 and data.startswith("RIFF") and String(unsafe_from_utf8=b[8:12])=="WAVE":
+    if len(b)>=12 and data.startswith("RIFF") and Bytes(b[8:12])=="WAVE":
         return "audio/wav"
     return "application/octet-stream"
 
 
-def metadata(mut db: Database, data: String, kind: String) raises -> String:
+def metadata(mut db: Database, data: Bytes, kind: String) raises -> String:
     var meta = String('{"identified":true,"analyzed":true}')
     if kind.startswith("image/") or kind=="application/pdf":
         var dims = List[Int](length=2,fill=0)
-        if external_call["image_dimensions",Int](data.as_bytes().unsafe_ptr(),data.byte_length(),dims.unsafe_ptr())==0:
+        if native.image_dimensions(data.as_bytes(), data.byte_length(), dims)==0:
             meta = '{"identified":true,"analyzed":true,"width":'+String(dims[0])+',"height":'+String(dims[1])+'}'
     elif kind.startswith("video/") or kind.startswith("audio/"):
         try:
@@ -137,18 +138,18 @@ def upload(mut db: Database, file: Upload) raises -> String:
 
 def checksum_fd(fd: Int, offset: Int, size: Int) raises -> String:
     var bytes = List[UInt8](length=16,fill=0)
-    if external_call["fs_md5_range",Int](fd,offset,size,bytes.unsafe_ptr())!=16:
+    if native.fs_md5_range(fd, offset, size, bytes)!=16:
         raise Error("Upload checksum failed")
-    return base64(String(unsafe_from_utf8=Span(unsafe_ptr=bytes.unsafe_ptr(),length=16)))
+    return base64(Bytes(Span(bytes)[:16]))
 
 
 def store_spooled(mut db: Database, key: String, file: Upload) raises:
     var rel = relative(key)
     var directory = root()+"/"+String(rel[byte=:5])
-    if external_call["fs_mkdirs",Int](directory.as_c_string_span())!=0:
+    if native.fs_mkdirs(directory)!=0:
         raise Error("Cannot create storage directory")
     var path = root()+"/"+rel
-    if external_call["fs_copy_range_new",Int](file.fd,file.offset,file.size,path.as_c_string_span())!=0:
+    if native.fs_copy_range_new(file.fd, file.offset, file.size, path)!=0:
         raise Error("Cannot save upload")
     db.pending_files.append(path)
 
@@ -158,19 +159,19 @@ def metadata_file(mut db: Database, key: String, kind: String) raises -> String:
     var meta = String('{"identified":true,"analyzed":true}')
     if kind.startswith("image/") or kind=="application/pdf":
         var dims = List[Int](length=2,fill=0)
-        if external_call["image_dimensions_path",Int](path.as_c_string_span(),dims.unsafe_ptr())==0:
+        if native.image_dimensions_path(path, dims)==0:
             meta = '{"identified":true,"analyzed":true,"width":'+String(dims[0])+',"height":'+String(dims[1])+'}'
     elif kind.startswith("video/") or kind.startswith("audio/"):
         var rel = relative(key)
         var base = root()
-        var fd = external_call["fs_open_beneath",Int](base.as_c_string_span(),rel.as_c_string_span())
+        var fd = native.fs_open_beneath(base, rel)
         if fd<0:
             raise Error("Cannot open media")
         try:
             meta = media.metadata(db,"",kind,fd)
         except:
             pass
-        _ = external_call["os_close",Int](fd)
+        _ = native.os_close(fd)
     return meta^
 
 
@@ -187,7 +188,7 @@ def upload_spooled(mut db: Database, file: Upload) raises -> String:
 def open_blob(key: String) raises -> Int:
     var base = root()
     var rel = relative(key)
-    var fd = external_call["fs_open_beneath",Int](base.as_c_string_span(),rel.as_c_string_span())
+    var fd = native.fs_open_beneath(base, rel)
     if fd<0:
         raise Error("Missing stored upload")
     return fd
@@ -196,8 +197,8 @@ def open_blob(key: String) raises -> Int:
 def verify_file(mut db: Database, blob: String) raises:
     var row = db.rows("SELECT key,byte_size FROM active_storage_blobs WHERE id=?",[blob])[0].copy()
     var fd = open_blob(row[0])
-    var size = external_call["fs_size",Int](fd)
-    _ = external_call["os_close",Int](fd)
+    var size = native.fs_size(fd)
+    _ = native.os_close(fd)
     if size!=Int(row[1]):
         raise Error("Incomplete stored upload")
 
@@ -217,7 +218,7 @@ def blob_path(mut signer: Signer, id: String, filename: String) raises -> String
     return "/rails/active_storage/blobs/proxy/"+url_encode(signed_id(signer,id))+"/"+url_encode(safe_filename(filename))
 
 
-def bytes_response(body: String, kind: String, filename: String, req: Request, force_download: Bool = False) raises -> Response:
+def bytes_response(body: Bytes, kind: String, filename: String, req: Request, force_download: Bool = False) raises -> Response:
     var extra = "Accept-Ranges: bytes\r\nContent-Disposition: "+("attachment" if force_download or kind not in ["image/webp","image/avif","image/png","image/gif","image/jpeg","image/tiff","image/bmp","image/vnd.adobe.photoshop","image/vnd.microsoft.icon","application/pdf"] else "inline")+'; filename="'+safe_filename(filename)+'"\r\n'
     var tag = validator(body)
     extra += "ETag: "+tag+"\r\nCache-Control: public, max-age=300\r\n"
@@ -253,11 +254,11 @@ def bytes_response(body: String, kind: String, filename: String, req: Request, f
         if len(spans)==1:
             var start = spans[0][0]
             var end = spans[0][1]
-            return Response(206,String(unsafe_from_utf8=body.as_bytes()[start:end+1]),kind,extra+"Content-Range: bytes "+String(start)+"-"+String(end)+"/"+String(total)+"\r\n")
+            return Response(206,Bytes(body.as_bytes()[start:end+1]),kind,extra+"Content-Range: bytes "+String(start)+"-"+String(end)+"/"+String(total)+"\r\n")
         var boundary = "campfire-"+token()
-        var multipart = String()
+        var multipart = Bytes()
         for span in spans:
-            multipart += "--"+boundary+"\r\nContent-Type: "+kind+"\r\nContent-Range: bytes "+String(span[0])+"-"+String(span[1])+"/"+String(total)+"\r\n\r\n"+String(unsafe_from_utf8=body.as_bytes()[span[0]:span[1]+1])+"\r\n"
+            multipart += "--"+boundary+"\r\nContent-Type: "+kind+"\r\nContent-Range: bytes "+String(span[0])+"-"+String(span[1])+"/"+String(total)+"\r\n\r\n"+Bytes(body.as_bytes()[span[0]:span[1]+1])+"\r\n"
         multipart += "--"+boundary+"--\r\n"
         return Response(206,multipart,"multipart/byteranges; boundary="+boundary,extra)
     return Response(200,body,kind,extra)
@@ -270,13 +271,13 @@ def download(mut db: Database, blob: String, req: Request) raises -> Response:
     var row = rows[0].copy()
     var folder = root()
     var path = relative(row[0])
-    var fd = external_call["fs_open_beneath",Int](folder.as_c_string_span(),path.as_c_string_span())
+    var fd = native.fs_open_beneath(folder, path)
     if fd<0:
         return html("File not found",404)
     var transfer = FileTransfer()
     transfer.fd = fd
     try:
-        var total = external_call["fs_size",Int](fd)
+        var total = native.fs_size(fd)
         if total<0 or String(total)!=row[3]:
             raise Error("Storage file size differs from its record")
         var kind = row[2]
@@ -382,14 +383,8 @@ def variant(mut db: Database, blob: String, transformations: String, symbols: Bo
     if width<1 or height<1 or width>4096 or height>4096:
         raise Error("Invalid variant dimensions")
     var source_path = root()+"/"+relative(row[0][0])
-    var address = 0
-    var size = 0
     var crop = db.scalar("SELECT json_type(?,'$.resize_to_fill')",[transformations])=="array"
-    if external_call["image_transform_path",Int](source_path.as_c_string_span(),width,height,Int(crop),format.as_c_string_span(),Pointer(to=address),Pointer(to=size))!=0:
-        raise Error("Cannot decode image")
-    var output = Pointer[UInt8,MutUntrackedOrigin](unsafe_from_address=address)
-    var body = String(unsafe_from_utf8=Span(unsafe_ptr=output,length=size))
-    external_call["buffer_free",NoneType](output)
+    var body = native.image_transform_path(source_path,width,height,crop,format)
     var file = Upload(safe_filename(row[0][1])+"."+format,"image/"+format,body)
     var result = upload(db,file)
     db.prepared_variants[plan] = String(result[byte=9:])
@@ -416,16 +411,16 @@ def preview(mut db: Database, blob: String) raises -> String:
     if row[2]!="application/pdf" and (Int(pixels[0])<1 or Int(pixels[1])<1 or Int(pixels[0])>250000000//Int(pixels[1])):
         raise Error("Media too large or undecodable")
     var fd = open_blob(row[0])
-    var data = String()
+    var data = Bytes()
     try:
         if row[2].startswith("video/"):
             data = media.poster("",row[2],fd)
         elif row[2]=="application/pdf":
             data = media.pdf_preview("",fd)
     except e:
-        _ = external_call["os_close",Int](fd)
+        _ = native.os_close(fd)
         raise e^
-    _ = external_call["os_close",Int](fd)
+    _ = native.os_close(fd)
     if data!="":
         var pdf = row[2]=="application/pdf"
         stored = upload(db,Upload(row[1]+(".png" if pdf else ".jpg"),"image/png" if pdf else "image/jpeg",data))
@@ -652,7 +647,7 @@ def discard_prepared(mut db: Database):
             if db.scalar("SELECT 1 FROM active_storage_blobs WHERE key=?",[key])=="1":
                 continue
             var name = file.copy()
-            _ = external_call["fs_unlink",Int](name.as_c_string_span())
+            _ = native.fs_unlink(name)
         except:
             # Offline gc-files recovers interrupted preparations.
             pass
@@ -729,7 +724,7 @@ def cleanup_file(mut db: Database, key: String) raises:
         _ = db.rows("DELETE FROM mojo_file_purges WHERE key=?",[key])
         return
     var path = root()+"/"+relative(key)
-    if external_call["fs_unlink",Int](path.as_c_string_span())==0:
+    if native.fs_unlink(path)==0:
         _ = db.rows("DELETE FROM mojo_file_purges WHERE key=?",[key])
     else:
         _ = db.rows("UPDATE mojo_file_purges SET attempts=attempts+1,available_at=unixepoch()+min(3600,(attempts+1)*5),error='unlink or directory fsync failed' WHERE key=?",[key])
@@ -774,10 +769,10 @@ def preflight_direct(mut db: Database, mut signer: Signer, req: Request, uid: St
     try:
         var fd = open_blob(key)
         try:
-            existing = checksum_fd(fd,0,external_call["fs_size",Int](fd))==expected
+            existing = checksum_fd(fd,0,native.fs_size(fd))==expected
         except:
             existing = False
-        _ = external_call["os_close",Int](fd)
+        _ = native.os_close(fd)
     except:
         pass
     if not existing:

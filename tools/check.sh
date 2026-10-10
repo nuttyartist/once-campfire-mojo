@@ -3,10 +3,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 make -j"${BUILD_JOBS:-3}"
+python3 tests/source_safety.py
 python3 -m compileall -q tools tests bench
-for suite in replacement sessions network_failures mixed_workloads storage_recovery full integration recovery lifecycle operations streaming_uploads; do
+for suite in byte_http replacement sessions network_failures mixed_workloads storage_recovery full integration recovery lifecycle operations streaming_uploads; do
     python3 "tests/$suite.py"
 done
-make -f tests/Makefile richtext vectors json-encoding
+make -f tests/Makefile richtext vectors json-encoding byte-safety
 bash tests/native-safety.sh
 printf '%s\n' 'PASS: standalone Mojo correctness gate'

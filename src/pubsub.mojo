@@ -1,4 +1,4 @@
-from std.ffi import external_call
+import native_boundary as native
 from crypto import json_string, base64, Signer
 from http import Request
 import views
@@ -8,7 +8,7 @@ from database import Database
 
 def publish(stream: String, payload: String) raises:
     var data = stream + "\n" + payload
-    if external_call["bus_publish", Int](data.as_bytes().unsafe_ptr(), data.byte_length()) < 0:
+    if native.bus_publish(data.as_bytes(), data.byte_length()) < 0:
         raise Error("Broadcast exceeds bounded delivery log")
 
 
@@ -39,9 +39,9 @@ def refresh_sidebars(mut db: Database, mut signer: Signer, req: Request) raises:
 
 def flush(mut db: Database):
     for event in db.pending_events:
-        if external_call["bus_publish",Int](event.as_bytes().unsafe_ptr(),event.byte_length())<0:
+        if native.bus_publish(event.as_bytes(), event.byte_length())<0:
             # stage() checked the bound before commit. If an invariant breaks,
             # force reconnect/refresh instead of returning a false HTTP failure.
             print("Realtime admission invariant failed; reconnecting clients")
-            external_call["bus_resync",NoneType]()
+            native.bus_resync()
     db.pending_events.clear()

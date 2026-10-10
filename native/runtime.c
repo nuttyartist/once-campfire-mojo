@@ -83,22 +83,25 @@ static void bus_lock(void) {
   if(pthread_mutex_lock(&bus->mutex)==EOWNERDEAD){for(int i=0;i<BUS_SLOTS;i++)bus->events[i].sequence=-1;bus->sequence+=BUS_SLOTS;pthread_mutex_consistent(&bus->mutex);}
 }
 long bus_sequence(void) {
+  if(!bus || bus==MAP_FAILED)return -1;
   bus_lock();long n=bus->sequence;pthread_mutex_unlock(&bus->mutex);return n;
 }
 long bus_publish(const void *bytes, long length) {
-  if (length<0 || length>BUS_BYTES) return -1;
+  if (!bus || bus==MAP_FAILED || length<0 || length>BUS_BYTES) return -1;
   bus_lock();
   long seq=++bus->sequence;struct event *e=&bus->events[seq%BUS_SLOTS];
   memcpy(e->bytes,bytes,length);e->length=length;e->sequence=seq;
   pthread_mutex_unlock(&bus->mutex);return seq;
 }
 void bus_resync(void) {
+  if(!bus || bus==MAP_FAILED)return;
   bus_lock();
   for(int i=0;i<BUS_SLOTS;i++)bus->events[i].sequence=-1;
   bus->sequence+=BUS_SLOTS;
   pthread_mutex_unlock(&bus->mutex);
 }
 long bus_read(long seq, void *bytes, long capacity) {
+  if(!bus || bus==MAP_FAILED || seq<0 || capacity<0)return -1;
   bus_lock();
   struct event *e=&bus->events[seq%BUS_SLOTS];long n=e->length;
   if(seq>bus->sequence)n=0;

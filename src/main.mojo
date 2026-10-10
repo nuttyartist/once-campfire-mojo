@@ -1,4 +1,5 @@
-from std.ffi import external_call
+import native_boundary as native
+from byte_buffer import Bytes
 from std.os import getenv
 from app import App
 import jobs
@@ -11,8 +12,8 @@ from http import parse_headers, html, chunked
 @fieldwise_init
 struct Connection(Copyable, Movable):
     var fd: Int
-    var incoming: String
-    var outgoing: String
+    var incoming: Bytes
+    var outgoing: Bytes
     var sent: Int
     var touched: Int
     var close_after: Bool
@@ -25,28 +26,30 @@ struct Connection(Copyable, Movable):
     def close(mut self):
         self.upload.close()
         self.download.close()
-        _ = external_call["os_close", Int](self.fd)
+        _ = native.os_close(self.fd)
         self.fd = -1
         self.incoming = ""
         self.outgoing = ""
 
     def dispatch(mut self, mut app: App) raises:
         if self.started==0:
-            self.started = external_call["os_now_ms",Int]()
+            self.started = native.os_now_ms()
         var end = self.incoming.find("\r\n\r\n")
         if end < 0:
             if self.incoming.byte_length() > 32768:
                 self.close()
             return
-        var req = parse_headers(String(self.incoming[byte=:end]))
+        if end>32768:
+            raise Error("Request headers too large")
+        var req = parse_headers(self.incoming.slice(0,end).text())
         var address = List[UInt8](length=64,fill=0)
-        if external_call["peer_address",Int](self.fd,address.unsafe_ptr(),len(address))==0:
-            req.peer = String(unsafe_from_utf8_ptr=address.unsafe_ptr())
+        if native.peer_address(self.fd, address, len(address))==0:
+            req.peer = native.terminated(address)
         var proxy = getenv("TRUSTED_PROXY_IP","")
         if proxy!="" and req.peer==proxy:
             var forwarded = String(req.header("x-forwarded-for").split(",")[0]).strip()
             var text = String(forwarded)
-            if external_call["valid_ip",Int](text.as_c_string_span())==1:
+            if native.valid_ip(text)==1:
                 req.peer = text
         var size = 0
         var cl = req.header("content-length")
@@ -66,20 +69,20 @@ struct Connection(Copyable, Movable):
         var consumed = end+4+size
         var complete = self.incoming.byte_length()>=consumed
         if spool:
-            var received = self.upload.feed(String(unsafe_from_utf8=self.incoming.as_bytes()[end+4:]),size,req.header("transfer-encoding")!="")
+            var received = self.upload.feed(Bytes(self.incoming.as_bytes()[end+4:]),size,req.header("transfer-encoding")!="")
             complete = received[1]
             consumed = end+4+received[0]
             req.body_fd = self.upload.fd
             req.body_size = self.upload.size
             if not complete:
-                self.incoming = String(unsafe_from_utf8=self.incoming.as_bytes()[:end+4])+String(unsafe_from_utf8=self.incoming.as_bytes()[consumed:])
+                self.incoming = Bytes(self.incoming.as_bytes()[:end+4])+Bytes(self.incoming.as_bytes()[consumed:])
         elif req.header("transfer-encoding")!="":
-            var decoded = chunked(String(unsafe_from_utf8=self.incoming.as_bytes()[end+4:]))
+            var decoded = chunked(Bytes(self.incoming.as_bytes()[end+4:]))
             complete = decoded[1]>0
             consumed = end+4+decoded[1]
             req.body = decoded[0]
         elif complete:
-            req.body = String(unsafe_from_utf8=self.incoming.as_bytes()[end+4:consumed])
+            req.body = Bytes(self.incoming.as_bytes()[end+4:consumed])
         if not complete:
             var expect = req.header("expect").lower()
             if expect!="" and expect!="100-continue":
@@ -89,7 +92,7 @@ struct Connection(Copyable, Movable):
                 self.outgoing = "HTTP/1.1 100 Continue\r\n\r\n"
                 self.continued = True
             return
-        var remaining = String(unsafe_from_utf8=self.incoming.as_bytes()[consumed:])
+        var remaining = Bytes(self.incoming.as_bytes()[consumed:])
         self.incoming = remaining^
         self.continued = False
         self.started = 0
@@ -112,7 +115,7 @@ struct Connection(Copyable, Movable):
             if req.method == "HEAD":
                 self.download.close()
                 var header_end = self.outgoing.find("\r\n\r\n")
-                var head = String(self.outgoing[byte = : header_end + 4])
+                var head = self.outgoing.slice(0,header_end+4)
                 self.outgoing = head^
         except e:
             app.db.pending_download.close()
@@ -122,7 +125,7 @@ struct Connection(Copyable, Movable):
                 self.outgoing = html("Malformed request parameters",400).pack(False)
             elif reason.startswith("HTTP 422: "):
                 self.outgoing = html(String(reason[byte=10:]),422).pack(False)
-            elif reason in ["Invalid ID", "Truncated percent escape", "Invalid percent escape", "NUL is not valid in a form value"]:
+            elif reason in ["Invalid UTF-8", "Invalid ID", "Truncated percent escape", "Invalid percent escape", "NUL is not valid in a form value"]:
                 self.outgoing = html("Malformed request",400).pack(False)
             elif reason in ["Invalid attachment", "Invalid image", "Incomplete stored upload", "Cannot decode image", "Cannot preview media"]:
                 self.outgoing = html(reason,422).pack(False)
@@ -144,19 +147,17 @@ def serve(listener: Int, db_path: String, cache_limit: Int) raises:
     var app = App(db_path, cache_limit,False)
     var connections = List[Connection]()
     var buffer = List[UInt8](length=65536, fill=0)
-    while external_call["os_running",Int]():
+    while native.os_running():
         var fds = List[Int]([listener])
         var writes = List[Int]([0])
         for conn in connections:
             fds.append(conn.fd)
             writes.append(1 if conn.outgoing != "" or conn.download.fd>=0 else 0)
         var ready = List[Int](length=len(fds), fill=0)
-        _ = external_call["os_poll", Int](
-            fds.unsafe_ptr(), writes.unsafe_ptr(), ready.unsafe_ptr(), len(fds)
-        )
-        var now = external_call["os_now_ms", Int]()
+        _ = native.os_poll(fds, writes, ready, len(fds))
+        var now = native.os_now_ms()
         if ready[0] != 0:
-            var fd = external_call["os_accept", Int](listener)
+            var fd = native.os_accept(listener)
             while fd >= 0:
                 var slot = -1
                 for i in range(len(connections)):
@@ -169,8 +170,8 @@ def serve(listener: Int, db_path: String, cache_limit: Int) raises:
                 elif len(connections) < 1024:
                     connections.append(conn^)
                 else:
-                    _ = external_call["os_close", Int](fd)
-                fd = external_call["os_accept", Int](listener)
+                    _ = native.os_close(fd)
+                fd = native.os_accept(listener)
         for i in range(len(ready) - 1):
             if connections[i].fd < 0:
                 continue
@@ -210,9 +211,7 @@ def serve(listener: Int, db_path: String, cache_limit: Int) raises:
                     connections[i].close()
                     continue
             if connections[i].outgoing == "":
-                var n = external_call["os_recv", Int](
-                    connections[i].fd, buffer.unsafe_ptr(), len(buffer)
-                )
+                var n = native.os_recv(connections[i].fd, buffer, len(buffer))
                 if n == -2:
                     continue
                 if n <= 0:
@@ -224,10 +223,7 @@ def serve(listener: Int, db_path: String, cache_limit: Int) raises:
                     connections[i].close()
                     continue
                 connections[i].touched = now
-                connections[i].incoming += String(
-                    unsafe_from_utf8=Span(
-                        unsafe_ptr=buffer.unsafe_ptr(), length=n
-                    )
+                connections[i].incoming += Bytes(Span(buffer)[:n]
                 )
                 try:
                     if connections[i].websocket.uid != "":
@@ -238,7 +234,7 @@ def serve(listener: Int, db_path: String, cache_limit: Int) raises:
                 except e:
                     if connections[i].websocket.uid!="":
                         connections[i].websocket.finish(app.db)
-                        connections[i].outgoing = cable.frame("\x03\xea",8)
+                        connections[i].outgoing = cable.frame(Bytes([3,234]),8)
                     else:
                         connections[i].outgoing = html("Body too large",413).pack(False) if String(e)=="Upload body too large" else html("Malformed request",400).pack(False)
                     connections[i].close_after = True
@@ -252,11 +248,7 @@ def serve(listener: Int, db_path: String, cache_limit: Int) raises:
                 var fd = connections[i].fd
                 var offset = connections[i].sent
                 var body = connections[i].outgoing.as_bytes()
-                var n = external_call["os_send", Int](
-                    fd,
-                    body.unsafe_ptr().unsafe_offset(offset),
-                    len(body) - offset,
-                )
+                var n = native.os_send(fd, body[offset:], len(body) - offset)
                 if n == -2:
                     continue
                 if n <= 0:
@@ -312,51 +304,51 @@ def main() raises:
     var parts = path.split("/")
     var parent = String(path[byte=:path.byte_length()-parts[len(parts)-1].byte_length()])
     if parent != "":
-        if external_call["fs_mkdirs", Int](parent.as_c_string_span()) != 0:
+        if native.fs_mkdirs(parent) != 0:
             raise Error("Cannot create database directory")
     var lock_path = path+".mojo.lock"
-    var lock = external_call["os_lock_file",Int](lock_path.as_c_string_span())
+    var lock = native.os_lock_file(lock_path)
     if lock<0:
         raise Error("Another Mojo server is using this database")
     initialize_db(path)
-    if external_call["bus_init",Int]()!=0 or external_call["work_init",Int]()!=0 or external_call["os_signals",Int]()!=0:
+    if native.bus_init()!=0 or native.work_init()!=0 or native.os_signals()!=0:
         raise Error("Cannot initialize runtime")
     var concurrency = Int(getenv("JOB_CONCURRENCY","3"))
     if concurrency<1 or concurrency>32:
         raise Error("JOB_CONCURRENCY must be 1–32")
-    var listener = external_call["os_listen",Int](port)
+    var listener = native.os_listen(port)
     if listener<0:
         raise Error("Cannot bind listener")
     print("Campfire Mojo listening on",getenv("BIND_ADDRESS","127.0.0.1"),port,"HTTP workers:",workers,"job workers:",concurrency)
     var children = List[Int](length=workers+concurrency,fill=0)
     for i in range(len(children)):
-        var pid = external_call["os_fork",Int]()
+        var pid = native.os_fork()
         if pid==0:
             try:
                 if i<workers:
                     serve(listener,path,cache_mb*1024*1024//workers)
                 else:
-                    _ = external_call["os_close",Int](listener)
+                    _ = native.os_close(listener)
                     jobs.run(path)
             except e:
                 print("Worker failed:", e)
-                external_call["os_child_exit",NoneType](1)
-            external_call["os_child_exit",NoneType](0)
+                native.os_child_exit(1)
+            native.os_child_exit(0)
             return
         if pid<0:
             for child in children:
                 if child>0:
-                    external_call["os_kill",NoneType](child,15)
+                    native.os_kill(child, 15)
             raise Error("Cannot fork worker")
         children[i] = pid
     var failures = 0
-    var window = external_call["os_now_ms",Int]()
-    while external_call["os_running",Int]():
-        var dead = external_call["os_wait_child",Int]()
+    var window = native.os_now_ms()
+    while native.os_running():
+        var dead = native.os_wait_child()
         if dead==0:
-            external_call["os_sleep_ms",NoneType](100)
+            native.os_sleep_ms(100)
             continue
-        var now = external_call["os_now_ms",Int]()
+        var now = native.os_now_ms()
         if now-window>60000:
             failures = 0
             window = now
@@ -367,31 +359,31 @@ def main() raises:
         for i in range(len(children)):
             if children[i]==dead:
                 children[i] = 0
-                var pid = external_call["os_fork",Int]()
+                var pid = native.os_fork()
                 if pid==0:
                     try:
                         if i<workers:
                             serve(listener,path,cache_mb*1024*1024//workers)
                         else:
-                            _ = external_call["os_close",Int](listener)
+                            _ = native.os_close(listener)
                             jobs.run(path)
                     except e:
                         print("Worker failed:", e)
-                        external_call["os_child_exit",NoneType](1)
-                    external_call["os_child_exit",NoneType](0)
+                        native.os_child_exit(1)
+                    native.os_child_exit(0)
                     return
                 if pid<0:
                     failures = 6
                 else:
                     children[i] = pid
                 break
-    _ = external_call["os_close",Int](listener)
+    _ = native.os_close(listener)
     for child in children:
         if child>0:
-            external_call["os_kill",NoneType](child,15)
-    var deadline = external_call["os_now_ms",Int]()+20000
-    while external_call["os_now_ms",Int]()<deadline:
-        var dead = external_call["os_wait_child",Int]()
+            native.os_kill(child, 15)
+    var deadline = native.os_now_ms()+20000
+    while native.os_now_ms()<deadline:
+        var dead = native.os_wait_child()
         for i in range(len(children)):
             if children[i]==dead:
                 children[i] = 0
@@ -401,10 +393,10 @@ def main() raises:
                 active = True
         if not active:
             break
-        external_call["os_sleep_ms",NoneType](50)
+        native.os_sleep_ms(50)
     for child in children:
         if child>0:
-            external_call["os_kill",NoneType](child,9)
-    _ = external_call["os_close",Int](lock)
+            native.os_kill(child, 9)
+    _ = native.os_close(lock)
     if failures>5:
         raise Error("Worker restart limit exceeded")

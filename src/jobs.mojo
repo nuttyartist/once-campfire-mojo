@@ -1,6 +1,6 @@
+import native_boundary as native
 import parameters
 # Durable notification and bot webhook delivery. Routing and payload policy live in Mojo.
-from std.ffi import external_call
 from std.os import getenv
 from database import Database
 from crypto import json_string, base64, Signer
@@ -16,7 +16,7 @@ from text import token
 
 
 def count(index: Int, delta: Int = 1):
-    _ = external_call["metric_add", Int](index, delta)
+    _ = native.metric_add(index, delta)
 
 
 def trace(kind: String, value: String) raises:
@@ -25,11 +25,7 @@ def trace(kind: String, value: String) raises:
         return
     var line = '{"kind":' + json_string(kind) + ',"value":' + value + "}\n"
     if (
-        external_call["file_append", Int](
-            path.as_c_string_span(),
-            line.as_bytes().unsafe_ptr(),
-            line.byte_length(),
-        )
+        native.file_append(path, line.as_bytes(), line.byte_length())
         != 0
     ):
         raise Error("Audit write failed")
@@ -53,7 +49,7 @@ def stats() -> String:
     var items = List[String]()
     for i in range(len(names)):
         items.append(
-            '"' + names[i] + '":' + String(external_call["metric_get", Int](i))
+            '"' + names[i] + '":' + String(native.metric_get(i))
         )
     return "{" + ",".join(items) + "}"
 
@@ -211,9 +207,9 @@ def receipt(mut db: Database, mid: String, kind: String, target: String) raises:
 
 def run(path: String) raises:
     var db = Database(path)
-    while external_call["os_running",Int]():
+    while native.os_running():
         if getenv("CAMPFIRE_JOBS_PAUSED","0")=="1":
-            external_call["os_sleep_ms",NoneType](50)
+            native.os_sleep_ms(50)
             continue
         var rows = db.rows("UPDATE mojo_jobs SET lease_until=unixepoch()+600,attempts=attempts+1 WHERE id=(SELECT id FROM mojo_jobs WHERE failed=0 AND available_at<=unixepoch() AND lease_until<unixepoch() ORDER BY id LIMIT 1) RETURNING id,message_id,hooks,attempts,kind")
         if len(rows)==0:
@@ -221,7 +217,7 @@ def run(path: String) raises:
                 storage.retry_cleanup(db)
             except e:
                 print("File cleanup retry failed:",e)
-            external_call["os_sleep_ms",NoneType](50)
+            native.os_sleep_ms(50)
             continue
         var job = rows[0].copy()
         try:
@@ -358,7 +354,7 @@ def deliver_webhook(mut db: Database, mut signer: Signer, mid: String, row: List
             storage.prepare(db,bid)
             plain = file.filename
         else:
-            body = richtext.canonical(db,response.body)
+            body = richtext.canonical(db,response.body.text())
             plain = richtext.resolved(db,signer,body,True)
         _ = db.rows("INSERT INTO action_text_rich_texts(name,record_type,record_id,body,created_at,updated_at) VALUES('body','Message',?,?,?,?)",[reply_id,body,now,now])
         richtext.sync_embeds(db,signer,db.last_id(),body)

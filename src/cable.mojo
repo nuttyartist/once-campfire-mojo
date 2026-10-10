@@ -1,5 +1,6 @@
+import native_boundary as native
+from byte_buffer import Bytes
 # Action Cable protocol, channel authorization and presence policy in Mojo.
-from std.ffi import external_call
 from database import Database
 from crypto import Signer, json_string, base64, unbase64
 from http import Request
@@ -7,7 +8,7 @@ from runtime import digest
 import pubsub
 
 
-def frame(payload: String, opcode: Int = 1) -> String:
+def frame(payload: Bytes, opcode: Int = 1) -> Bytes:
     var bytes = List[UInt8]()
     bytes.append(UInt8(128 + opcode))
     var size = payload.byte_length()
@@ -23,10 +24,10 @@ def frame(payload: String, opcode: Int = 1) -> String:
             bytes.append(UInt8((size >> (shift*8)) & 255))
     for b in payload.as_bytes():
         bytes.append(b)
-    return String(unsafe_from_utf8=Span(unsafe_ptr=bytes.unsafe_ptr(), length=len(bytes)))
+    return Bytes(Span(bytes)[:len(bytes)])
 
 
-def upgrade(req: Request) raises -> String:
+def upgrade(req: Request) raises -> Bytes:
     if req.method != "GET" or req.header("sec-websocket-version") != "13" or "upgrade" not in req.header("connection").lower():
         raise Error("Invalid WebSocket handshake")
     var origin = req.header("origin")
@@ -60,7 +61,7 @@ struct Cable(Copyable, Movable):
     var subscriptions: Dict[String, Subscription]
     var sequence: Int
     var last_ping: Int
-    var fragments: String
+    var fragments: Bytes
     var fragmented: Bool
     var closed: Bool
 
@@ -77,8 +78,8 @@ struct Cable(Copyable, Movable):
     def start(mut self, uid: String, token: String):
         self.uid = uid
         self.token = token
-        self.sequence = external_call["bus_sequence", Int]()
-        self.last_ping = external_call["os_now_ms", Int]()
+        self.sequence = native.bus_sequence()
+        self.last_ping = native.os_now_ms()
 
     def absent(self, mut db: Database, sub: Subscription) raises:
         if sub.channel == "PresenceChannel" and sub.present:
@@ -90,7 +91,7 @@ struct Cable(Copyable, Movable):
         self.subscriptions.clear()
         self.closed = True
 
-    def command(mut self, mut db: Database, mut signer: Signer, value: String) raises -> String:
+    def command(mut self, mut db: Database, mut signer: Signer, value: String) raises -> Bytes:
         if db.scalar("SELECT json_valid(?)", [value]) != "1":
             raise Error("Invalid Cable JSON")
         var command = field(db,value,"command")
@@ -115,7 +116,7 @@ struct Cable(Copyable, Movable):
                 var bits = stream.split(":", maxsplit=1)
                 if len(bits)==2 and String(bits[1])=="messages":
                     if channel == "RoomMessagesChannel":
-                        var gid = unbase64(String(bits[0]))
+                        var gid = unbase64(String(bits[0])).text()
                         var parts = gid.split("/")
                         if len(parts)==5 and String(parts[0])=="gid:" and String(parts[2])=="campfire":
                             rid = String(parts[4])
@@ -168,8 +169,8 @@ struct Cable(Copyable, Movable):
         _ = db.rows("UPDATE memberships SET connections=CASE WHEN connected_at>datetime('now','-60 seconds') THEN max(1,connections+?) ELSE 1 END, connected_at=strftime('%Y-%m-%d %H:%M:%f','now'),unread_at=NULL WHERE room_id=? AND user_id=?",["1" if increment else "0",rid,self.uid])
         pubsub.publish("user_"+self.uid+"_reads",'{"room_id":'+rid+',"at":'+db.scalar("SELECT (julianday('now')-2440587.5)*86400")+'}')
 
-    def receive(mut self, mut db: Database, mut signer: Signer, mut incoming: String) raises -> String:
-        var out = String()
+    def receive(mut self, mut db: Database, mut signer: Signer, mut incoming: Bytes) raises -> Bytes:
+        var out = Bytes()
         while incoming.byte_length() >= 2:
             var b = incoming.as_bytes()
             var opcode = Int(b[0]) & 15
@@ -203,8 +204,8 @@ struct Cable(Copyable, Movable):
             var decoded = List[UInt8](length=size,fill=0)
             for i in range(size):
                 decoded[i] = b[head+4+i] ^ b[head+(i%4)]
-            var payload = String(unsafe_from_utf8=Span(unsafe_ptr=decoded.unsafe_ptr(),length=size))
-            var rest = String(unsafe_from_utf8=incoming.as_bytes()[head+4+size:])
+            var payload = Bytes(Span(decoded)[:size])
+            var rest = Bytes(incoming.as_bytes()[head+4+size:])
             incoming = rest^
             if opcode == 8:
                 if size==1:
@@ -213,7 +214,7 @@ struct Cable(Copyable, Movable):
                     var code = Int(decoded[0])*256+Int(decoded[1])
                     if code<1000 or code>=5000 or code in [1004,1005,1006,1015] or (code>=1016 and code<3000):
                         raise Error("Invalid close status")
-                    var reason = String(from_utf8=Span(unsafe_ptr=decoded.unsafe_ptr().unsafe_offset(2),length=size-2))
+                    var reason = String(from_utf8=Span(decoded)[2:])
                 self.finish(db)
                 return out+frame(payload,8)
             if opcode == 9:
@@ -235,7 +236,7 @@ struct Cable(Copyable, Movable):
                 self.fragments = ""
         return out^
 
-    def events(mut self, mut db: Database) raises -> String:
+    def events(mut self, mut db: Database) raises -> Bytes:
         if self.closed:
             return ""
         if db.scalar("SELECT 1 FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND u.id=? AND u.status=0 AND NOT EXISTS(SELECT 1 FROM bans WHERE user_id=u.id)",[self.token,self.uid]) != "1":
@@ -245,23 +246,23 @@ struct Cable(Copyable, Movable):
             if sub.room_id != "" and db.scalar("SELECT 1 FROM memberships WHERE room_id=? AND user_id=?",[sub.room_id,self.uid]) != "1":
                 self.finish(db)
                 return frame('{"type":"disconnect","reason":"unauthorized","reconnect":true}')+frame("",8)
-        var out = String()
-        var latest = external_call["bus_sequence", Int]()
+        var out = Bytes()
+        var latest = native.bus_sequence()
         if latest > self.sequence:
             var buffer = List[UInt8](length=1048576,fill=0)
             while self.sequence < latest:
                 self.sequence += 1
-                var n = external_call["bus_read", Int](self.sequence,buffer.unsafe_ptr(),len(buffer))
+                var n = native.bus_read(self.sequence, buffer, len(buffer))
                 if n<0:
                     raise Error("Slow subscriber exceeded broadcast log")
                 if n==0:
                     break
-                var value = String(unsafe_from_utf8=Span(unsafe_ptr=buffer.unsafe_ptr(),length=n))
+                var value = String(from_utf8=Span(buffer)[:n])
                 var bits = value.split("\n",maxsplit=1)
                 for ident in self.subscriptions.keys():
                     if self.subscriptions[ident].stream == String(bits[0]):
                         out += frame('{"identifier":'+json_string(ident)+',"message":'+String(bits[1])+'}')
-        var now = external_call["os_now_ms",Int]()
+        var now = native.os_now_ms()
         if now-self.last_ping >= 3000:
             out += frame('{"type":"ping","message":'+db.scalar("SELECT unixepoch()")+'}')
             self.last_ping = now

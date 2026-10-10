@@ -1,5 +1,6 @@
+import native_boundary as native
+from byte_buffer import Bytes
 # A connection-owned, bounded file response. Application/storage policy is elsewhere.
-from std.ffi import external_call
 
 
 @fieldwise_init
@@ -24,12 +25,12 @@ struct FileTransfer(Copyable, Movable):
 
     def close(mut self):
         if self.fd>=0:
-            _ = external_call["os_close",Int](self.fd)
+            _ = native.os_close(self.fd)
         self.fd = -1
         self.parts.clear()
         self.part = 0
 
-    def next(mut self) raises -> String:
+    def next(mut self) raises -> Bytes:
         while self.fd>=0 and self.part<len(self.parts):
             if self.parts[self.part].prefix!="":
                 var prefix = self.parts[self.part].prefix.copy()
@@ -40,12 +41,12 @@ struct FileTransfer(Copyable, Movable):
                 self.part += 1
                 continue
             var bytes = List[UInt8](length=length,fill=0)
-            var read = external_call["fs_read",Int](self.fd,bytes.unsafe_ptr(),length,self.parts[self.part].offset)
+            var read = native.fs_read(self.fd,bytes,length,self.parts[self.part].offset)
             if read<=0:
                 self.close()
                 raise Error("File changed during download")
             self.parts[self.part].offset += read
             self.parts[self.part].length -= read
-            return String(unsafe_from_utf8=Span(unsafe_ptr=bytes.unsafe_ptr(),length=read))
+            return Bytes(Span(bytes)[:read])
         self.close()
         return ""

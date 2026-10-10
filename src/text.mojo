@@ -1,4 +1,4 @@
-from std.ffi import external_call
+import native_boundary as native
 
 
 def escape(s: String) -> String:
@@ -49,7 +49,7 @@ def decode(s: String) raises -> String:
     for c in out:
         if c == 0:
             raise Error("NUL is not valid in a form value")
-    return String(from_utf8=Span(unsafe_ptr=out.unsafe_ptr(), length=len(out)))
+    return String(from_utf8=Span(out)[:len(out)])
 
 
 def params(s: String) raises -> Dict[String, String]:
@@ -75,14 +75,14 @@ def positive(s: String) raises -> Int:
 
 def token() raises -> String:
     var buf = List[UInt8](length=32, fill=0)
-    if external_call["crypto_random", Int](buf.unsafe_ptr(), 32) != 0:
+    if native.crypto_random(buf, 32) != 0:
         raise Error("Secure randomness failed")
     var digits = String("0123456789abcdef")
     var out = List[UInt8]()
     for c in buf:
         out.append(digits.as_bytes()[Int(c) // 16])
         out.append(digits.as_bytes()[Int(c) % 16])
-    return String(from_utf8=Span(unsafe_ptr=out.unsafe_ptr(), length=len(out)))
+    return String(from_utf8=Span(out)[:len(out)])
 
 
 def plain_text(html: String) -> String:
@@ -103,5 +103,5 @@ def search_query(value: String) -> String:
     var result = String()
     for point in value.codepoints():
         var ch = String(point)
-        result += ch if external_call["unicode_word",Int](ch.as_c_string_span())==1 else " "
+        result += ch if native.unicode_word(ch)==1 else " "
     return result^

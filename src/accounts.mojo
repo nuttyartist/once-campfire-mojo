@@ -1,5 +1,4 @@
 # Account, session, profile and administrator policies from the Rails controllers.
-from std.ffi import external_call
 from database import Database
 from crypto import Signer, session_token, json_string, base64, url_encode
 from text import decode

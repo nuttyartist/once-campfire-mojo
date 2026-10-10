@@ -1,4 +1,5 @@
-from std.ffi import external_call
+import native_boundary as native
+from byte_buffer import Bytes
 from std.os import getenv
 from text import decode
 from database import Database
@@ -41,14 +42,12 @@ def json_string(s: String) -> String:
     return out + "\""
 
 
-def base64(s: String, url: Bool = False, padding: Bool = True) raises -> String:
+def base64(s: Bytes, url: Bool = False, padding: Bool = True) raises -> String:
     var buf = List[UInt8](length=(s.byte_length() + 2) // 3 * 4 + 1, fill=0)
-    var n = external_call["base64_encode", Int](
-        s.as_bytes().unsafe_ptr(), s.byte_length(), buf.unsafe_ptr()
-    )
+    var n = native.base64_encode(s.as_bytes(), s.byte_length(), buf)
     if n < 0:
         raise Error("Base64 encoding failed")
-    var out = String(from_utf8=Span(unsafe_ptr=buf.unsafe_ptr(), length=n))
+    var out = String(from_utf8=Span(buf)[:n])
     if url:
         out = out.replace("+", "-").replace("/", "_")
     if not padding:
@@ -56,7 +55,7 @@ def base64(s: String, url: Bool = False, padding: Bool = True) raises -> String:
     return out^
 
 
-def unbase64(var s: String) raises -> String:
+def unbase64(var s: String) raises -> Bytes:
     s = s.replace("-", "+").replace("_", "/")
     while s.byte_length() % 4:
         s += "="
@@ -71,12 +70,10 @@ def unbase64(var s: String) raises -> String:
         ):
             raise Error("Invalid base64")
     var buf = List[UInt8](length=s.byte_length() + 1, fill=0)
-    var n = external_call["base64_decode", Int](
-        s.as_bytes().unsafe_ptr(), s.byte_length(), buf.unsafe_ptr()
-    )
+    var n = native.base64_decode(s.as_bytes(), s.byte_length(), buf)
     if n < 0:
         raise Error("Invalid base64")
-    return String(unsafe_from_utf8=Span(unsafe_ptr=buf.unsafe_ptr(), length=n))
+    return Bytes(Span(buf)[:n])
 
 
 def url_encode(s: String) -> String:
@@ -92,9 +89,7 @@ def url_encode(s: String) -> String:
             or c == 95
             or c == 42
         ):
-            out += String(
-                unsafe_from_utf8=Span(unsafe_ptr=Pointer(to=c), length=1)
-            )
+            out += String(chr(Int(c)))
         elif c == 32:
             out += "+"
         else:
@@ -108,9 +103,7 @@ def url_encode(s: String) -> String:
 
 def secure_equal(var a: String, var b: String) -> Bool:
     return (
-        external_call["crypto_equal", Int](
-            a.as_c_string_span(), b.as_c_string_span()
-        )
+        native.crypto_equal(a, b)
         == 1
     )
 
@@ -131,15 +124,11 @@ struct Signer(Movable):
         if salt not in self.keys:
             var buf = List[UInt8](length=129, fill=0)
             if (
-                external_call["crypto_derive", Int](
-                    self.secret.as_c_string_span(),
-                    salt.as_c_string_span(),
-                    buf.unsafe_ptr(),
-                )
+                native.crypto_derive(self.secret, salt, buf)
                 != 0
             ):
                 raise Error("PBKDF2 failed")
-            self.keys[salt] = String(unsafe_from_utf8_ptr=buf.unsafe_ptr())
+            self.keys[salt] = native.terminated(buf)
         return self.keys[salt]
 
     def mac(
@@ -148,22 +137,16 @@ struct Signer(Movable):
         var key = self.key(salt)
         var buf = List[UInt8](length=65, fill=0)
         if (
-            external_call["crypto_hmac", Int](
-                key.as_c_string_span(),
-                data.as_bytes().unsafe_ptr(),
-                data.byte_length(),
-                Int(sha256),
-                buf.unsafe_ptr(),
-            )
+            native.crypto_hmac(key, data.as_bytes(), data.byte_length(), Int(sha256), buf)
             != 0
         ):
             raise Error("HMAC failed")
-        return String(unsafe_from_utf8_ptr=buf.unsafe_ptr())
+        return native.terminated(buf)
 
     def sign(
         mut self,
         salt: String,
-        payload: String,
+        payload: Bytes,
         sha256: Bool = True,
         url: Bool = False,
     ) raises -> String:
@@ -188,14 +171,10 @@ struct Signer(Movable):
             raise Error("HTTP 422: Session cookie exceeds browser limit")
         var key = self.key("authenticated encrypted cookie")
         var nonce = List[UInt8](length=12,fill=0)
-        if external_call["crypto_random",Int](nonce.unsafe_ptr(),12)!=0:
+        if native.crypto_random(nonce, 12)!=0:
             raise Error("Cookie random generator failed")
-        var tag = List[UInt8](length=16,fill=0)
-        var out = List[UInt8](length=payload.byte_length()+16,fill=0)
-        var n = external_call["cookie_cipher",Int](key.as_c_string_span(),nonce.unsafe_ptr(),payload.as_bytes().unsafe_ptr(),payload.byte_length(),out.unsafe_ptr(),tag.unsafe_ptr(),0)
-        if n<0:
-            raise Error("Cookie encryption failed")
-        return url_encode(base64(String(unsafe_from_utf8=Span(unsafe_ptr=out.unsafe_ptr(),length=n)))+"--"+base64(String(unsafe_from_utf8=Span(unsafe_ptr=nonce.unsafe_ptr(),length=12)))+"--"+base64(String(unsafe_from_utf8=Span(unsafe_ptr=tag.unsafe_ptr(),length=16))))
+        var result = native.cookie_encrypt(key,Bytes(Span(nonce)),payload)
+        return url_encode(base64(result[0])+"--"+base64(Bytes(Span(nonce)))+"--"+base64(result[1]))
 
     def decrypt_cookie(mut self, mut db: Database, wire: String, name: String = "_campfire_session") raises -> String:
         if wire=="" or wire.byte_length()>8192:
@@ -210,11 +189,7 @@ struct Signer(Movable):
             if nonce.byte_length()!=12 or tag.byte_length()!=16:
                 return ""
             var key = self.key("authenticated encrypted cookie")
-            var out = List[UInt8](length=body.byte_length()+16,fill=0)
-            var n = external_call["cookie_cipher",Int](key.as_c_string_span(),nonce.as_bytes().unsafe_ptr(),body.as_bytes().unsafe_ptr(),body.byte_length(),out.unsafe_ptr(),tag.as_bytes().unsafe_ptr(),1)
-            if n<0:
-                return ""
-            var data = String(from_utf8=Span(unsafe_ptr=out.unsafe_ptr(),length=n))
+            var data = native.cookie_decrypt(key,nonce,body,tag).text()
             if db.scalar("SELECT json_valid(?)",[data])!="1":
                 return ""
             if db.scalar("SELECT json_type(?,'$._rails')",[data])!="":
@@ -222,7 +197,7 @@ struct Signer(Movable):
                     return ""
                 if db.scalar("SELECT CASE WHEN json_extract(?,'$._rails.exp') IS NULL THEN 1 WHEN julianday(json_extract(?,'$._rails.exp'))>julianday(?) THEN 1 ELSE 0 END",[data,data,self.clock])!="1":
                     return ""
-                data = unbase64(db.scalar("SELECT json_extract(?,'$._rails.message')",[data]))
+                data = unbase64(db.scalar("SELECT json_extract(?,'$._rails.message')",[data])).text()
             if db.scalar("SELECT json_valid(?)",[data])!="1":
                 return ""
             return data^
@@ -257,6 +232,9 @@ struct Signer(Movable):
         if wire.byte_length() > 16384:
             return ""
         try:
+            for byte in wire.as_bytes():
+                if byte>=128 or byte==0:
+                    return ""
             var offset = wire.byte_length() - (66 if sha256 else 42)
             if offset <= 0 or String(wire[byte=offset:offset+2]) != "--":
                 if sha256 and salt=="active_record/signed_id":
@@ -265,7 +243,7 @@ struct Signer(Movable):
             var encoded = String(wire[byte=:offset])
             if not secure_equal(self.mac(salt, encoded, sha256), String(wire[byte=offset+2:])):
                 return ""
-            var payload = unbase64(encoded)
+            var payload = unbase64(encoded).text()
             if db.scalar("SELECT json_valid(?)", [payload]) != "1":
                 return ""
             if db.scalar("SELECT json_type(?,'$._rails')",[payload])=="":
@@ -284,7 +262,7 @@ struct Signer(Movable):
             var data = unbase64(db.scalar("SELECT json_extract(?,'$._rails.message')", [payload]))
             if not sha256 and data.startswith("\x04\x08"):
                 return marshal.load_string(data)
-            return db.scalar("SELECT json_extract(?,'$')", [data])
+            return db.scalar("SELECT json_extract(?,'$')", [data.text()])
         except:
             return ""
 
@@ -295,6 +273,9 @@ struct Signer(Movable):
             return ""
         try:
             var raw = decode(wire)
+            for byte in raw.as_bytes():
+                if byte>=128 or byte==0:
+                    return ""
             var pos = raw.byte_length() - 42
             if pos <= 0 or String(raw[byte = pos : pos + 2]) != "--":
                 return ""
@@ -304,7 +285,7 @@ struct Signer(Movable):
                 String(raw[byte = pos + 2 :]),
             ):
                 return ""
-            var payload = unbase64(encoded)
+            var payload = unbase64(encoded).text()
             if db.scalar("SELECT json_valid(?)", [payload]) != "1":
                 return ""
             var purpose = db.scalar(
@@ -330,7 +311,7 @@ struct Signer(Movable):
                     db.scalar(
                         "SELECT json_extract(?,'$._rails.message')", [payload]
                     )
-                )
+                ).text()
             if db.scalar("SELECT json_valid(?)", [dumped]) != "1":
                 return ""
             if db.scalar("SELECT json_type(?)", [dumped]) != "text":
@@ -348,9 +329,9 @@ def session_token() raises -> String:
     var out = List[UInt8]()
     while len(out) < 24:
         var random = List[UInt8](length=32, fill=0)
-        if external_call["crypto_random", Int](random.unsafe_ptr(), 32) != 0:
+        if native.crypto_random(random, 32) != 0:
             raise Error("Randomness failed")
         for b in random:
             if b < 232 and len(out) < 24:
                 out.append(alphabet.as_bytes()[Int(b) % 58])
-    return String(from_utf8=Span(unsafe_ptr=out.unsafe_ptr(), length=len(out)))
+    return String(from_utf8=Span(out)[:len(out)])

@@ -1,21 +1,22 @@
+from byte_buffer import Bytes
 # Data-only Ruby Marshal 4.8 encoder for Active Storage variant digests.
 # It never deserializes Ruby objects or runs Ruby code.
 from database import Database
 
 
-def octet(value: Int) -> String:
+def octet(value: Int) -> Bytes:
     var b = UInt8(value & 255)
-    return String(unsafe_from_utf8=Span(unsafe_ptr=Pointer(to=b),length=1))
+    return Bytes([b])
 
 
-def long(var n: Int) raises -> String:
+def long(var n: Int) raises -> Bytes:
     if n==0:
         return "\x00"
     if n>0 and n<123:
         return octet(n+5)
     if n<0 and n>-124:
         return octet(n-5)
-    var bytes = String()
+    var bytes = Bytes()
     for _ in range(8):
         bytes += octet(n)
         n >>= 8
@@ -24,7 +25,7 @@ def long(var n: Int) raises -> String:
     raise Error("Marshal integer out of range")
 
 
-def symbol(name: String, mut symbols: List[String]) raises -> String:
+def symbol(name: String, mut symbols: List[String]) raises -> Bytes:
     for i in range(len(symbols)):
         if symbols[i]==name:
             return ";"+long(i)
@@ -32,7 +33,7 @@ def symbol(name: String, mut symbols: List[String]) raises -> String:
     return ":"+long(name.byte_length())+name
 
 
-def encode(mut db: Database, json: String, mut symbols: List[String], symbol_strings: Bool, depth: Int = 0) raises -> String:
+def encode(mut db: Database, json: String, mut symbols: List[String], symbol_strings: Bool, depth: Int = 0) raises -> Bytes:
     if depth>32:
         raise Error("Variation nesting too deep")
     var row = db.rows("SELECT json_type(?),json_extract(?,'$')",[json,json])[0].copy()
@@ -47,10 +48,10 @@ def encode(mut db: Database, json: String, mut symbols: List[String], symbol_str
         var n = Int(row[1])
         if n>=-1073741824 and n<1073741824:
             return "i"+long(n)
-        var bytes = String()
-        var magnitude = abs(n)
+        var bytes = Bytes()
+        var magnitude = UInt64(-(n+1))+1 if n<0 else UInt64(n)
         while magnitude>0:
-            bytes += octet(magnitude)
+            bytes += octet(Int(magnitude & 255))
             magnitude >>= 8
         if bytes.byte_length()%2:
             bytes += "\x00"
@@ -70,12 +71,12 @@ def encode(mut db: Database, json: String, mut symbols: List[String], symbol_str
     return out^
 
 
-def dump(mut db: Database, json: String, symbol_strings: Bool = False) raises -> String:
+def dump(mut db: Database, json: String, symbol_strings: Bool = False) raises -> Bytes:
     var symbols = List[String]()
     return "\x04\x08"+encode(db,json,symbols,symbol_strings)
 
 
-def load_string(data: String) raises -> String:
+def load_string(data: Bytes) raises -> String:
     # Rails 7 GlobalIDs used a Marshal String. Never instantiate a Ruby object.
     var bytes = data.as_bytes()
     if len(bytes)<4 or bytes[0]!=4 or bytes[1]!=8:

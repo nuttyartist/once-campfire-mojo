@@ -26,3 +26,10 @@ build/json-encoding: tests/json_encoding.mojo $(wildcard src/*.mojo native/*) bu
 .PHONY: json-encoding
 json-encoding: build/json-encoding
 	python3 tests/json_encoding.py
+
+.PHONY: byte-safety
+byte-safety: build/byte-safety
+	python3 tests/source_safety.py
+	python3 tests/byte_safety.py
+build/byte-safety: tests/byte_safety.mojo $(wildcard src/*.mojo native/*) build/platform.o build/runtime.o
+	$(MOJO) build -O3 -I src $< -o $@ $(ABI)

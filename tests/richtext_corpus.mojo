@@ -10,7 +10,7 @@ def main() raises:
     var db = Database(":memory:")
     schema.initialize(db)
     var signer = Signer()
-    var corpus = read_file(getenv("RICHTEXT_CORPUS_DIR","tests/corpus"),"expected.json",16777216)
+    var corpus = read_file(getenv("RICHTEXT_CORPUS_DIR","tests/corpus"),"expected.json",16777216).text()
     var replacements = Dict[String,String]()
     var users = db.rows("SELECT json_extract(value,'$.id'),json_extract(value,'$.name'),json_extract(value,'$.avatar_path'),json_extract(value,'$.attachable_sgid'),json_extract(value,'$.title') FROM json_each(?,'$.users')",[corpus])
     for user in users:

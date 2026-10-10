@@ -1,44 +1,45 @@
-from std.ffi import external_call
+import native_boundary as native
+from byte_buffer import Bytes
 from std.os import getenv
 from http import Request, Response, html, conditional
 
 
-def digest(data: String, sha256: Bool = True) raises -> String:
+def digest(data: Bytes, sha256: Bool = True) raises -> Bytes:
     var buf = List[UInt8](length=32, fill=0)
-    var n = external_call["crypto_hash", Int](data.as_bytes().unsafe_ptr(), data.byte_length(), Int(sha256), buf.unsafe_ptr())
+    var n = native.crypto_hash(data.as_bytes(), data.byte_length(), Int(sha256), buf)
     if n < 0:
         raise Error("Digest failed")
-    return String(unsafe_from_utf8=Span(unsafe_ptr=buf.unsafe_ptr(), length=n))
+    return Bytes(Span(buf)[:n])
 
 
 def password_hash(var password: String) raises -> String:
     if password.byte_length() == 0 or password.byte_length() > 72 or "\x00" in password:
         raise Error("Password must contain 1–72 bytes")
     var buf = List[UInt8](length=61, fill=0)
-    if external_call["password_hash", Int](password.as_c_string_span(), buf.unsafe_ptr()) != 0:
+    if native.password_hash(password, buf) != 0:
         raise Error("Password hashing failed")
-    return String(unsafe_from_utf8_ptr=buf.unsafe_ptr())
+    return native.terminated(buf)
 
 
-def read_file(var root: String, var path: String, limit: Int = 67108864) raises -> String:
-    var fd = external_call["fs_open_beneath", Int](root.as_c_string_span(), path.as_c_string_span())
+def read_file(var root: String, var path: String, limit: Int = 67108864) raises -> Bytes:
+    var fd = native.fs_open_beneath(root, path)
     if fd < 0:
         raise Error("File not found")
     try:
-        var size = external_call["fs_size", Int](fd)
+        var size = native.fs_size(fd)
         if size < 0 or size > limit:
             raise Error("File too large")
         var bytes = List[UInt8](length=size, fill=0)
         var offset = 0
         while offset < size:
-            var n = external_call["fs_read", Int](fd, bytes.unsafe_ptr().unsafe_offset(offset), size-offset, offset)
+            var n = native.fs_read(fd,bytes,size-offset,offset,offset)
             if n <= 0:
                 raise Error("File read failed")
             offset += n
-        _ = external_call["os_close", Int](fd)
-        return String(unsafe_from_utf8=Span(unsafe_ptr=bytes.unsafe_ptr(), length=size))
+        _ = native.os_close(fd)
+        return Bytes(Span(bytes)[:size])
     except e:
-        _ = external_call["os_close", Int](fd)
+        _ = native.os_close(fd)
         raise e^
 
 

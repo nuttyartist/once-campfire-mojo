@@ -4,6 +4,8 @@ A standalone Mojo 1.1 port of [Basecamp Campfire](https://github.com/basecamp/on
 
 The ten findings from the local replacement audit have regression tests and fixes. The port also includes recoverable file cleanup, schema-checked Disk import, Rails encrypted session migration, large streamed uploads, Linux ARM64/amd64 images, browser/TLS tests and CI. [PORT_STATUS.md](PORT_STATUS.md) states the supported contract and intentional differences. This repository is prepared for upstream review; it has not been uploaded or released.
 
+Binary data uses owned byte buffers with explicit UTF-8 decoding. FFI and raw-pointer operations are confined to one checked native boundary; see [SAFETY.md](SAFETY.md) for ownership rules and regression coverage.
+
 ## Local comparison — 2026-10-10
 
 <!-- BENCHMARK_BEGIN -->

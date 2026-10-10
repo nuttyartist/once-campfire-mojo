@@ -18,6 +18,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <zlib.h>
+#include <limits.h>
 
 long os_listen(long port) {
   signal(SIGPIPE, SIG_IGN);
@@ -202,7 +203,7 @@ static xmlNodePtr html5_node(const GumboNode *node) {
  for(unsigned i=0;i<e->children.length;i++){xmlNodePtr child=html5_node(e->children.data[i]);if(child)xmlAddChild(result,child);}
  return result;
 }
-static long dom_parse_impl(const char *html, long n, int fragment) {
+static long rawdom_parse_impl(const char *html, long n, int fragment) {
  GumboOptions options=kGumboDefaultOptions;options.max_tree_depth=401;options.max_attributes=400;options.max_errors=0;
  if(fragment)options.fragment_context="body";
  GumboOutput *parsed=gumbo_parse_with_options(&options,html,n);
@@ -212,23 +213,23 @@ static long dom_parse_impl(const char *html, long n, int fragment) {
  xmlDocSetRootElement(doc,html5_node(parsed->root));
  gumbo_destroy_output(parsed);return (long)(intptr_t)doc;
 }
-long dom_parse(const char *html,long n) { return dom_parse_impl(html,n,0); }
-long dom_parse_fragment(const char *html,long n) { return dom_parse_impl(html,n,1); }
-void dom_set_name(long node,const char *name) { xmlNodeSetName((xmlNodePtr)(intptr_t)node,(const xmlChar*)name); }
-void dom_set_attr(long node,const char *key,const char *value) { xmlSetProp((xmlNodePtr)(intptr_t)node,(const xmlChar*)key,(const xmlChar*)value); }
-void dom_clear_node(long address) { xmlNodePtr node=(void*)(intptr_t)address;xmlFreeNodeList(node->children);node->children=NULL;node->last=NULL;xmlFreePropList(node->properties);node->properties=NULL; }
-void dom_free(long doc) { xmlFreeDoc((xmlDocPtr)(intptr_t)doc); }
-long dom_root(long doc) { return (long)(intptr_t)xmlDocGetRootElement((xmlDocPtr)(intptr_t)doc); }
-long dom_child(long node) { return (long)(intptr_t)((xmlNodePtr)(intptr_t)node)->children; }
-long dom_next(long node) { return (long)(intptr_t)((xmlNodePtr)(intptr_t)node)->next; }
-long dom_foreign(long node) { return ((xmlNodePtr)(intptr_t)node)->_private!=NULL; }
-long dom_type(long node) { return ((xmlNodePtr)(intptr_t)node)->type; }
-const char *dom_name(long node) { const char *p=(const char*)((xmlNodePtr)(intptr_t)node)->name;return p?p:""; }
-const char *dom_text(long node) { const char *p=(const char*)((xmlNodePtr)(intptr_t)node)->content;return p?p:""; }
-long dom_attrs(long node) { return (long)(intptr_t)((xmlNodePtr)(intptr_t)node)->properties; }
-long dom_attr_next(long attr) { return (long)(intptr_t)((xmlAttrPtr)(intptr_t)attr)->next; }
-const char *dom_attr_name(long attr) { return (const char*)((xmlAttrPtr)(intptr_t)attr)->name; }
-const char *dom_attr_text(long attr) { xmlNodePtr n=((xmlAttrPtr)(intptr_t)attr)->children;return n&&n->content?(const char*)n->content:""; }
+static long rawdom_parse(const char *html,long n) { return rawdom_parse_impl(html,n,0); }
+static long rawdom_parse_fragment(const char *html,long n) { return rawdom_parse_impl(html,n,1); }
+static void rawdom_set_name(long node,const char *name) { xmlNodeSetName((xmlNodePtr)(intptr_t)node,(const xmlChar*)name); }
+static void rawdom_set_attr(long node,const char *key,const char *value) { xmlSetProp((xmlNodePtr)(intptr_t)node,(const xmlChar*)key,(const xmlChar*)value); }
+static void rawdom_clear_node(long address) { xmlNodePtr node=(void*)(intptr_t)address;xmlFreeNodeList(node->children);node->children=NULL;node->last=NULL;xmlFreePropList(node->properties);node->properties=NULL; }
+static void rawdom_free(long doc) { xmlFreeDoc((xmlDocPtr)(intptr_t)doc); }
+static long rawdom_root(long doc) { return (long)(intptr_t)xmlDocGetRootElement((xmlDocPtr)(intptr_t)doc); }
+static long rawdom_child(long node) { return (long)(intptr_t)((xmlNodePtr)(intptr_t)node)->children; }
+static long rawdom_next(long node) { return (long)(intptr_t)((xmlNodePtr)(intptr_t)node)->next; }
+static long rawdom_foreign(long node) { return ((xmlNodePtr)(intptr_t)node)->_private!=NULL; }
+static long rawdom_type(long node) { return ((xmlNodePtr)(intptr_t)node)->type; }
+static const char *rawdom_name(long node) { const char *p=(const char*)((xmlNodePtr)(intptr_t)node)->name;return p?p:""; }
+static const char *rawdom_text(long node) { const char *p=(const char*)((xmlNodePtr)(intptr_t)node)->content;return p?p:""; }
+static long rawdom_attrs(long node) { return (long)(intptr_t)((xmlNodePtr)(intptr_t)node)->properties; }
+static long rawdom_attr_next(long attr) { return (long)(intptr_t)((xmlAttrPtr)(intptr_t)attr)->next; }
+static const char *rawdom_attr_name(long attr) { return (const char*)((xmlAttrPtr)(intptr_t)attr)->name; }
+static const char *rawdom_attr_text(long attr) { xmlNodePtr n=((xmlAttrPtr)(intptr_t)attr)->children;return n&&n->content?(const char*)n->content:""; }
 
 /* A process-shared bounded integer queue and counters; payload policy is Mojo. */
 #include <sys/mman.h>
@@ -264,22 +265,22 @@ long work_pop(void) {
   queue->head=(queue->head+1)%QUEUE_CAP;queue->count--;
   pthread_mutex_unlock(&queue->lock);return value;
 }
-long metric_add(long index,long delta) { return atomic_fetch_add(&queue->metrics[index],delta); }
-long metric_get(long index) { return atomic_load(&queue->metrics[index]); }
+long metric_add(long index,long delta) { return !queue || queue==MAP_FAILED || index<0 || index>=16 ? -1 : atomic_fetch_add(&queue->metrics[index],delta); }
+long metric_get(long index) { return !queue || queue==MAP_FAILED || index<0 || index>=16 ? -1 : atomic_load(&queue->metrics[index]); }
 long file_append(const char *path,const void *value,long length) {
   int fd=open(path,O_WRONLY|O_CREAT|O_APPEND|O_CLOEXEC,0600);if(fd<0)return -1;
   long n=write(fd,value,(size_t)length);close(fd);return n==length?0:-1;
 }
 
-long dom_replace_text(long address,const char *value) {
+static long rawdom_replace_text(long address,const char *value) {
  xmlNodePtr node=(void*)(intptr_t)address, replacement=xmlNewText((const xmlChar*)value);
  if(!replacement)return -1;xmlReplaceNode(node,replacement);xmlFreeNode(node);return 0;
 }
 static xmlNodePtr find_body(xmlNodePtr node) {
  for(;node;node=node->next){if(node->type==XML_ELEMENT_NODE&&!xmlStrcmp(node->name,(const xmlChar*)"body"))return node;xmlNodePtr found=find_body(node->children);if(found)return found;}return NULL;
 }
-long dom_replace_html(long address,const char *value,long length) {
- xmlNodePtr node=(void*)(intptr_t)address;xmlDocPtr doc=(void*)(intptr_t)dom_parse_fragment(value,length);if(!doc)return -1;
+static long rawdom_replace_html(long address,const char *value,long length) {
+ xmlNodePtr node=(void*)(intptr_t)address;xmlDocPtr doc=(void*)(intptr_t)rawdom_parse_fragment(value,length);if(!doc)return -1;
  xmlNodePtr body=find_body(xmlDocGetRootElement(doc));if(!body)body=xmlDocGetRootElement(doc);
  if(body)for(xmlNodePtr child=body->children;child;child=child->next)xmlAddPrevSibling(node,xmlDocCopyNode(child,node->doc,1));
  xmlUnlinkNode(node);xmlFreeNode(node);xmlFreeDoc(doc);return 0;
@@ -313,10 +314,10 @@ long regex_find(const char *pattern,const char *text,long n,long start,long *spa
  if(found){gint a=0,b=0;g_match_info_fetch_pos(match,0,&a,&b);span[0]=a;span[1]=b;}
  if(match)g_match_info_free(match);return found?1:0;
 }
-void dom_remove(long address) { xmlNodePtr node=(void*)(intptr_t)address;xmlUnlinkNode(node);xmlFreeNode(node); }
+static void rawdom_remove(long address) { xmlNodePtr node=(void*)(intptr_t)address;xmlUnlinkNode(node);xmlFreeNode(node); }
 
-long dom_inner_html(long address,const char *value,long length) {
- xmlNodePtr node=(void*)(intptr_t)address;xmlDocPtr doc=(void*)(intptr_t)dom_parse_fragment(value,length);if(!doc)return -1;
+static long rawdom_inner_html(long address,const char *value,long length) {
+ xmlNodePtr node=(void*)(intptr_t)address;xmlDocPtr doc=(void*)(intptr_t)rawdom_parse_fragment(value,length);if(!doc)return -1;
  xmlFreeNodeList(node->children);node->children=NULL;node->last=NULL;
  xmlNodePtr root=xmlDocGetRootElement(doc);
  for(xmlNodePtr child=root->children;child;child=child->next)xmlAddChild(node,xmlDocCopyNode(child,node->doc,1));
@@ -340,3 +341,67 @@ long cookie_cipher(const char *keyhex,const void *iv,const void *input,long leng
   }
   EVP_CIPHER_CTX_free(ctx);OPENSSL_cleanse(derived,sizeof derived);return ok?n+final:-1;
 }
+
+
+/* Opaque, non-reused DOM identifiers. Application integers are never cast to
+ * pointers. Deletion invalidates descendants and attributes before libxml frees
+ * them, and closing a document invalidates every borrowed handle. Each worker
+ * invokes this synchronous API on its single event-loop thread. */
+typedef struct { long id; void *pointer; xmlDocPtr owner; int kind; } DomHandle;
+static GHashTable *dom_ids, *dom_pointers;
+static unsigned long dom_serial;
+static DomHandle *dom_get(long id, int kind) {
+ if(id<=0 || !dom_ids)return NULL;
+ DomHandle *h=g_hash_table_lookup(dom_ids,(void*)(uintptr_t)id);
+ return h && h->kind==kind ? h : NULL;
+}
+static long dom_register(void *pointer,xmlDocPtr owner,int kind) {
+ if(!pointer)return 0;
+ if(!dom_ids){dom_ids=g_hash_table_new(g_direct_hash,g_direct_equal);dom_pointers=g_hash_table_new(g_direct_hash,g_direct_equal);}
+ DomHandle *h=g_hash_table_lookup(dom_pointers,pointer);
+ if(h)return h->id;
+ if(dom_serial>=(unsigned long)LONG_MAX)return 0;
+ h=g_new0(DomHandle,1);h->id=(long)++dom_serial;h->pointer=pointer;h->owner=owner;h->kind=kind;
+ g_hash_table_insert(dom_ids,(void*)(uintptr_t)h->id,h);g_hash_table_insert(dom_pointers,pointer,h);return h->id;
+}
+static void dom_invalidate(void *pointer) {
+ if(!pointer || !dom_pointers)return;
+ DomHandle *h=g_hash_table_lookup(dom_pointers,pointer);
+ if(h){g_hash_table_remove(dom_ids,(void*)(uintptr_t)h->id);g_hash_table_remove(dom_pointers,pointer);g_free(h);}
+}
+static void dom_invalidate_children(xmlNodePtr node) {
+ for(xmlNodePtr child=node->children;child;child=child->next){dom_invalidate_children(child);dom_invalidate(child);}
+ for(xmlAttrPtr attr=node->properties;attr;attr=attr->next)dom_invalidate(attr);
+}
+static long dom_parse_handle(const char *text,long length,int fragment) {
+ if(!text || length<0)return 0;
+ xmlDocPtr doc=(void*)(intptr_t)(fragment?rawdom_parse_fragment(text,length):rawdom_parse(text,length));
+ if(!doc)return 0;
+ long id=dom_register(doc,doc,1);if(!id)xmlFreeDoc(doc);return id;
+}
+long dom_parse(const char *text,long length){return dom_parse_handle(text,length,0);}
+long dom_parse_fragment(const char *text,long length){return dom_parse_handle(text,length,1);}
+void dom_free(long id) {
+ DomHandle *h=dom_get(id,1);if(!h)return;xmlDocPtr doc=h->pointer;
+ GHashTableIter it;void *key,*value;g_hash_table_iter_init(&it,dom_ids);
+ while(g_hash_table_iter_next(&it,&key,&value)){DomHandle *entry=value;if(entry->owner==doc){g_hash_table_remove(dom_pointers,entry->pointer);g_hash_table_iter_remove(&it);g_free(entry);}}
+ rawdom_free((long)(intptr_t)doc);
+}
+long dom_root(long id){DomHandle *h=dom_get(id,1);return h?dom_register((void*)(intptr_t)rawdom_root((long)(intptr_t)h->pointer),h->owner,2):0;}
+long dom_child(long id){DomHandle *h=dom_get(id,2);return h?dom_register((void*)(intptr_t)rawdom_child((long)(intptr_t)h->pointer),h->owner,2):0;}
+long dom_next(long id){DomHandle *h=dom_get(id,2);return h?dom_register((void*)(intptr_t)rawdom_next((long)(intptr_t)h->pointer),h->owner,2):0;}
+long dom_attrs(long id){DomHandle *h=dom_get(id,2);return h?dom_register((void*)(intptr_t)rawdom_attrs((long)(intptr_t)h->pointer),h->owner,3):0;}
+long dom_attr_next(long id){DomHandle *h=dom_get(id,3);return h?dom_register((void*)(intptr_t)rawdom_attr_next((long)(intptr_t)h->pointer),h->owner,3):0;}
+long dom_type(long id){DomHandle *h=dom_get(id,2);return h?rawdom_type((long)(intptr_t)h->pointer):0;}
+long dom_foreign(long id){DomHandle *h=dom_get(id,2);return h?rawdom_foreign((long)(intptr_t)h->pointer):0;}
+const char *dom_name(long id){DomHandle *h=dom_get(id,2);return h?rawdom_name((long)(intptr_t)h->pointer):"";}
+const char *dom_text(long id){DomHandle *h=dom_get(id,2);return h?rawdom_text((long)(intptr_t)h->pointer):"";}
+const char *dom_attr_name(long id){DomHandle *h=dom_get(id,3);return h?rawdom_attr_name((long)(intptr_t)h->pointer):"";}
+const char *dom_attr_text(long id){DomHandle *h=dom_get(id,3);return h?rawdom_attr_text((long)(intptr_t)h->pointer):"";}
+void dom_set_name(long id,const char *name){DomHandle *h=dom_get(id,2);if(h)rawdom_set_name((long)(intptr_t)h->pointer,name);}
+void dom_set_attr(long id,const char *key,const char *value){DomHandle *h=dom_get(id,2);if(h){xmlNodePtr node=h->pointer;for(xmlAttrPtr a=node->properties;a;a=a->next)dom_invalidate(a);rawdom_set_attr((long)(intptr_t)node,key,value);}}
+void dom_clear_node(long id){DomHandle *h=dom_get(id,2);if(h){dom_invalidate_children(h->pointer);rawdom_clear_node((long)(intptr_t)h->pointer);}}
+void dom_remove(long id){DomHandle *h=dom_get(id,2);if(h){xmlNodePtr node=h->pointer;dom_invalidate_children(node);dom_invalidate(node);rawdom_remove((long)(intptr_t)node);}}
+long dom_replace_text(long id,const char *value){DomHandle *h=dom_get(id,2);if(!h)return -1;xmlNodePtr node=h->pointer;dom_invalidate_children(node);dom_invalidate(node);return rawdom_replace_text((long)(intptr_t)node,value);}
+long dom_replace_html(long id,const char *value,long length){DomHandle *h=dom_get(id,2);if(!h || length<0)return -1;xmlNodePtr node=h->pointer;dom_invalidate_children(node);dom_invalidate(node);return rawdom_replace_html((long)(intptr_t)node,value,length);}
+long dom_inner_html(long id,const char *value,long length){DomHandle *h=dom_get(id,2);if(!h || length<0)return -1;dom_invalidate_children(h->pointer);return rawdom_inner_html((long)(intptr_t)h->pointer,value,length);}

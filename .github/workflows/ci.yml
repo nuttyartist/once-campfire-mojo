@@ -33,7 +33,7 @@ jobs:
         env:
           CAMPFIRE_WORKSPACE: ${{ github.workspace }}
         run: bash once-campfire-mojo/tools/bootstrap-tests.sh
-      - name: Application, fault recovery, crypto and native sanitizer tests
+      - name: Application, byte safety, fault recovery, crypto and native sanitizer tests
         run: |
           docker run --rm --init -e CAMPFIRE_TEST_NO_AFFINITY=1 \
             -v "$GITHUB_WORKSPACE:/workspace" -w /workspace/once-campfire-mojo \

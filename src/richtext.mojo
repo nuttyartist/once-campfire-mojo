@@ -1,5 +1,6 @@
-from std.ffi import external_call
-from database import c_text, Database
+import native_boundary as native
+from byte_buffer import Bytes
+from database import Database
 from crypto import Signer, json_string, unbase64, url_encode
 import storage
 import network
@@ -37,9 +38,7 @@ def uri_unescape(source: String) -> String:
             if number>1114111:
                 break
         if number>0 and number<=1114111 and not (number>=55296 and number<=57343):
-            var bytes = List[UInt8](length=8,fill=0)
-            var size = external_call["g_unichar_to_utf8",Int32](number,bytes.unsafe_ptr())
-            out += String(unsafe_from_utf8=Span(unsafe_ptr=bytes.unsafe_ptr(),length=Int(size)))
+            out += String(chr(Int(number)))
         offset = found[1]
     return out+String(value[byte=offset:])
 
@@ -82,7 +81,7 @@ def uri_escape(value: String) -> String:
 def regex(pattern: String, text: String, start: Int = 0) -> Tuple[Int,Int]:
     var pat = pattern.copy()
     var span = List[Int](length=2,fill=-1)
-    var found = external_call["regex_find",Int](pat.as_c_string_span(),text.as_bytes().unsafe_ptr(),text.byte_length(),start,span.unsafe_ptr())
+    var found = native.regex_find(pat, text.as_bytes(), text.byte_length(), start, span)
     return (span[0],span[1]) if found==1 else (-1,-1)
 
 
@@ -130,10 +129,10 @@ def walk(node: Int, plain: Bool, link: Bool, depth: Int, preserve_style: Bool = 
     var out = String()
     var current = node
     while current != 0:
-        var kind = external_call["dom_type", Int](current)
-        var name = c_text["dom_name"](current)
+        var kind = native.dom_type(current)
+        var name = native.dom_name(current)
         if kind == 3:
-            var value = c_text["dom_text"](current)
+            var value = native.dom_text(current)
             out += value if plain else (
                 autolink(value) if not link else text_html(value)
             )
@@ -144,7 +143,7 @@ def walk(node: Int, plain: Bool, link: Bool, depth: Int, preserve_style: Bool = 
             and name != "iframe"
             and name != "object"
         ):
-            var child = external_call["dom_child", Int](current)
+            var child = native.dom_child(current)
             var inside = walk(
                 child,
                 plain,
@@ -167,11 +166,11 @@ def walk(node: Int, plain: Bool, link: Bool, depth: Int, preserve_style: Bool = 
                     out += "\n\n"
             elif " " + name + " " in (FINAL_TAGS if final else TAGS):
                 out += "<" + name
-                var attr = external_call["dom_attrs", Int](current)
+                var attr = native.dom_attrs(current)
                 var escaped_urls = False
                 while attr != 0:
-                    var key = c_text["dom_attr_name"](attr)
-                    var value = c_text["dom_attr_text"](attr)
+                    var key = native.dom_attr_name(attr)
+                    var value = native.dom_attr_text(attr)
                     if key=="style" and not final:
                         escaped_urls = True
                         var style = sanitize_style(value)
@@ -187,7 +186,7 @@ def walk(node: Int, plain: Bool, link: Bool, depth: Int, preserve_style: Bool = 
                                 value = uri_escape(value)
                             out += " " + key + '="' + escape(value) + '"'
                             escaped_urls = True
-                    attr = external_call["dom_attr_next", Int](attr)
+                    attr = native.dom_attr_next(attr)
                 out += ">" + inside
                 if (
                     name != "br"
@@ -198,24 +197,22 @@ def walk(node: Int, plain: Bool, link: Bool, depth: Int, preserve_style: Bool = 
                     out += "</" + name + ">"
             else:
                 out += inside
-        current = external_call["dom_next", Int](current)
+        current = native.dom_next(current)
     return out^
 
 
 def convert(var source: String, plain: Bool = False, preserve_style: Bool = False) raises -> String:
     source = ruby_strip(source)
-    var doc = external_call["dom_parse_fragment", Int](
-        source.as_c_string_span(), source.byte_length()
-    )
+    var doc = native.dom_parse_fragment(source.as_bytes(), source.byte_length())
     if doc == 0:
         raise Error("Could not parse rich text")
     try:
-        var root = external_call["dom_root", Int](doc)
+        var root = native.dom_root(doc)
         var value = plain_nodes(root) if plain else walk(root, False, False, 0, preserve_style)
-        external_call["dom_free", NoneType](doc)
+        native.dom_free(doc)
         return chomp(value) if plain else value^
     except e:
-        external_call["dom_free", NoneType](doc)
+        native.dom_free(doc)
         raise e^
 
 
@@ -223,12 +220,12 @@ def presentation(source: String) raises -> String:
     return '<div class="lexxy-content">\n  ' + convert(source) + "\n</div>\n"
 
 
-def attributes(node: Int) -> Dict[String,String]:
+def attributes(node: Int) raises -> Dict[String,String]:
     var out = Dict[String,String]()
-    var attr = external_call["dom_attrs",Int](node)
+    var attr = native.dom_attrs(node)
     while attr!=0:
-        out[c_text["dom_attr_name"](attr)] = c_text["dom_attr_text"](attr)
-        attr = external_call["dom_attr_next",Int](attr)
+        out[native.dom_attr_name(attr)] = native.dom_attr_text(attr)
+        attr = native.dom_attr_next(attr)
     return out^
 
 
@@ -295,19 +292,19 @@ def embed_content(node: Int, mut attrs: Dict[String,String], depth: Int = 0) rai
         var values = attributes(current)
         var cls = values.get("class","")
         if "og-embed__title" in cls:
-            attrs["filename"] = String(walk(external_call["dom_child",Int](current),True,False,0).strip())
-            var link = descendant(external_call["dom_child",Int](current),"a")
+            attrs["filename"] = String(walk(native.dom_child(current),True,False,0).strip())
+            var link = descendant(native.dom_child(current),"a")
             if link!=0:
-                attrs["filename"] = String(walk(external_call["dom_child",Int](link),True,False,0).strip())
+                attrs["filename"] = String(walk(native.dom_child(link),True,False,0).strip())
                 attrs["href"] = attributes(link).get("href","")
         if "og-embed__description" in cls:
-            attrs["caption"] = String(walk(external_call["dom_child",Int](current),True,False,0).strip())
+            attrs["caption"] = String(walk(native.dom_child(current),True,False,0).strip())
         if "og-embed__image" in cls:
-            var img = descendant(external_call["dom_child",Int](current),"img")
+            var img = descendant(native.dom_child(current),"img")
             if img!=0:
                 attrs["url"] = attributes(img).get("src","")
-        embed_content(external_call["dom_child",Int](current),attrs,depth+1)
-        current = external_call["dom_next",Int](current)
+        embed_content(native.dom_child(current),attrs,depth+1)
+        current = native.dom_next(current)
 
 
 def shortened(value: String, count: Int) -> String:
@@ -321,13 +318,13 @@ def embed(var attrs: Dict[String,String], host: String) raises -> String:
     if String(attrs.get("filename","").strip())=="":
         var content = attrs.get("content","")
         attrs = Dict[String,String]()
-        var doc = external_call["dom_parse_fragment",Int](content.as_c_string_span(),content.byte_length())
+        var doc = native.dom_parse_fragment(content.as_bytes(), content.byte_length())
         if doc!=0:
             try:
-                embed_content(external_call["dom_root",Int](doc),attrs)
-                external_call["dom_free",NoneType](doc)
+                embed_content(native.dom_root(doc),attrs)
+                native.dom_free(doc)
             except e:
-                external_call["dom_free",NoneType](doc)
+                native.dom_free(doc)
                 raise e^
     var href = web_url(attrs.get("href",""),host)
     var image = web_url(attrs.get("url",""),host)
@@ -342,8 +339,8 @@ def resolve(mut db: Database, mut signer: Signer, node: Int, plain: Bool, mut me
         raise Error("Attachment nesting too deep")
     var current = node
     while current!=0:
-        var next = external_call["dom_next",Int](current)
-        if c_text["dom_name"](current)=="action-text-attachment":
+        var next = native.dom_next(current)
+        if native.dom_name(current)=="action-text-attachment":
             var attrs = attributes(current)
             if wrap and "content" in attrs:
                 var cleaned = action_sanitize(attrs["content"])
@@ -445,11 +442,11 @@ def resolve(mut db: Database, mut signer: Signer, node: Int, plain: Bool, mut me
                     raise Error("Attachment is missing its attributes")
                 replacement = full+">"+replacement+"</action-text-attachment>"
             if plain:
-                _ = external_call["dom_replace_text",Int](current,replacement.as_c_string_span())
+                _ = native.dom_replace_text(current, replacement)
             else:
-                _ = external_call["dom_replace_html",Int](current,replacement.as_c_string_span(),replacement.byte_length())
+                _ = native.dom_replace_html(current, replacement.as_bytes(), replacement.byte_length())
         else:
-            resolve(db,signer,external_call["dom_child",Int](current),plain,mentions,depth+1,attachment_depth,wrap)
+            resolve(db,signer,native.dom_child(current),plain,mentions,depth+1,attachment_depth,wrap)
         current = next
 
 
@@ -457,11 +454,11 @@ def resolved(mut db: Database, mut signer: Signer, var source: String, plain: Bo
     if plain and "action-text-attachment" not in source and "data-trix-attachment" not in source:
         return convert(source,True)
     source = ruby_strip(source)
-    var doc = external_call["dom_parse_fragment",Int](source.as_c_string_span(),source.byte_length())
+    var doc = native.dom_parse_fragment(source.as_bytes(), source.byte_length())
     if doc==0:
         raise Error("Cannot parse attachments")
     try:
-        var root = external_call["dom_root",Int](doc)
+        var root = native.dom_root(doc)
         if not plain:
             if not preserve_style:
                 remove_solo_link(db,signer,root,source)
@@ -471,10 +468,10 @@ def resolved(mut db: Database, mut signer: Signer, var source: String, plain: Bo
         resolve(db,signer,root,plain,mentions,0,attachment_depth)
         var value = plain_nodes(root) if plain else walk(root,False,True,0,preserve_style)
         var result = chomp(value) if plain else final_html(value) if not preserve_style else value
-        external_call["dom_free",NoneType](doc)
+        native.dom_free(doc)
         return result^
     except e:
-        external_call["dom_free",NoneType](doc)
+        native.dom_free(doc)
         raise e^
 
 
@@ -482,15 +479,15 @@ def mention_ids(mut db: Database, mut signer: Signer, var source: String) raises
     var ids = List[String]()
     if "<" not in source:
         return ids^
-    var doc = external_call["dom_parse_fragment",Int](source.as_c_string_span(),source.byte_length())
+    var doc = native.dom_parse_fragment(source.as_bytes(), source.byte_length())
     if doc==0:
         raise Error("Cannot parse mentions")
     try:
-        verified_mentions(db,signer,external_call["dom_root",Int](doc),ids)
-        external_call["dom_free",NoneType](doc)
+        verified_mentions(db,signer,native.dom_root(doc),ids)
+        native.dom_free(doc)
         return ids^
     except e:
-        external_call["dom_free",NoneType](doc)
+        native.dom_free(doc)
         raise e^
 
 
@@ -499,15 +496,15 @@ def verified_mentions(mut db: Database, mut signer: Signer, node: Int, mut ids: 
         raise Error("Mention nesting too deep")
     var current = node
     while current!=0:
-        if c_text["dom_name"](current)=="action-text-attachment":
+        if native.dom_name(current)=="action-text-attachment":
             var gid = signer.verify(db,"signed_global_ids",attributes(current).get("sgid",""),"attachable",False)
             if gid.startswith("gid://campfire/User/"):
                 var uid = String(String(gid[byte=20:]).split("?")[0])
                 if uid not in ids and db.scalar("SELECT 1 FROM users WHERE id=?",[uid])=="1":
                     ids.append(uid)
         else:
-            verified_mentions(db,signer,external_call["dom_child",Int](current),ids,depth+1)
-        current = external_call["dom_next",Int](current)
+            verified_mentions(db,signer,native.dom_child(current),ids,depth+1)
+        current = native.dom_next(current)
 
 
 def editable_nodes(mut db: Database, mut signer: Signer, node: Int, depth: Int = 0) raises:
@@ -515,8 +512,8 @@ def editable_nodes(mut db: Database, mut signer: Signer, node: Int, depth: Int =
         raise Error("Editor nesting too deep")
     var current = node
     while current!=0:
-        var next = external_call["dom_next",Int](current)
-        if c_text["dom_name"](current)=="action-text-attachment":
+        var next = native.dom_next(current)
+        if native.dom_name(current)=="action-text-attachment":
             var attrs = attributes(current)
             var content = String()
             var content_type = String()
@@ -541,22 +538,22 @@ def editable_nodes(mut db: Database, mut signer: Signer, node: Int, depth: Int =
                 # like the Rust port, are omitted so the surrounding text survives.
                 if ("html" in attrs.get("content-type","") and String(attrs.get("content","").strip())!="") or ("url" in attrs and (attrs.get("content-type","").startswith("image") or attrs.get("content-type","").startswith("video"))):
                     raise Error("Unsupported editable attachment type")
-                external_call["dom_remove",NoneType](current)
+                native.dom_remove(current)
             else:
                 # Current Action Text rebuilds attachment nodes from its public
                 # attribute set and discards stale nested editor markup.
-                external_call["dom_clear_node",NoneType](current)
+                native.dom_clear_node(current)
                 for field in ["sgid","content-type","url","href","filename","filesize","width","height","previewable","presentation","caption"]:
                     if field in attrs:
                         var value = attrs[field]
                         var attribute_name = field.copy()
-                        external_call["dom_set_attr",NoneType](current,attribute_name.as_c_string_span(),value.as_c_string_span())
+                        native.dom_set_attr(current, attribute_name, value)
                 var key = String("content-type")
-                external_call["dom_set_attr",NoneType](current,key.as_c_string_span(),content_type.as_c_string_span())
+                native.dom_set_attr(current, key, content_type)
                 key = "content"
-                external_call["dom_set_attr",NoneType](current,key.as_c_string_span(),content.as_c_string_span())
+                native.dom_set_attr(current, key, content)
         else:
-            editable_nodes(db,signer,external_call["dom_child",Int](current),depth+1)
+            editable_nodes(db,signer,native.dom_child(current),depth+1)
         current = next
 
 
@@ -568,43 +565,43 @@ def editor_html(node: Int, depth: Int = 0, raw_text: Bool = False) raises -> Str
     var out = String()
     var current = node
     while current!=0:
-        var kind = external_call["dom_type",Int](current)
+        var kind = native.dom_type(current)
         if kind==3:
-            out += c_text["dom_text"](current) if raw_text else text_html(c_text["dom_text"](current))
+            out += native.dom_text(current) if raw_text else text_html(native.dom_text(current))
         elif kind==8:
-            out += "<!--"+c_text["dom_text"](current)+"-->"
+            out += "<!--"+native.dom_text(current)+"-->"
         elif kind==1:
-            var name = c_text["dom_name"](current)
+            var name = native.dom_name(current)
             out += "<"+name
-            var attr = external_call["dom_attrs",Int](current)
+            var attr = native.dom_attrs(current)
             while attr!=0:
-                out += " "+c_text["dom_attr_name"](attr)+'="'+escape(c_text["dom_attr_text"](attr))+'"'
-                attr = external_call["dom_attr_next",Int](attr)
-            out += ">"+editor_html(external_call["dom_child",Int](current),depth+1,external_call["dom_foreign",Int](current)==0 and name in ["script","style","xmp","iframe","noembed","noframes","plaintext","noscript"])
+                out += " "+native.dom_attr_name(attr)+'="'+escape(native.dom_attr_text(attr))+'"'
+                attr = native.dom_attr_next(attr)
+            out += ">"+editor_html(native.dom_child(current),depth+1,native.dom_foreign(current)==0 and name in ["script","style","xmp","iframe","noembed","noframes","plaintext","noscript"])
             if name not in ["area","base","br","col","embed","hr","img","input","link","meta","param","source","track","wbr"]:
                 out += "</"+name+">"
-        current = external_call["dom_next",Int](current)
+        current = native.dom_next(current)
     return out^
 
 
 def editable(mut db: Database, mut signer: Signer, var source: String) raises -> String:
     source = ruby_strip(source)
-    var doc = external_call["dom_parse_fragment",Int](source.as_c_string_span(),source.byte_length())
+    var doc = native.dom_parse_fragment(source.as_bytes(), source.byte_length())
     if doc==0:
         raise Error("Cannot parse editable message")
     try:
-        var root = external_call["dom_root",Int](doc)
+        var root = native.dom_root(doc)
         editable_nodes(db,signer,root)
-        var serialized = editor_html(external_call["dom_child",Int](root))
-        var second = external_call["dom_parse_fragment",Int](serialized.as_c_string_span(),serialized.byte_length())
+        var serialized = editor_html(native.dom_child(root))
+        var second = native.dom_parse_fragment(serialized.as_bytes(), serialized.byte_length())
         if second==0:
             raise Error("Cannot parse rebuilt editor value")
-        var result = editor_html(external_call["dom_child",Int](external_call["dom_root",Int](second)))
-        external_call["dom_free",NoneType](second)
-        external_call["dom_free",NoneType](doc)
+        var result = editor_html(native.dom_child(native.dom_root(second)))
+        native.dom_free(second)
+        native.dom_free(doc)
         return result^
     except e:
-        external_call["dom_free",NoneType](doc)
+        native.dom_free(doc)
         raise e^
 
 
@@ -613,27 +610,27 @@ def embedded_ids(mut db: Database, mut signer: Signer, node: Int, mut ids: List[
         raise Error("Attachment nesting too deep")
     var current = node
     while current!=0:
-        if c_text["dom_name"](current)=="action-text-attachment":
+        if native.dom_name(current)=="action-text-attachment":
             var gid = signer.verify(db,"signed_global_ids",attributes(current).get("sgid",""),"attachable",False)
             if gid.startswith("gid://campfire/ActiveStorage::Blob/"):
                 var bid = String(String(gid[byte=35:]).split("?")[0])
                 if bid not in ids and db.scalar("SELECT 1 FROM active_storage_blobs WHERE id=?",[bid])=="1":
                     ids.append(bid)
-        embedded_ids(db,signer,external_call["dom_child",Int](current),ids,depth+1)
-        current = external_call["dom_next",Int](current)
+        embedded_ids(db,signer,native.dom_child(current),ids,depth+1)
+        current = native.dom_next(current)
 
 
 def sync_embeds(mut db: Database, mut signer: Signer, id: String, var source: String) raises:
     var ids = List[String]()
     if "action-text-attachment" in source:
-        var doc = external_call["dom_parse_fragment",Int](source.as_c_string_span(),source.byte_length())
+        var doc = native.dom_parse_fragment(source.as_bytes(), source.byte_length())
         if doc==0:
             raise Error("Cannot parse attachments")
         try:
-            embedded_ids(db,signer,external_call["dom_root",Int](doc),ids)
-            external_call["dom_free",NoneType](doc)
+            embedded_ids(db,signer,native.dom_root(doc),ids)
+            native.dom_free(doc)
         except e:
-            external_call["dom_free",NoneType](doc)
+            native.dom_free(doc)
             raise e^
     var old = db.rows("SELECT blob_id FROM active_storage_attachments WHERE record_type='ActionText::RichText' AND record_id=? AND name='embeds'",[id])
     _ = db.rows("DELETE FROM active_storage_attachments WHERE record_type='ActionText::RichText' AND record_id=? AND name='embeds'",[id])
@@ -649,7 +646,7 @@ def chomp(value: String) -> String:
     var b = value.as_bytes()
     while end>0 and (b[end-1]==10 or b[end-1]==13):
         end -= 1
-    return String(unsafe_from_utf8=b[:end])
+    return String(value[byte=:end])
 
 
 def ruby_strip(value: String) -> String:
@@ -660,7 +657,7 @@ def ruby_strip(value: String) -> String:
         start += 1
     while end>start and Int(b[end-1]) in [0,9,10,11,12,13,32]:
         end -= 1
-    return String(unsafe_from_utf8=b[start:end])
+    return String(value[byte=start:end])
 
 
 def plain_nodes(node: Int, lists: Int = 0, ordered: Bool = False, depth: Int = 0) raises -> String:
@@ -670,14 +667,14 @@ def plain_nodes(node: Int, lists: Int = 0, ordered: Bool = False, depth: Int = 0
     var current = node
     var index = 0
     while current!=0:
-        var name = c_text["dom_name"](current)
-        var kind = external_call["dom_type",Int](current)
+        var name = native.dom_name(current)
+        var kind = native.dom_type(current)
         if kind==3:
-            out += chomp(c_text["dom_text"](current))
+            out += chomp(native.dom_text(current))
         elif kind==1 and name not in ["script","style","unsupported"]:
             index += 1
             var is_list = name=="ul" or name=="ol"
-            var inside = plain_nodes(external_call["dom_child",Int](current),lists+Int(is_list),name=="ol" if is_list else ordered,depth+1)
+            var inside = plain_nodes(native.dom_child(current),lists+Int(is_list),name=="ol" if is_list else ordered,depth+1)
             if name=="br":
                 out += "\n"
             elif name in ["h1","h2","h3","h4","h5","h6","p"] or is_list:
@@ -701,7 +698,7 @@ def plain_nodes(node: Int, lists: Int = 0, ordered: Bool = False, depth: Int = 0
                     out += String(text[byte=:at])+"“"+trimmed+"”"+String(text[byte=at+trimmed.byte_length():])
             else:
                 out += inside
-        current = external_call["dom_next",Int](current)
+        current = native.dom_next(current)
     return out^
 
 
@@ -710,8 +707,8 @@ def normalize_legacy(mut db: Database, node: Int, depth: Int = 0) raises:
         raise Error("Rich text nesting too deep")
     var current = node
     while current!=0:
-        var next = external_call["dom_next",Int](current)
-        if external_call["dom_type",Int](current)==1:
+        var next = native.dom_next(current)
+        if native.dom_type(current)==1:
             var attrs = attributes(current)
             if "data-trix-attachment" in attrs:
                 var mapped = Dict[String,String]()
@@ -729,20 +726,20 @@ def normalize_legacy(mut db: Database, node: Int, depth: Int = 0) raises:
                         if name in ["sgid","content-type","url","href","filename","filesize","width","height","previewable","content","caption","presentation"]:
                             mapped[name] = attr[1]
                 if len(mapped)==0:
-                    external_call["dom_remove",NoneType](current)
+                    native.dom_remove(current)
                     current = next
                     continue
                 if mapped.get("sgid","")!="":
                     _ = display_user_gid(db,mapped["sgid"])
-                external_call["dom_clear_node",NoneType](current)
+                native.dom_clear_node(current)
                 var tag = String("action-text-attachment")
-                external_call["dom_set_name",NoneType](current,tag.as_c_string_span())
+                native.dom_set_name(current, tag)
                 for key in mapped.keys():
                     var value = mapped[key]
                     var name = key.copy()
-                    external_call["dom_set_attr",NoneType](current,name.as_c_string_span(),value.as_c_string_span())
+                    native.dom_set_attr(current, name, value)
             else:
-                normalize_legacy(db,external_call["dom_child",Int](current),depth+1)
+                normalize_legacy(db,native.dom_child(current),depth+1)
         current = next
 
 
@@ -750,16 +747,16 @@ def canonical(mut db: Database, var source: String) raises -> String:
     if "data-trix-attachment" not in source:
         return convert(source,False,True)
     source = ruby_strip(source)
-    var doc = external_call["dom_parse_fragment",Int](source.as_c_string_span(),source.byte_length())
+    var doc = native.dom_parse_fragment(source.as_bytes(), source.byte_length())
     if doc==0:
         raise Error("Cannot parse rich text")
     try:
-        var root = external_call["dom_root",Int](doc)
+        var root = native.dom_root(doc)
         var result = walk(root,False,True,0,True)
-        external_call["dom_free",NoneType](doc)
+        native.dom_free(doc)
         return result^
     except e:
-        external_call["dom_free",NoneType](doc)
+        native.dom_free(doc)
         raise e^
 
 
@@ -769,7 +766,7 @@ def display_user_gid(mut db: Database, sgid: String) raises -> String:
     if sgid=="" or sgid.replace("--","")=="":
         return ""
     var encoded = String(sgid.split("--")[0])
-    var payload = unbase64(encoded)
+    var payload = unbase64(encoded).text()
     if db.scalar("SELECT json_valid(?)",[payload])!="1":
         raise Error("Invalid mention encoding")
     if db.scalar("SELECT json_type(?)",[payload])!="object":
@@ -784,7 +781,7 @@ def display_user_gid(mut db: Database, sgid: String) raises -> String:
             var end = at+20
             while end<bytes.byte_length() and bytes.as_bytes()[end]>=48 and bytes.as_bytes()[end]<=57:
                 end += 1
-            gid = String(unsafe_from_utf8=bytes.as_bytes()[at:end])
+            gid = bytes.slice(at,end).text()
     if gid.startswith("gid://"):
         var pieces = gid.split("/")
         if len(pieces)>=5 and String(pieces[3])=="User":
@@ -802,26 +799,26 @@ def unwrap_content_scripts(node: Int, depth: Int = 0) raises:
         raise Error("Content nesting too deep")
     var current = node
     while current!=0:
-        var name = c_text["dom_name"](current)
+        var name = native.dom_name(current)
         if name=="script" or name=="style":
             var span = String("unwrap")
-            external_call["dom_set_name",NoneType](current,span.as_c_string_span())
-        unwrap_content_scripts(external_call["dom_child",Int](current),depth+1)
-        current = external_call["dom_next",Int](current)
+            native.dom_set_name(current, span)
+        unwrap_content_scripts(native.dom_child(current),depth+1)
+        current = native.dom_next(current)
 
 
 def content_plain(var source: String) raises -> String:
-    var doc = external_call["dom_parse_fragment",Int](source.as_c_string_span(),source.byte_length())
+    var doc = native.dom_parse_fragment(source.as_bytes(), source.byte_length())
     if doc==0:
         raise Error("Cannot parse attachment content")
     try:
-        var root = external_call["dom_root",Int](doc)
+        var root = native.dom_root(doc)
         unwrap_content_scripts(root)
         var value = chomp(plain_nodes(root))
-        external_call["dom_free",NoneType](doc)
+        native.dom_free(doc)
         return value^
     except e:
-        external_call["dom_free",NoneType](doc)
+        native.dom_free(doc)
         raise e^
 
 
@@ -887,43 +884,43 @@ def prune_tags(node: Int, depth: Int = 0) raises:
         raise Error("Rich text nesting too deep")
     var current = node
     while current!=0:
-        var next = external_call["dom_next",Int](current)
-        var name = c_text["dom_name"](current)
-        if external_call["dom_type",Int](current)==1 and name!="html" and " "+name+" " not in INPUT_TAGS:
-            external_call["dom_remove",NoneType](current)
+        var next = native.dom_next(current)
+        var name = native.dom_name(current)
+        if native.dom_type(current)==1 and name!="html" and " "+name+" " not in INPUT_TAGS:
+            native.dom_remove(current)
         else:
-            prune_tags(external_call["dom_child",Int](current),depth+1)
+            prune_tags(native.dom_child(current),depth+1)
         current = next
 
 
 def final_html(var source: String) raises -> String:
     source = '<div class="lexxy-content">'+source+'</div>'
-    var doc = external_call["dom_parse_fragment",Int](source.as_c_string_span(),source.byte_length())
+    var doc = native.dom_parse_fragment(source.as_bytes(), source.byte_length())
     if doc==0:
         raise Error("Cannot parse rendered rich text")
     try:
-        var root = external_call["dom_child",Int](external_call["dom_root",Int](doc))
-        var result = walk(external_call["dom_child",Int](root),False,True,0,False,True)
+        var root = native.dom_child(native.dom_root(doc))
+        var result = walk(native.dom_child(root),False,True,0,False,True)
         result = autolink_html(result)
-        external_call["dom_free",NoneType](doc)
+        native.dom_free(doc)
         return result^
     except e:
-        external_call["dom_free",NoneType](doc)
+        native.dom_free(doc)
         raise e^
 
 
 def sanitize_content(var source: String) raises -> String:
-    var doc = external_call["dom_parse_fragment",Int](source.as_c_string_span(),source.byte_length())
+    var doc = native.dom_parse_fragment(source.as_bytes(), source.byte_length())
     if doc==0:
         raise Error("Cannot parse content")
     try:
-        var root = external_call["dom_root",Int](doc)
+        var root = native.dom_root(doc)
         unwrap_content_scripts(root)
         var result = walk(root,False,True,0,True)
-        external_call["dom_free",NoneType](doc)
+        native.dom_free(doc)
         return result^
     except e:
-        external_call["dom_free",NoneType](doc)
+        native.dom_free(doc)
         raise e^
 
 
@@ -932,23 +929,23 @@ def galleries(node: Int, depth: Int = 0) raises:
         raise Error("Gallery nesting too deep")
     var current = node
     while current!=0:
-        var child = external_call["dom_child",Int](current)
-        if c_text["dom_name"](current)=="div":
+        var child = native.dom_child(current)
+        if native.dom_name(current)=="div":
             var count = 0
             var eligible = True
             var c = child
             while c!=0:
-                if c_text["dom_name"](c)=="action-text-attachment" and attributes(c).get("presentation","")=="gallery":
+                if native.dom_name(c)=="action-text-attachment" and attributes(c).get("presentation","")=="gallery":
                     count += 1
-                elif external_call["dom_type",Int](c)!=3 or c_text["dom_text"](c).replace(" ","").replace("\n","")!="":
+                elif native.dom_type(c)!=3 or native.dom_text(c).replace(" ","").replace("\n","")!="":
                     eligible = False
-                c = external_call["dom_next",Int](c)
+                c = native.dom_next(c)
             if eligible and count>=2:
                 var key = String("class")
                 var value = "attachment-gallery attachment-gallery--"+String(count)
-                external_call["dom_set_attr",NoneType](current,key.as_c_string_span(),value.as_c_string_span())
+                native.dom_set_attr(current, key, value)
         galleries(child,depth+1)
-        current = external_call["dom_next",Int](current)
+        current = native.dom_next(current)
 
 
 def og_nodes(node: Int, mut nodes: List[Int], depth: Int = 0) raises:
@@ -956,14 +953,14 @@ def og_nodes(node: Int, mut nodes: List[Int], depth: Int = 0) raises:
         raise Error("Embed nesting too deep")
     var current = node
     while current!=0:
-        if c_text["dom_name"](current)=="action-text-attachment" and "application/vnd.actiontext.opengraph-embed" in attributes(current).get("content-type",""):
+        if native.dom_name(current)=="action-text-attachment" and "application/vnd.actiontext.opengraph-embed" in attributes(current).get("content-type",""):
             nodes.append(current)
         else:
-            og_nodes(external_call["dom_child",Int](current),nodes,depth+1)
-        current = external_call["dom_next",Int](current)
+            og_nodes(native.dom_child(current),nodes,depth+1)
+        current = native.dom_next(current)
 
 
-def normalize_tweet(value: String) -> String:
+def normalize_tweet(value: String) raises -> String:
     var host = network.component(value).lower()
     if host!="x.com" and host!="twitter.com":
         return value
@@ -978,13 +975,13 @@ def remove_solo_link(mut db: Database, mut signer: Signer, root: Int, source: St
     var attrs = attributes(nodes[0])
     if attrs.get("href","")=="":
         var content = attrs.get("content","")
-        var doc = external_call["dom_parse_fragment",Int](content.as_c_string_span(),content.byte_length())
+        var doc = native.dom_parse_fragment(content.as_bytes(), content.byte_length())
         if doc!=0:
             try:
-                embed_content(external_call["dom_root",Int](doc),attrs)
-                external_call["dom_free",NoneType](doc)
+                embed_content(native.dom_root(doc),attrs)
+                native.dom_free(doc)
             except e:
-                external_call["dom_free",NoneType](doc)
+                native.dom_free(doc)
                 raise e^
     var href = attrs.get("href","")
     if href=="" or normalize_tweet(href)!=normalize_tweet(resolved(db,signer,source,True)):
@@ -1001,17 +998,17 @@ def remove_solo_nodes(node: Int, attachment: String, depth: Int = 0) raises:
         raise Error("Embed nesting too deep")
     var current = node
     while current!=0:
-        var next = external_call["dom_next",Int](current)
-        var name = c_text["dom_name"](current)
+        var next = native.dom_next(current)
+        var name = native.dom_name(current)
         if name=="div":
-            _ = external_call["dom_inner_html",Int](current,attachment.as_bytes().unsafe_ptr(),attachment.byte_length())
+            _ = native.dom_inner_html(current, attachment.as_bytes(), attachment.byte_length())
         elif name=="p":
             var nodes = List[Int]()
-            og_nodes(external_call["dom_child",Int](current),nodes)
+            og_nodes(native.dom_child(current),nodes)
             if len(nodes)==0:
-                external_call["dom_remove",NoneType](current)
+                native.dom_remove(current)
         else:
-            remove_solo_nodes(external_call["dom_child",Int](current),attachment,depth+1)
+            remove_solo_nodes(native.dom_child(current),attachment,depth+1)
         current = next
 
 
@@ -1133,19 +1130,19 @@ def action_nodes(node: Int, depth: Int = 0) raises -> String:
     var out = String()
     var current = node
     while current!=0:
-        var kind = external_call["dom_type",Int](current)
-        var name = c_text["dom_name"](current)
+        var kind = native.dom_type(current)
+        var name = native.dom_name(current)
         if kind==3:
-            out += text_html(c_text["dom_text"](current))
+            out += text_html(native.dom_text(current))
         elif kind==1 and name not in ["svg","math"]:
-            var inside = action_nodes(external_call["dom_child",Int](current),depth+1)
+            var inside = action_nodes(native.dom_child(current),depth+1)
             if " "+name+" " in ACTION_TAGS:
                 out += "<"+name
-                var attr = external_call["dom_attrs",Int](current)
+                var attr = native.dom_attrs(current)
                 var escaped_urls = False
                 while attr!=0:
-                    var key = c_text["dom_attr_name"](attr)
-                    var value = c_text["dom_attr_text"](attr)
+                    var key = native.dom_attr_name(attr)
+                    var value = native.dom_attr_text(attr)
                     if " "+key+" " in ACTION_ATTRS:
                         if key=="style":
                             value = action_style(value)
@@ -1159,45 +1156,45 @@ def action_nodes(node: Int, depth: Int = 0) raises -> String:
                                     value = uri_escape(value)
                                 out += " "+key+'="'+escape(value)+'"'
                         escaped_urls = True
-                    attr = external_call["dom_attr_next",Int](attr)
+                    attr = native.dom_attr_next(attr)
                 out += ">"+inside
                 if name not in ["br","hr","img","source","embed"]:
                     out += "</"+name+">"
             else:
                 out += inside
-        current = external_call["dom_next",Int](current)
+        current = native.dom_next(current)
     return out^
 
 
 def action_sanitize(var source: String) raises -> String:
-    var doc = external_call["dom_parse_fragment",Int](source.as_c_string_span(),source.byte_length())
+    var doc = native.dom_parse_fragment(source.as_bytes(), source.byte_length())
     if doc==0:
         raise Error("Cannot parse Action Text HTML")
     try:
-        var result = action_nodes(external_call["dom_root",Int](doc))
-        external_call["dom_free",NoneType](doc)
+        var result = action_nodes(native.dom_root(doc))
+        native.dom_free(doc)
         return result^
     except e:
-        external_call["dom_free",NoneType](doc)
+        native.dom_free(doc)
         raise e^
 
 
 def body_inner(mut db: Database, mut signer: Signer, var source: String, depth: Int = 0) raises -> String:
     source = ruby_strip(source)
-    var doc = external_call["dom_parse_fragment",Int](source.as_c_string_span(),source.byte_length())
+    var doc = native.dom_parse_fragment(source.as_bytes(), source.byte_length())
     if doc==0:
         raise Error("Cannot parse Action Text body")
     try:
-        var root = external_call["dom_root",Int](doc)
+        var root = native.dom_root(doc)
         var mentions = List[String]()
         resolve(db,signer,root,False,mentions,0,depth,True)
         galleries(root)
-        var raw = editor_html(external_call["dom_child",Int](root))
+        var raw = editor_html(native.dom_child(root))
         var result = action_sanitize(raw)
-        external_call["dom_free",NoneType](doc)
+        native.dom_free(doc)
         return result^
     except e:
-        external_call["dom_free",NoneType](doc)
+        native.dom_free(doc)
         raise e^
 
 
@@ -1210,10 +1207,10 @@ def descendant(node: Int, name: String, depth: Int = 0) raises -> Int:
         raise Error("Attachment nesting too deep")
     var current = node
     while current!=0:
-        if c_text["dom_name"](current)==name:
+        if native.dom_name(current)==name:
             return current
-        var found = descendant(external_call["dom_child",Int](current),name,depth+1)
+        var found = descendant(native.dom_child(current),name,depth+1)
         if found!=0:
             return found
-        current = external_call["dom_next",Int](current)
+        current = native.dom_next(current)
     return 0

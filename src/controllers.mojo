@@ -1,4 +1,4 @@
-from std.ffi import external_call
+import native_boundary as native
 from database import Database
 from crypto import Signer, json_string, url_encode, unbase64
 from http import Request, Response, html
@@ -85,15 +85,15 @@ def public(mut db: Database, mut signer: Signer, req: Request, f: Form) raises -
     if req.path.startswith("/session/transfers/"):
         return accounts.transfer(db,signer,req)
     if req.path.startswith("/qr_code/") and req.method=="GET":
-        var text = unbase64(String(req.path[byte=9:]))
+        var text = unbase64(String(req.path[byte=9:])).text()
         var qr = List[UInt8](length=3918,fill=0)
-        var size = external_call["qr_encode",Int](text.as_c_string_span(),qr.unsafe_ptr())
+        var size = native.qr_encode(text, qr)
         if size<0:
             return html("Invalid QR content",400)
         var paths = String()
         for y in range(size):
             for x in range(size):
-                if external_call["qr_module",Int](qr.unsafe_ptr(),x,y):
+                if native.qr_module(Span(qr), x, y):
                     paths += "M"+String(x+4)+" "+String(y+4)+"h1v1h-1z "
         return Response(200,'<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 '+String(size+8)+' '+String(size+8)+'"><rect width="100%" height="100%" fill="white"/><path d="'+paths+'" fill="black"/></svg>',"image/svg+xml","")
     if req.path in ["/webmanifest","/webmanifest.json"] and req.method=="GET":
@@ -140,7 +140,7 @@ def public(mut db: Database, mut signer: Signer, req: Request, f: Form) raises -
                 count += 1
             in_word = word
         var colors = ["#AF2E1B","#CC6324","#3B4B59","#BFA07A","#ED8008","#ED3F1C","#BF1B1B","#736B1E","#D07B53","#736356","#AD1D1D","#BF7C2A","#C09C6F","#698F9C","#7C956B","#5D618F","#3B3633","#67695E"]
-        var index = external_call["crc32_bytes",Int](uid.as_bytes().unsafe_ptr(),uid.byte_length())%18
+        var index = native.crc32_bytes(uid.as_bytes(), uid.byte_length())%18
         var values: Dict[String,String] = {"initials":initials,"wide":"1" if count>=3 else "0","color":colors[index]}
         return Response(200,templates.avatar(values),"image/svg+xml","")
     return html("",0)
@@ -156,4 +156,4 @@ def valid_subscription(f: Form) raises -> Bool:
         return False
     var key = unbase64(f.fields.get("push_subscription[p256dh_key]",""))
     var auth = unbase64(f.fields.get("push_subscription[auth_key]",""))
-    return key.byte_length()==65 and auth.byte_length()==16 and external_call["p256_validate_public",Int](key.as_bytes().unsafe_ptr())==1 and network.validate(endpoint)
+    return key.byte_length()==65 and auth.byte_length()==16 and native.p256_validate_public(key.as_bytes())==1 and network.validate(endpoint)

@@ -1,4 +1,5 @@
-from std.ffi import external_call
+import native_boundary as native
+from byte_buffer import Bytes
 from database import Database
 from http import Request, Response, html, conditional
 from text import params, positive, token, plain_text, escape, search_query
@@ -31,7 +32,7 @@ comptime MESSAGE_COLUMNS = (
 struct App(Movable):
     var db: Database
     var signer: Signer
-    var cache: Dict[String, String]
+    var cache: Dict[String, Bytes]
     var cache_bytes: Int
     var cache_limit: Int
     var version: String
@@ -44,7 +45,7 @@ struct App(Movable):
         if initialize_schema:
             schema.initialize(self.db)
         self.signer = Signer()
-        self.cache = Dict[String, String]()
+        self.cache = Dict[String, Bytes]()
         self.cache_bytes = 0
         self.cache_limit = cache_limit
         self.version = ""
@@ -56,8 +57,8 @@ struct App(Movable):
         self.cache.clear()
         self.cache_bytes = 0
 
-    def handle(mut self, req: Request) raises -> String:
-        var result: String
+    def handle(mut self, req: Request) raises -> Bytes:
+        var result: Bytes
         try:
             result = self.handle_request(req.copy())
             storage.discard_prepared(self.db)
@@ -65,15 +66,15 @@ struct App(Movable):
             storage.discard_prepared(self.db)
             raise e^
         # Consume a migrated flash only when HTML has actually displayed it.
-        if req.method=="GET" and req.cookie("_campfire_session")!="" and result.startswith("HTTP/1.1 200") and "Content-Type: text/html" in String(result.split("\r\n\r\n",maxsplit=1)[0]):
+        if req.method=="GET" and req.cookie("_campfire_session")!="" and result.startswith("HTTP/1.1 200") and "Content-Type: text/html" in result.split("\r\n\r\n",maxsplit=1)[0].text():
             var session = accounts.read_session(self.db,self.signer,req)
             if self.db.scalar("SELECT json_type(?,'$.flash')",[session])!="":
                 session = self.db.scalar("SELECT json_remove(?,'$.flash')",[session])
                 var end = result.find("\r\n")
-                result = String(result[byte=:end+2])+accounts.session_header(self.db,self.signer,req,session)+String(result[byte=end+2:])
+                result = result.slice(0,end+2)+accounts.session_header(self.db,self.signer,req,session)+result.slice(end+2)
         return result^
 
-    def handle_request(mut self, var req: Request) raises -> String:
+    def handle_request(mut self, var req: Request) raises -> Bytes:
         self.db.request_host = req.header("host")
         if req.method not in ["GET", "HEAD"] and self.db.scalar("SELECT 1 FROM bans WHERE ip_address=? LIMIT 1",[req.peer])=="1":
             return html("Too many requests",429).pack(False)
@@ -238,7 +239,7 @@ struct App(Movable):
                     headers += "Link: <"+req.origin()+original_path+"?"+("after" if after else "before")+"="+anchor+'>; rel="next"\r\n'
             return Response(200,"["+",".join(entries)+"]","application/json",headers)
         var boost = len(segments)>=7 and String(segments[6])=="boosts"
-        var raw = req.body
+        var raw = req.body.text()
         req.path = "/rooms/"+rid+"/messages"
         var mid = String()
         if len(segments)>5:
@@ -357,9 +358,7 @@ struct App(Movable):
         )
         if len(rows) > 0:
             digest = rows[0][1]
-        var valid = external_call["crypto_password", Int](
-            password.as_c_string_span(), digest.as_c_string_span()
-        )
+        var valid = native.crypto_password(password, digest)
         if valid != 1 or len(rows) == 0:
             return html(views.login(), 401)
         var tok = session_token()
@@ -384,7 +383,7 @@ struct App(Movable):
             + "; Path=/; HttpOnly; SameSite=Lax; Max-Age=631152000"+("; Secure" if req.origin().startswith("https://") else "")+"\r\n",
         )
 
-    def read(mut self, req: Request) raises -> String:
+    def read(mut self, req: Request) raises -> Bytes:
         var uid = self.user(req)
         if uid == "":
             return accounts.request_login(self.db,self.signer,req).pack(False)
@@ -411,7 +410,7 @@ struct App(Movable):
             if len(room_info) == 0:
                 return html("Room not found", 404).pack(False)
         var generation = self.db.scalar("PRAGMA data_version")
-        var now = external_call["os_now_ms", Int]()
+        var now = native.os_now_ms()
         if self.version != generation or now > self.expires:
             self.invalidate()
             self.version = generation

@@ -1,17 +1,20 @@
+import native_boundary as native
+from byte_buffer import Bytes
 # Incremental body framing into an anonymous disk file. No body-sized allocations.
-from std.ffi import external_call
 from std.os import getenv
 
 
-def read_slice(fd: Int, offset: Int, size: Int) raises -> String:
+def read_slice(fd: Int, offset: Int, size: Int) raises -> Bytes:
+    if offset<0 or size<0 or size>67108864 or offset>9223372036854775807-size:
+        raise Error("Invalid upload byte range")
     var out = List[UInt8](length=size,fill=0)
     var used = 0
     while used<size:
-        var n = external_call["fs_read",Int](fd,out.unsafe_ptr().unsafe_offset(used),size-used,offset+used)
+        var n = native.fs_read(fd,out,size-used,offset+used,used)
         if n<=0:
             raise Error("Cannot read upload")
         used += n
-    return String(unsafe_from_utf8=Span(unsafe_ptr=out.unsafe_ptr(),length=size))
+    return Bytes(Span(out)[:size])
 
 
 struct BodyStream(Copyable, Movable):
@@ -28,40 +31,44 @@ struct BodyStream(Copyable, Movable):
 
     def close(mut self):
         if self.fd>=0:
-            _ = external_call["os_close",Int](self.fd)
+            _ = native.os_close(self.fd)
         self.fd = -1
         self.size = 0
         self.state = 0
         self.remaining = 0
 
-    def append(mut self, data: String) raises:
+    def append(mut self, data: Bytes) raises:
         var limit = Int(getenv("MULTIPART_BYTESIZE_LIMIT","10737418240"))
-        if limit<0 or self.size+data.byte_length()>limit:
+        if limit<0 or self.size>limit or data.byte_length()>limit-self.size:
             raise Error("Upload body too large")
         if self.fd<0:
-            self.fd = external_call["fs_temp",Int]()
+            self.fd = native.fs_temp()
             if self.fd<0:
                 raise Error("Cannot spool upload")
-        if external_call["fs_append",Int](self.fd,data.as_bytes().unsafe_ptr(),data.byte_length())!=0:
+        if native.fs_append(self.fd, data.as_bytes(), data.byte_length())!=0:
             raise Error("Cannot spool upload")
         self.size += data.byte_length()
 
     # Returns consumed wire bytes and whether framing is complete.
-    def feed(mut self, source: String, length: Int, chunked: Bool) raises -> Tuple[Int,Bool]:
+    def feed(mut self, source: Bytes, length: Int, chunked: Bool) raises -> Tuple[Int,Bool]:
         if not chunked:
+            if length<self.size:
+                raise Error("Invalid upload content length")
             var used = min(source.byte_length(),length-self.size)
-            self.append(String(unsafe_from_utf8=source.as_bytes()[:used]))
+            self.append(Bytes(source.as_bytes()[:used]))
             return (used,self.size==length)
         var offset = 0
         while True:
-            var tail = String(unsafe_from_utf8=source.as_bytes()[offset:])
+            var tail = Bytes(source.as_bytes()[offset:])
             if self.state==0:
                 var end = tail.find("\r\n")
                 if end<0:
                     if tail.byte_length()>8192:
                         raise Error("Chunk line too long")
                     return (offset,False)
-                var line = String(tail[byte=:end])
+                if end>8192:
+                    raise Error("Chunk line too long")
+                var line = tail.slice(0,end).text()
                 var raw = String(line.split(";",maxsplit=1)[0]).lower()
                 if raw=="" or raw.byte_length()>10:
                     raise Error("Invalid chunk size")
@@ -77,7 +84,7 @@ struct BodyStream(Copyable, Movable):
                 self.state = 3 if self.remaining==0 else 1
             elif self.state==1:
                 var used = min(self.remaining,tail.byte_length())
-                self.append(String(unsafe_from_utf8=tail.as_bytes()[:used]))
+                self.append(Bytes(tail.as_bytes()[:used]))
                 offset += used
                 self.remaining -= used
                 if self.remaining>0:
@@ -99,7 +106,9 @@ struct BodyStream(Copyable, Movable):
                     if tail.byte_length()>32768:
                         raise Error("Trailers too long")
                     return (offset,False)
-                for line in String(tail[byte=:end]).split("\r\n"):
+                if end>32768:
+                    raise Error("Trailers too long")
+                for line in tail.slice(0,end).text().split("\r\n"):
                     var bits = line.split(":",maxsplit=1)
                     if len(bits)!=2 or String(bits[0]).lower() in ["content-length","transfer-encoding","authorization","cookie"]:
                         raise Error("Invalid trailer")
