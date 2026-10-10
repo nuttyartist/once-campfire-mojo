@@ -480,7 +480,7 @@ def cookie_decrypt(var key: String, nonce: Bytes, cipher: Bytes, tag: Bytes) rai
 
 
 def process_capture(var executable: String, args: List[String], source: Bytes, capacity: Int, timeout: Int, seekable: Bool, source_fd: Int) raises -> Bytes:
-    if "\x00" in executable or capacity<0 or capacity>67108864 or timeout<=0 or source_fd < -1:
+    if "\x00" in executable or capacity<0 or capacity>67108864 or timeout<=0 or source_fd < -1 or source_fd > 2147483647:
         raise Error("Invalid media process parameters")
     for arg in args:
         if "\x00" in arg:

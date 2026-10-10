@@ -84,6 +84,12 @@ def main() raises:
     except:
         rejected = True
     require(rejected,"random allocation bounds")
+    rejected = False
+    try:
+        _ = native.process_capture("/bin/echo",List[String](),"",1,1,False,9223372036854775807)
+    except:
+        rejected = True
+    require(rejected,"process descriptor must fit the native fd type")
     var db = Database(":memory:")
     var signer = Signer("byte-safety-test-key-00000000000000000000000000")
     # Offsets formerly landed in the middle of a multibyte code point.
