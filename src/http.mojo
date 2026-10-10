@@ -40,7 +40,6 @@ struct Request(Copyable, Movable):
 
 
 def parse_headers(head: String) raises -> Request:
-    _ = String(from_utf8=head.as_bytes())
     var lines = head.split("\r\n")
     var first = lines[0].split(" ")
     if len(first) != 3 or String(first[2]) != "HTTP/1.1":

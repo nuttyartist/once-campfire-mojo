@@ -1,3 +1,4 @@
+from byte_buffer import Bytes
 import native_boundary as native
 
 
@@ -49,7 +50,7 @@ def decode(s: String) raises -> String:
     for c in out:
         if c == 0:
             raise Error("NUL is not valid in a form value")
-    return String(from_utf8=Span(out)[:len(out)])
+    return Bytes(out^).text()
 
 
 def params(s: String) raises -> Dict[String, String]:
@@ -82,7 +83,7 @@ def token() raises -> String:
     for c in buf:
         out.append(digits.as_bytes()[Int(c) // 16])
         out.append(digits.as_bytes()[Int(c) % 16])
-    return String(from_utf8=Span(out)[:len(out)])
+    return Bytes(out^).text()
 
 
 def plain_text(html: String) -> String:

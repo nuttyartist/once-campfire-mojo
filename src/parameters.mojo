@@ -94,9 +94,10 @@ def parse(mut db: Database, req: Request) raises -> Form:
             else:
                 form.fields[name] = body.text()
     elif kind.startswith("application/json"):
-        if db.scalar("SELECT json_valid(?)",[req.body.text()])!="1" or db.scalar("SELECT json_type(?)",[req.body.text()])!="object":
+        var text_body = req.body.text()
+        if db.scalar("SELECT json_valid(?)",[text_body])!="1" or db.scalar("SELECT json_type(?)",[text_body])!="object":
             raise Error("HTTP 400: Invalid JSON object")
-        var rows = db.rows("SELECT id,coalesce(parent,-1),coalesce(key,''),coalesce(cast(atom AS TEXT),''),type FROM json_tree(?) ORDER BY id",[req.body.text()])
+        var rows = db.rows("SELECT id,coalesce(parent,-1),coalesce(key,''),coalesce(cast(atom AS TEXT),''),type FROM json_tree(?) ORDER BY id",[text_body])
         var paths = Dict[String,String]()
         for row in rows:
             var parent = paths.get(row[1],"")
@@ -105,9 +106,10 @@ def parse(mut db: Database, req: Request) raises -> Form:
             if row[4]!="object" and row[4]!="array" and row[4]!="null":
                 form.fields[key] = row[3]
     elif kind.startswith("application/x-www-form-urlencoded") or req.body == "":
-        form.fields = params(req.body.text())
+        var text_body = req.body.text()
+        form.fields = params(text_body)
         var ids = String()
-        for pair in req.body.text().split("&"):
+        for pair in text_body.split("&"):
             var bits = pair.split("=",maxsplit=1)
             if len(bits)==2 and decode(String(bits[0]))=="user_ids[]":
                 ids += ","+decode(String(bits[1]))
@@ -116,10 +118,6 @@ def parse(mut db: Database, req: Request) raises -> Form:
     else:
         raise Error("HTTP 400: Unsupported content type")
     for value in form.fields.values():
-        try:
-            _ = String(from_utf8=value.as_bytes())
-        except:
-            raise Error("HTTP 400: Invalid UTF-8 text field")
         if "\x00" in value:
             raise Error("HTTP 400: NUL is not valid in text fields")
     return form^

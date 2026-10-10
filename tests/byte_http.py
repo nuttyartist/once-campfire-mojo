@@ -35,7 +35,8 @@ class ByteHTTP(unittest.TestCase):
         path=f'/rooms/{self.rid}/messages'
         for invalid in [b'\xff', b'\xc0\x80', b'\xed\xa0\x80', b'\xf4\x90\x80\x80', b'\xe2\x82']:
             for kind, body in [('application/json',b'{"message":{"body":"'+invalid+b'"}}'),
-                               ('application/x-www-form-urlencoded',b'message[body]='+invalid)]:
+                               ('application/x-www-form-urlencoded',b'message[body]='+invalid),
+                               ('application/x-www-form-urlencoded',('message[body]='+''.join(f'%{b:02X}' for b in invalid)).encode())]:
                 with self.subTest(invalid=invalid,kind=kind):
                     self.assertEqual(self.request(path,'POST',body=body,headers={'Content-Type':kind})[0],400)
 
