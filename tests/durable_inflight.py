@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Crash while jobs and recipient receipts are actively progressing in all three ports."""
-import concurrent.futures,contextlib,json,os,signal,subprocess,sys,tempfile,time,unittest,urllib.parse
+import concurrent.futures,contextlib,http.client,json,os,signal,subprocess,sys,tempfile,threading,time,unittest,urllib.parse
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'bench'))
 import local as b
@@ -47,25 +47,64 @@ class Durability(unittest.TestCase):
      environment=dict(item.split(b'=',1) for item in Path(f'/proc/{pid}/environ').read_bytes().split(b'\0') if item)
      env={k.decode():v.decode() for k,v in environment.items()};env.pop('CAMPFIRE_JOBS_PAUSED',None)
      command=[x.decode() for x in Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0') if x]
+     acknowledged=set()
      def post(i):
       body=urllib.parse.urlencode({'message[body]':f'inflight durable accepted {i}','message[client_message_id]':f'crash-acceptance-{i}'})
       result=b.request(f'/rooms/{room}/messages',cookie,'POST',body,{'Content-Type':'application/x-www-form-urlencoded','Accept':'text/vnd.turbo-stream.html'})
       self.assertEqual(result[0],200,result[2][:150])
+      acknowledged.add(f'crash-acceptance-{i}')
      with concurrent.futures.ThreadPoolExecutor(max_workers=8) as workers:list(workers.map(post,range(1200)))
-     expected=durable.new_ids(db,room,baseline);self.assertEqual(len(expected),1200)
-     deadline=time.monotonic()+10
-     while True:
-      pending,failed,complete,receipts=durable.state(db,app)
-      table='mojo_jobs' if app=='mojo' else 'campfire_jobs'
-      with b.connection(db) as c:leased=c.execute('SELECT count(*) FROM '+table+' WHERE lease_until>unixepoch()').fetchone()[0]
-      if pending>0 and leased>0 and receipts:break
-      self.assertLess(time.monotonic(),deadline,'No active backlog to crash')
-      time.sleep(.001)
-     os.killpg(pid,signal.SIGKILL)
+     self.assertEqual(len(acknowledged),1200)
+     table='mojo_jobs' if app=='mojo' else 'campfire_jobs'
+     stopped=threading.Event()
+     def keep_posting(lane):
+      i=1200+lane
+      while not stopped.is_set():
+       try:post(i)
+       except (OSError,http.client.HTTPException):
+        # Only the intentional crash may interrupt an in-flight request.
+        if not stopped.is_set():raise
+        return
+       i+=8
+     # Continue writes until an actual leased job can be frozen. Otherwise a
+     # fast implementation may drain between the observation and SIGKILL.
+     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as workers:
+      futures=[workers.submit(keep_posting,lane) for lane in range(8)]
+      deadline=time.monotonic()+15
+      try:
+       while True:
+        pending,failed,complete,receipts=durable.state(db,app)
+        self.assertEqual(failed,0)
+        if pending and receipts:
+         os.killpg(pid,signal.SIGSTOP)
+         freeze_deadline=time.monotonic()+3
+         while True:
+          states=[]
+          for task in Path('/proc').glob('[0-9]*/task/[0-9]*/stat'):
+           try:
+            fields=task.read_text().rsplit(')',1)[1].split()
+            if int(fields[2])==pid:states.append(fields[0])
+           except (OSError,ValueError):pass
+          if states and all(state in ('T','t','Z') for state in states):break
+          self.assertLess(time.monotonic(),freeze_deadline,'Process group did not freeze')
+          time.sleep(.001)
+         pending_at_crash,failed,_,receipts_at_crash=durable.state(db,app)
+         with b.connection(db) as c:leased_at_crash=c.execute('SELECT count(*) FROM '+table+' WHERE lease_until>unixepoch()').fetchone()[0]
+         self.assertEqual(failed,0)
+         if pending_at_crash and leased_at_crash and receipts_at_crash:break
+         os.killpg(pid,signal.SIGCONT)
+        self.assertLess(time.monotonic(),deadline,'No active backlog to crash')
+        time.sleep(.001)
+      finally:
+       stopped.set()
+       os.killpg(pid,signal.SIGKILL)
+      for future in futures:future.result()
      time.sleep(.15)
-     pending_at_crash,_,_,receipts_at_crash=durable.state(db,app)
-     with b.connection(db) as c:leased_at_crash=c.execute('SELECT count(*) FROM '+table+' WHERE lease_until>unixepoch()').fetchone()[0]
-     self.assertGreater(pending_at_crash,0);self.assertGreater(leased_at_crash,0);self.assertGreater(len(receipts_at_crash),0)
+     expected=durable.new_ids(db,room,baseline)
+     with b.connection(db) as c:
+      saved={r[0] for r in c.execute('SELECT client_message_id FROM messages WHERE room_id=? AND id IN ('+','.join('?' for _ in expected)+')',(room,*expected))}
+     self.assertTrue(acknowledged<=saved,(app,'Acknowledged message missing at crash'))
+     self.assertLessEqual(len(expected)-len(acknowledged),8,'Unexpected unacknowledged writes')
      with (dest/'restart.log').open('w') as log:
       proc=subprocess.Popen(['taskset','-c','0-3',*command],cwd=runtime/'app',env=env,stdout=log,stderr=log,start_new_session=True)
       try:
@@ -90,7 +129,7 @@ class Durability(unittest.TestCase):
         time.sleep(.4);self.assertIsNone(second.poll());again=drain_recovered(db,app,expected,subscriptions)
         self.assertEqual(again['completed_notifications'],receipt['completed_notifications'])
        finally:os.killpg(second.pid,signal.SIGTERM);second.wait(15)
-       evidence.append({'app':app,'acknowledged_before_crash':1200,'jobs_pending_at_crash':pending_at_crash,'leased_jobs_at_crash':leased_at_crash,'recipient_receipts_at_crash':len(receipts_at_crash),'mode':'inflight','completed_after_restart':receipt,'restart_did_not_duplicate_receipts':True})
+       evidence.append({'app':app,'acknowledged_before_crash':len(acknowledged),'committed_before_crash':len(expected),'unacknowledged_commits_at_crash':len(expected)-len(acknowledged),'jobs_pending_at_crash':pending_at_crash,'leased_jobs_at_crash':leased_at_crash,'recipient_receipts_at_crash':len(receipts_at_crash),'mode':'inflight','completed_after_restart':receipt,'restart_did_not_duplicate_receipts':True})
       finally:
        if proc.poll() is None:os.killpg(proc.pid,signal.SIGKILL);proc.wait()
      b.validate_server_log(dest/'restart.log')

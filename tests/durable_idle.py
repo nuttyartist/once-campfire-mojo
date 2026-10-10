@@ -19,5 +19,6 @@ class IdleWorkers(unittest.TestCase):
                     time.sleep(5.5)
                     db.rollback()
                 self.assertEqual(local.request('/up')[0],200)
+        print('PASS: empty C worker pools remain read-only across a 5.5s writer lock',flush=True)
 
 if __name__=='__main__':unittest.main(verbosity=2)
