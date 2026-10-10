@@ -57,6 +57,26 @@ class MixedWorkloads(unittest.TestCase):
                     self.assertEqual(db.execute('PRAGMA integrity_check').fetchone(),('ok',))
                     self.assertEqual(db.execute('SELECT count(*) FROM active_storage_variant_records WHERE blob_id=?',(blob,)).fetchone()[0],1)
 
+    def test_bot_credentials_are_rechecked_after_slow_preparation(self):
+        with tempfile.TemporaryDirectory(prefix='mojo-media-revocation-') as temp:
+            root=Path(temp);entered=root/'decoder-entered';library=root/'faults.so'
+            subprocess.run(['clang','-shared','-fPIC',str(Path(__file__).with_name('network_faults.c')),'-o',str(library),'-ldl'],check=True)
+            with patch.dict(os.environ,{'LD_PRELOAD':str(library),'CAMPFIRE_TEST_MEDIA_ENTERED':str(entered)}), local.server('mojo',root/'logs',cache=False) as (database,runtime,_):
+                labels=json.loads((local.SEED/'labels.json').read_text())
+                helper=full.Full('test_04_avatar_real_decode');helper.cookie=local.login(labels);helper.rid=labels['rooms.watercooler']
+                self.assertEqual(helper.request('/account/bots','POST',fields={'user[name]':'Revoked while preparing'})[0],303)
+                with local.connection(database) as db:
+                    bot,key=db.execute("SELECT id,bot_token FROM users WHERE name='Revoked while preparing'").fetchone()
+                    db.execute("INSERT INTO memberships(room_id,user_id,created_at,updated_at) VALUES(?,?,datetime('now'),datetime('now'))",(helper.rid,bot))
+                before={str(path) for path in (runtime/'files').rglob('*') if path.is_file()}
+                replies=[];image=(local.VERIFICATION/'test/fixtures/avatar.webp').read_bytes()
+                thread=threading.Thread(target=lambda:replies.append(helper.multipart(f'/rooms/{helper.rid}/{bot}-{key}/messages',{}, {'attachment':('revoked.webp','image/webp',image)})))
+                thread.start();eventually(entered.exists,'decoder did not start')
+                with local.connection(database) as db:db.execute("UPDATE users SET bot_token='rotated-during-preparation' WHERE id=?",(bot,))
+                thread.join(12);self.assertFalse(thread.is_alive());self.assertEqual(replies[0][0],404,replies[0][2])
+                with local.connection(database) as db:self.assertEqual(db.execute('SELECT count(*) FROM messages WHERE creator_id=?',(bot,)).fetchone()[0],0)
+                self.assertEqual({str(path) for path in (runtime/'files').rglob('*') if path.is_file()},before)
+
     def test_failed_admission_rolls_back_prepared_objects_and_records(self):
         with tempfile.TemporaryDirectory(prefix='mojo-media-rollback-') as temp, local.server('mojo',Path(temp),cache=False) as (database,runtime,_):
             labels=json.loads((local.SEED/'labels.json').read_text())

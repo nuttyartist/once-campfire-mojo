@@ -266,7 +266,7 @@ struct App(Movable):
             form.fields["message[body]"] = raw
         if req.method=="POST" and len(segments)==5:
             var cid = token()
-            var response = self.post(req.copy(),uid,cid)
+            var response = self.post(req.copy(),uid,cid,String(bot_key[1]))
             if response.status==200:
                 return html("",201,"Location: "+req.origin()+"/rooms/"+rid+"/messages/"+self.db.scalar("SELECT id FROM messages WHERE creator_id=? AND client_message_id=?",[uid,cid])+"\r\n")
             return response^
@@ -275,6 +275,10 @@ struct App(Movable):
         storage.preflight_form(self.db,self.signer,form)
         _ = self.db.rows("BEGIN IMMEDIATE")
         try:
+            if self.db.scalar("SELECT 1 FROM users u JOIN memberships mm ON mm.user_id=u.id WHERE u.id=? AND u.bot_token=? AND u.role=2 AND u.status=0 AND NOT EXISTS(SELECT 1 FROM bans WHERE user_id=u.id) AND mm.room_id=?",[uid,String(bot_key[1]),rid])!="1":
+                _ = self.db.rows("ROLLBACK")
+                storage.rollback(self.db)
+                return html("Not found",404)
             var result = message_actions.route(self.db,self.signer,req,uid,form)
             if result.status>=400 or result.status==0:
                 _ = self.db.rows("ROLLBACK")
@@ -542,7 +546,7 @@ struct App(Movable):
             self.cache[key] = wire
         return wire^
 
-    def post(mut self, req: Request, uid_override: String = "", cid_override: String = "") raises -> Response:
+    def post(mut self, req: Request, uid_override: String = "", cid_override: String = "", bot_token: String = "") raises -> Response:
         var segments = req.path.split("/")
         if (
             len(segments) != 4
@@ -579,6 +583,10 @@ struct App(Movable):
         _ = self.db.rows("BEGIN IMMEDIATE")
         try:
             var uid = uid_override if uid_override != "" else self.user(req)
+            if uid_override!="" and self.db.scalar("SELECT 1 FROM users WHERE id=? AND bot_token=? AND role=2 AND status=0 AND NOT EXISTS(SELECT 1 FROM bans WHERE user_id=users.id)",[uid,bot_token])!="1":
+                _ = self.db.rows("ROLLBACK")
+                storage.rollback(self.db)
+                return html("Not found",404)
             if uid == "":
                 _ = self.db.rows("ROLLBACK")
                 return html("Unauthorized", 401)
