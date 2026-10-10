@@ -93,7 +93,13 @@ class StorageRecovery(unittest.TestCase):
                     state.write_text("allow")
                     with local.connection(database) as db:
                         db.execute("UPDATE mojo_file_purges SET available_at=0")
-                    eventually(lambda: not path.exists(), "committed cleanup did not resume")
+                    # Unlink happens before directory fsync and the SQL completion
+                    # commit. Observing the absent file alone races that commit.
+                    def cleanup_completed():
+                        with local.connection(database) as db:
+                            pending = db.execute("SELECT count(*) FROM mojo_file_purges WHERE key=?", (key,)).fetchone()[0]
+                        return not path.exists() and pending == 0
+                    eventually(cleanup_completed, "committed cleanup did not resume")
                     with local.connection(database) as db:
                         self.assertEqual(db.execute("SELECT count(*) FROM mojo_file_purges WHERE key=?", (key,)).fetchone()[0], 0)
                         self.assertEqual(db.execute("PRAGMA integrity_check").fetchone(), ("ok",))
