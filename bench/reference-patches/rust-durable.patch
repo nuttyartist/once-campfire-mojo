@@ -277,11 +277,17 @@ index 0d7bdcc..569de92 100644
  pub mod events;
  #[cfg(feature = "test-support")]
 diff --git a/crates/db/src/schema.rs b/crates/db/src/schema.rs
-index 1fd542e..fb32064 100644
+index 1fd542e..13e051f 100644
 --- a/crates/db/src/schema.rs
 +++ b/crates/db/src/schema.rs
-@@ -63,7 +63,11 @@ pub fn configure_connection(conn: &Connection) -> Result<()> {
-     conn.busy_timeout(std::time::Duration::from_millis(BUSY_TIMEOUT_MS))?;
+@@ -60,10 +60,16 @@ pub const BUSY_TIMEOUT_MS: u64 = 5000;
+ /// Applies the per-connection settings Rails applies (`SQLite3Adapter#configure_connection`),
+ /// except `mmap_size`: every reader remaps a memory-mapped database after each commit.
+ pub fn configure_connection(conn: &Connection) -> Result<()> {
+-    conn.busy_timeout(std::time::Duration::from_millis(BUSY_TIMEOUT_MS))?;
++    // The opt-in durable comparison uses the same write-lock budget as Mojo.
++    let timeout_ms = if crate::durable::enabled() { 10_000 } else { BUSY_TIMEOUT_MS };
++    conn.busy_timeout(std::time::Duration::from_millis(timeout_ms))?;
      conn.pragma_update(None, "foreign_keys", true)?;
      conn.pragma_update(None, "journal_mode", "wal")?;
 -    conn.pragma_update(None, "synchronous", "normal")?;

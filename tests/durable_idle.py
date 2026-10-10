@@ -14,11 +14,11 @@ class IdleWorkers(unittest.TestCase):
                 with local.connection(database) as db:
                     self.assertEqual(db.execute('SELECT count(*) FROM campfire_jobs').fetchone()[0],0)
                     db.execute('BEGIN IMMEDIATE')
-                    # Longer than C's 5s busy timeout. A write-polling idle pool
+                    # Longer than C's 10s durable busy timeout. A write-polling idle pool
                     # would emit a durable claim failure and fail the log gate.
-                    time.sleep(5.5)
+                    time.sleep(10.5)
                     db.rollback()
                 self.assertEqual(local.request('/up')[0],200)
-        print('PASS: empty C worker pools remain read-only across a 5.5s writer lock',flush=True)
+        print('PASS: empty C worker pools remain read-only across a 10.5s writer lock',flush=True)
 
 if __name__=='__main__':unittest.main(verbosity=2)

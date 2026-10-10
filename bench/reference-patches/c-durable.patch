@@ -15,10 +15,32 @@ index 9c21384..6c6b9af 100644
 +
 +`CAMPFIRE_JOBS_PAUSED=1` keeps workers paused for a controlled restart test without losing outbox work. Normal application tests run in the upstream mode; the shared durability gate runs explicitly in the new mode. The original shared benchmark fixture is copied, never modified.
 diff --git a/src/db/reader.c b/src/db/reader.c
-index 79e0e77..13a5148 100644
+index 79e0e77..065b2c7 100644
 --- a/src/db/reader.c
 +++ b/src/db/reader.c
-@@ -127,6 +127,9 @@ static cf_err configure_connection(sqlite3 *handle, bool read_only) {
+@@ -13,6 +13,7 @@
+  * ".ffffff" only when the microseconds are non-zero.
+  */
+ #include "db/db_internal.h"
++#include "jobs/durable.h"
+ 
+ #include <stdarg.h>
+ #include <stdio.h>
+@@ -91,9 +92,10 @@ static cf_err pragma_text(sqlite3 *handle, const char *sql, char *out,
+ }
+ 
+ static cf_err configure_connection(sqlite3 *handle, bool read_only) {
+-    if (sqlite3_busy_timeout(handle, CF_DB_BUSY_TIMEOUT_MS) != SQLITE_OK) {
+-        return cf_db_failf(CF_NOMEM, "cannot set busy_timeout=%d ms",
+-                           CF_DB_BUSY_TIMEOUT_MS);
++    /* Match the durable comparison's worker and Mojo write-lock budget. */
++    int timeout_ms = cf_durable_enabled() ? 10000 : CF_DB_BUSY_TIMEOUT_MS;
++    if (sqlite3_busy_timeout(handle, timeout_ms) != SQLITE_OK) {
++        return cf_db_failf(CF_NOMEM, "cannot set busy_timeout=%d ms", timeout_ms);
+     }
+     if (sqlite3_wal_autocheckpoint(handle, CF_DB_AUTOCHECKPOINT_PAGES) !=
+         SQLITE_OK) {
+@@ -127,6 +129,9 @@ static cf_err configure_connection(sqlite3 *handle, bool read_only) {
          if (err != CF_OK) return err;
      }
  
@@ -73,7 +95,7 @@ index 9e56f2e..e31274d 100644
          free(w->queue);
 diff --git a/src/jobs/durable.h b/src/jobs/durable.h
 new file mode 100644
-index 0000000..5c3a74e
+index 0000000..add8ca9
 --- /dev/null
 +++ b/src/jobs/durable.h
 @@ -0,0 +1,39 @@
@@ -93,7 +115,7 @@ index 0000000..5c3a74e
 +static inline int cf_durable_open(const char *path, sqlite3 **out) {
 +    int rc=sqlite3_open_v2(path,out,SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE|SQLITE_OPEN_NOMUTEX,NULL);
 +    if(rc!=SQLITE_OK) return rc;
-+    sqlite3_busy_timeout(*out,5000);
++    sqlite3_busy_timeout(*out,10000);
 +    const char *mode=getenv("CAMPFIRE_SQLITE_SYNCHRONOUS");
 +    return sqlite3_exec(*out,mode && strcmp(mode,"FULL")==0 ? "PRAGMA synchronous=FULL" : "PRAGMA synchronous=NORMAL",NULL,NULL,NULL);
 +}
