@@ -91,8 +91,12 @@ def main():
  metadata={'complete':False,'started_at_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'platform':list(os.uname()),'server_cpus':args.server_cpus,'client_cpus':args.client_cpus,'rounds':args.rounds,'order':'rotating Latin-square order: Rust/C/Mojo, C/Mojo/Rust, Mojo/Rust/C','duration_seconds':args.duration,'warmup_seconds':args.warmup,'concurrency':16,'response_cache_mib':0 if args.no_cache else 64,'seed_sha256':seed,'durability':'SQLite WAL synchronous=FULL; atomic message/outbox; persisted retries and receipts; at-least-once recovery','completion':'Post rate includes HTTP plus final job drain, exact message IDs and subscription receipt sets required','notifications':'Three selected subscriptions/message; canonical notification preparation and identical endpoint-policy rejection; no remote push network in timed workloads','active_cable_subscribers':0,'parity_gate':parity,'local_reference_patches':True,'environment':ENV,'revisions':{},'patch_sha256':{},'loadgen_sha256':hashlib.sha256(b.LOADGEN.read_bytes()).hexdigest()}
  for app in ['rust','c','mojo']:
   path=b.WORKSPACE/f'once-campfire-{app}'
-  metadata['revisions'][app]=b.command(['git','-C',path,'rev-parse','HEAD']).strip()
-  metadata['patch_sha256'][app]=hashlib.sha256(b.command(['git','-C',path,'diff','HEAD']).encode()).hexdigest()
+  # These exact user-selected sibling checkouts are mounted from the host;
+  # their UID can differ from the container user. Trust only this path, only
+  # for the read-only invocation; never alter global Git configuration.
+  git=['git','-c','safe.directory='+str(path),'-C',path]
+  metadata['revisions'][app]=b.command([*git,'rev-parse','HEAD']).strip()
+  metadata['patch_sha256'][app]=hashlib.sha256(b.command([*git,'diff','HEAD']).encode()).hexdigest()
  b.write_json(args.output/'metadata.json',metadata)
  results=[]
  for round_no in range(1,args.rounds+1):
