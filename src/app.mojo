@@ -115,7 +115,7 @@ struct App(Movable):
             return controllers.preview(form).pack(req.gzip())
         # Posting owns its transaction; reuse the already validated form.
         if len(segments)==4 and String(segments[1])=="rooms" and String(segments[3])=="messages" and req.method=="POST":
-            return self.post(req,form).pack(req.gzip())
+            return self.post(req,form^).pack(req.gzip())
         # Slow cryptography and remote validation do not own the SQLite writer.
         # Authorization and uniqueness are checked again in the write transaction.
         var preflight_uid = self.user(req) if req.method!="GET" else String()
@@ -265,7 +265,7 @@ struct App(Movable):
             form.fields["message[body]"] = raw
         if req.method=="POST" and len(segments)==5:
             var cid = token()
-            var response = self.post(req,form,uid,cid,String(bot_key[1]))
+            var response = self.post(req,form^,uid,cid,String(bot_key[1]))
             if response.status==200:
                 return html("",201,"Location: "+req.origin()+"/rooms/"+rid+"/messages/"+self.db.scalar("SELECT id FROM messages WHERE creator_id=? AND client_message_id=?",[uid,cid])+"\r\n")
             return response^
