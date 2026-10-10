@@ -1,7 +1,21 @@
 # Schema DDL from the Rails-compatible shared database (no seed data).
 from database import Database
+import schema_contract
 
 def initialize(mut db: Database) raises:
+    # Refuse unsupported source shapes before creating tables or changing rows.
+    schema_contract.validate(db)
+    _ = db.rows("BEGIN IMMEDIATE")
+    try:
+        migrate(db)
+        schema_contract.validate(db,False)
+        _ = db.rows("COMMIT")
+    except e:
+        _ = db.rows("ROLLBACK")
+        raise e^
+
+
+def migrate(mut db: Database) raises:
     _ = db.rows("CREATE TABLE IF NOT EXISTS \"accounts\" (\"id\" integer PRIMARY KEY AUTOINCREMENT NOT NULL, \"created_at\" datetime(6) NOT NULL, \"custom_styles\" text, \"join_code\" varchar NOT NULL, \"name\" varchar NOT NULL, \"settings\" json, \"singleton_guard\" integer DEFAULT 0 NOT NULL, \"updated_at\" datetime(6) NOT NULL)")
     _ = db.rows("CREATE TABLE IF NOT EXISTS \"action_text_rich_texts\" (\"id\" integer PRIMARY KEY AUTOINCREMENT NOT NULL, \"body\" text, \"created_at\" datetime(6) NOT NULL, \"name\" varchar NOT NULL, \"record_id\" bigint NOT NULL, \"record_type\" varchar NOT NULL, \"updated_at\" datetime(6) NOT NULL)")
     _ = db.rows("CREATE TABLE IF NOT EXISTS \"active_storage_blobs\" (\"id\" integer PRIMARY KEY AUTOINCREMENT NOT NULL, \"byte_size\" bigint NOT NULL, \"checksum\" varchar, \"content_type\" varchar, \"created_at\" datetime(6) NOT NULL, \"filename\" varchar NOT NULL, \"key\" varchar NOT NULL, \"metadata\" text, \"service_name\" varchar NOT NULL)")
@@ -50,9 +64,47 @@ def initialize(mut db: Database) raises:
     _ = db.rows("CREATE TABLE IF NOT EXISTS campfire_delivery_receipts(message_id INTEGER NOT NULL,target_id INTEGER NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(message_id,target_id,kind))")
     _ = db.rows("CREATE INDEX IF NOT EXISTS mojo_jobs_available ON mojo_jobs(failed,available_at,lease_until)")
     _ = db.rows("CREATE TABLE IF NOT EXISTS mojo_deliveries (message_id INTEGER NOT NULL, kind TEXT NOT NULL, target_id INTEGER NOT NULL, PRIMARY KEY(message_id,kind,target_id))")
+    _ = db.rows("CREATE TABLE IF NOT EXISTS mojo_file_purges (key TEXT PRIMARY KEY, attempts INTEGER NOT NULL DEFAULT 0, available_at INTEGER NOT NULL DEFAULT (unixepoch()), error TEXT)")
     var has_kind = False
     for column in db.rows("PRAGMA table_info(mojo_jobs)"):
         if column[1]=="kind":
             has_kind = True
     if not has_kind:
         _ = db.rows("ALTER TABLE mojo_jobs ADD COLUMN kind TEXT NOT NULL DEFAULT 'message'")
+
+    var has_count = False
+    for column in db.rows("PRAGMA table_info(rooms)"):
+        if column[1]=="messages_count":
+            has_count = True
+    if not has_count:
+        _ = db.rows("ALTER TABLE rooms ADD COLUMN messages_count INTEGER NOT NULL DEFAULT 0")
+    _ = db.rows("CREATE INDEX IF NOT EXISTS index_messages_on_room_id_and_created_at ON messages(room_id,created_at)")
+    _ = db.rows("CREATE INDEX IF NOT EXISTS index_messages_on_room_id_and_updated_at ON messages(room_id,updated_at)")
+    # Match Room::MessagesCount, including bulk/foreign SQL, without callbacks.
+    _ = db.rows("UPDATE rooms SET messages_count=(SELECT count(*) FROM messages WHERE room_id=rooms.id)")
+    _ = db.rows("DROP TRIGGER IF EXISTS messages_ai_rooms_messages_count")
+    _ = db.rows("CREATE TRIGGER messages_ai_rooms_messages_count AFTER INSERT ON messages BEGIN UPDATE rooms SET messages_count=messages_count+1 WHERE id=NEW.room_id; END")
+    _ = db.rows("DROP TRIGGER IF EXISTS messages_ad_rooms_messages_count")
+    _ = db.rows("CREATE TRIGGER messages_ad_rooms_messages_count AFTER DELETE ON messages BEGIN UPDATE rooms SET messages_count=messages_count-1 WHERE id=OLD.room_id; END")
+    _ = db.rows("DROP TRIGGER IF EXISTS messages_au_rooms_messages_count")
+    _ = db.rows("CREATE TRIGGER messages_au_rooms_messages_count AFTER UPDATE OF room_id ON messages WHEN OLD.room_id IS NOT NEW.room_id BEGIN UPDATE rooms SET messages_count=messages_count-1 WHERE id=OLD.room_id; UPDATE rooms SET messages_count=messages_count+1 WHERE id=NEW.room_id; END")
+    _ = db.rows("INSERT OR IGNORE INTO schema_migrations(version) VALUES(?)",["20231215043540"])
+    _ = db.rows("INSERT OR IGNORE INTO schema_migrations(version) VALUES(?)",["20231220143106"])
+    _ = db.rows("INSERT OR IGNORE INTO schema_migrations(version) VALUES(?)",["20240110071740"])
+    _ = db.rows("INSERT OR IGNORE INTO schema_migrations(version) VALUES(?)",["20240115124901"])
+    _ = db.rows("INSERT OR IGNORE INTO schema_migrations(version) VALUES(?)",["20240130003150"])
+    _ = db.rows("INSERT OR IGNORE INTO schema_migrations(version) VALUES(?)",["20240130213001"])
+    _ = db.rows("INSERT OR IGNORE INTO schema_migrations(version) VALUES(?)",["20240131105830"])
+    _ = db.rows("INSERT OR IGNORE INTO schema_migrations(version) VALUES(?)",["20240209110503"])
+    _ = db.rows("INSERT OR IGNORE INTO schema_migrations(version) VALUES(?)",["20250825100957"])
+    _ = db.rows("INSERT OR IGNORE INTO schema_migrations(version) VALUES(?)",["20250825100958"])
+    _ = db.rows("INSERT OR IGNORE INTO schema_migrations(version) VALUES(?)",["20250825100959"])
+    _ = db.rows("INSERT OR IGNORE INTO schema_migrations(version) VALUES(?)",["20251126092013"])
+    _ = db.rows("INSERT OR IGNORE INTO schema_migrations(version) VALUES(?)",["20251126115722"])
+    _ = db.rows("INSERT OR IGNORE INTO schema_migrations(version) VALUES(?)",["20251126130131"])
+    _ = db.rows("INSERT OR IGNORE INTO schema_migrations(version) VALUES(?)",["20251212154340"])
+    _ = db.rows("INSERT OR IGNORE INTO schema_migrations(version) VALUES(?)",["20261004225000"])
+    _ = db.rows("INSERT OR IGNORE INTO schema_migrations(version) VALUES(?)",["20261005022000"])
+    _ = db.rows("INSERT OR IGNORE INTO schema_migrations(version) VALUES(?)",["20261007190000"])
+    _ = db.rows("CREATE TABLE IF NOT EXISTS mojo_schema_migrations(version INTEGER PRIMARY KEY)")
+    _ = db.rows("INSERT OR IGNORE INTO mojo_schema_migrations(version) VALUES(1),(2)")

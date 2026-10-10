@@ -27,12 +27,24 @@ long password_hash(const char *password, char *out) {
   if (!value || strlen(value) != 60) return -1;
   memcpy(out, value, 61); return 0;
 }
+static int sync_parent(const char *path) {
+  char *copy=strdup(path);if(!copy)return -1;
+  char *slash=strrchr(copy,'/');
+  if(slash){if(slash==copy)slash[1]=0;else *slash=0;}
+  else {free(copy);copy=strdup(".");if(!copy)return -1;}
+  int fd=open(copy,O_RDONLY|O_DIRECTORY|O_CLOEXEC|O_NOFOLLOW);free(copy);
+  if(fd<0)return -1;int rc=fsync(fd);if(close(fd))rc=-1;return rc;
+}
+static int mkdir_durable(const char *path) {
+  if(mkdir(path,0700))return errno==EEXIST?0:-1;
+  return sync_parent(path);
+}
 long fs_mkdirs(const char *path) {
   char *p = strdup(path); if (!p) return -1;
   for (char *c=p+1; *c; c++) if (*c=='/') {
-    *c=0; if (mkdir(p,0700) && errno!=EEXIST) { free(p);return -1; } *c='/';
+    *c=0; if (mkdir_durable(p)) { free(p);return -1; } *c='/';
   }
-  int rc=mkdir(p,0700); free(p); return rc && errno!=EEXIST ? -1 : 0;
+  int rc=mkdir_durable(p); free(p); return rc;
 }
 /* Open relative to a trusted directory, rejecting symlinks in every component. */
 long fs_open_beneath(const char *root, const char *relative) {
@@ -80,6 +92,12 @@ long bus_publish(const void *bytes, long length) {
   memcpy(e->bytes,bytes,length);e->length=length;e->sequence=seq;
   pthread_mutex_unlock(&bus->mutex);return seq;
 }
+void bus_resync(void) {
+  bus_lock();
+  for(int i=0;i<BUS_SLOTS;i++)bus->events[i].sequence=-1;
+  bus->sequence+=BUS_SLOTS;
+  pthread_mutex_unlock(&bus->mutex);
+}
 long bus_read(long seq, void *bytes, long capacity) {
   bus_lock();
   struct event *e=&bus->events[seq%BUS_SLOTS];long n=e->length;
@@ -103,9 +121,9 @@ long fs_write_new(const char *path,const void *bytes,long size) {
   int fd=open(path,O_WRONLY|O_CREAT|O_EXCL|O_CLOEXEC|O_NOFOLLOW,0600);
   if(fd<0)return -1;
   long offset=0;while(offset<size){ssize_t n=write(fd,(const char*)bytes+offset,size-offset);if(n<0&&errno==EINTR)continue;if(n<=0){close(fd);unlink(path);return -1;}offset+=n;}
-  if(fsync(fd)){close(fd);unlink(path);return -1;}return close(fd);
+  if(fsync(fd)){close(fd);unlink(path);return -1;}if(close(fd))return -1;return sync_parent(path);
 }
-long fs_unlink(const char *path) { return unlink(path); }
+long fs_unlink(const char *path) { if(unlink(path)&&errno!=ENOENT)return -1;return sync_parent(path); }
 
 #include <vips/vips.h>
 static void image_initialize(void) {
@@ -177,7 +195,7 @@ long fs_copy_range_new(long source,long offset,long length,const char *path) {
   char buf[65536];long done=0;int ok=1;
   while(done<length){ssize_t n=pread(source,buf,(size_t)(length-done>65536?65536:length-done),offset+done);if(n<0&&errno==EINTR)continue;if(n<=0||fs_append(fd,buf,n)){ok=0;break;}done+=n;}
   if(ok&&fsync(fd))ok=0;if(close(fd))ok=0;
-  if(!ok){unlink(path);return -1;}return 0;
+  if(!ok){unlink(path);return -1;}return sync_parent(path);
 }
 long image_dimensions_path(const char *path,long *dimensions) {
   image_initialize();VipsImage *im=vips_image_new_from_file(path,NULL);if(!im){vips_error_clear();return -1;}

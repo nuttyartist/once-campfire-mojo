@@ -12,6 +12,13 @@ def publish(stream: String, payload: String) raises:
         raise Error("Broadcast exceeds bounded delivery log")
 
 
+def stage(mut db: Database, stream: String, payload: String) raises:
+    var event = stream+"\n"+payload
+    if event.byte_length()>1048576:
+        raise Error("HTTP 422: Rendered update exceeds the 1 MiB realtime limit")
+    db.pending_events.append(event^)
+
+
 def room_stream(kind: String, rid: String) raises -> String:
     return base64("gid://campfire/" + kind + "/" + rid, True, False) + ":messages"
 
@@ -19,7 +26,7 @@ def room_stream(kind: String, rid: String) raises -> String:
 def room(mut db: Database, rid: String, html: String) raises:
     var kind = db.scalar("SELECT type FROM rooms WHERE id=?", [rid])
     if kind != "":
-        db.pending_events.append(room_stream(kind, rid)+"\n"+json_string(html))
+        stage(db,room_stream(kind, rid),json_string(html))
 
 
 def refresh_sidebars(mut db: Database, mut signer: Signer, req: Request) raises:
@@ -27,11 +34,14 @@ def refresh_sidebars(mut db: Database, mut signer: Signer, req: Request) raises:
     for user in users:
         var v = views.sidebar_values(db,signer,user[0],req)
         var stream = base64("gid://campfire/User/"+user[0],True,False)+":rooms"
-        publish(stream,json_string(ui.stream("update","shared_rooms",v["shared"])+ui.stream("update","direct_rooms",v["directs"])))
+        stage(db,stream,json_string(ui.stream("update","shared_rooms",v["shared"])+ui.stream("update","direct_rooms",v["directs"])))
 
 
-def flush(mut db: Database) raises:
+def flush(mut db: Database):
     for event in db.pending_events:
-        var parts = event.split("\n",maxsplit=1)
-        publish(String(parts[0]),String(parts[1]))
+        if external_call["bus_publish",Int](event.as_bytes().unsafe_ptr(),event.byte_length())<0:
+            # stage() checked the bound before commit. If an invariant breaks,
+            # force reconnect/refresh instead of returning a false HTTP failure.
+            print("Realtime admission invariant failed; reconnecting clients")
+            external_call["bus_resync",NoneType]()
     db.pending_events.clear()

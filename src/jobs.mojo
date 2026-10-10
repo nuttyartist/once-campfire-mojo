@@ -1,3 +1,4 @@
+import parameters
 # Durable notification and bot webhook delivery. Routing and payload policy live in Mojo.
 from std.ffi import external_call
 from std.os import getenv
@@ -117,9 +118,7 @@ def process(mut db: Database, mid: String, hooks: Bool = True, job_id: String = 
         receipt(db,mid,"unread",row[0])
     var title = row[4] if row[2] == "Rooms::Direct" else row[3]
     var signer = Signer()
-    var body = richtext.resolved(db,signer,row[5],True)
-    if body=="":
-        body = db.scalar("SELECT b.filename FROM active_storage_blobs b JOIN active_storage_attachments a ON a.blob_id=b.id WHERE a.record_type='Message' AND a.record_id=? AND a.name='attachment' LIMIT 1",[mid])
+    var body = message_actions.plain_body(db,signer,mid,row[5])
     var mention_ids = richtext.mention_ids(db,signer,row[5])
     var mention_json = "["+",".join(mention_ids)+"]"
     if row[2] != "Rooms::Direct":
@@ -218,6 +217,10 @@ def run(path: String) raises:
             continue
         var rows = db.rows("UPDATE mojo_jobs SET lease_until=unixepoch()+600,attempts=attempts+1 WHERE id=(SELECT id FROM mojo_jobs WHERE failed=0 AND available_at<=unixepoch() AND lease_until<unixepoch() ORDER BY id LIMIT 1) RETURNING id,message_id,hooks,attempts,kind")
         if len(rows)==0:
+            try:
+                storage.retry_cleanup(db)
+            except e:
+                print("File cleanup retry failed:",e)
             external_call["os_sleep_ms",NoneType](50)
             continue
         var job = rows[0].copy()
@@ -251,13 +254,13 @@ def run(path: String) raises:
 def broadcast(
     mut db: Database, room_id: String, kind: String, mid: String, body: String
 ) raises:
-    # Publish after commit to every authorized Action Cable subscriber.
+    # Prepare and admit inside the transaction; flush only after commit.
     var stream = (
         base64("gid://campfire/" + kind + "/" + room_id, True, False)
         + ":messages"
     )
     var payload = json_string(body)
-    pubsub.publish(stream, payload)
+    pubsub.stage(db,stream,payload)
     count(4)
     if getenv("MOJO_AUDIT_PATH", "") != "":
         trace(
@@ -315,9 +318,9 @@ def deliver_webhook(mut db: Database, mut signer: Signer, mid: String, row: List
     renew(db,job_id)
     if delivered(db,mid,"hook",bot[0]):
         return
-    var plain = String(richtext.resolved(db,signer,row[5],True).replace("@"+bot[1],"").strip())
+    var plain = String(message_actions.plain_body(db,signer,mid,row[5]).replace("@"+bot[1],"").strip())
     var payload = '{"user":{"id":'+row[1]+',"name":'+json_string(row[4])+'},"room":{"id":'+row[0]+',"name":'+("null" if row[2]=="Rooms::Direct" else json_string(row[3]))+',"path":'+json_string("/rooms/"+row[0]+"/"+bot[0]+"-"+bot[2]+"/messages")+'},"message":{"id":'+mid+',"body":{"html":'+json_string(richtext.body_html(db,signer,row[5]))+',"plain":'+json_string(plain)+'},"path":'+json_string("/rooms/"+row[0]+"/@"+mid)+'}}'
-    var response = network.request(bot[3],"POST","Content-Type: application/json",payload,True,7000)
+    var response = network.request(bot[3],"POST","Content-Type: application/json",payload,True,7000,100_000_000)
     var attachment = response.content_type!="" and not response.content_type.startswith("text/html") and not response.content_type.startswith("text/plain")
     if response.status==-3:
         response.body = "Failed to respond within 7 seconds"
@@ -329,11 +332,18 @@ def deliver_webhook(mut db: Database, mut signer: Signer, mid: String, row: List
     if response.body=="":
         receipt(db,mid,"hook",bot[0])
         return
+    var attachment_form = parameters.Form()
+    if attachment:
+        var kind = String(response.content_type.split(";")[0])
+        var extensions: Dict[String,String] = {"image/png":"png","image/jpeg":"jpg","image/webp":"webp","application/pdf":"pdf","video/mp4":"mp4","audio/mpeg":"mp3"}
+        attachment_form.files["message[attachment]"] = Upload("attachment."+extensions.get(kind,""),kind,response.body)
+        storage.preflight_form(db,signer,attachment_form)
     _ = db.rows("BEGIN IMMEDIATE")
     try:
         # Membership can change while the remote endpoint is answering.
         if db.scalar("SELECT 1 FROM memberships WHERE room_id=? AND user_id=?",[row[0],bot[0]])!="1":
             _ = db.rows("ROLLBACK")
+            storage.rollback(db)
             return
         var now = db.scalar("SELECT strftime('%Y-%m-%d %H:%M:%f','now')")
         var cid = token()
@@ -342,9 +352,7 @@ def deliver_webhook(mut db: Database, mut signer: Signer, mid: String, row: List
         var body = String()
         var plain = String()
         if attachment:
-            var kind = String(response.content_type.split(";")[0])
-            var extensions: Dict[String,String] = {"image/png":"png","image/jpeg":"jpg","image/webp":"webp","application/pdf":"pdf","video/mp4":"mp4","audio/mpeg":"mp3"}
-            var file = Upload("attachment."+extensions.get(kind,""),kind,response.body)
+            var file = attachment_form.files["message[attachment]"].copy()
             var bid = storage.upload(db,file)
             storage.attach(db,bid,"Message",reply_id,"attachment")
             storage.prepare(db,bid)
@@ -355,23 +363,24 @@ def deliver_webhook(mut db: Database, mut signer: Signer, mid: String, row: List
         _ = db.rows("INSERT INTO action_text_rich_texts(name,record_type,record_id,body,created_at,updated_at) VALUES('body','Message',?,?,?,?)",[reply_id,body,now,now])
         richtext.sync_embeds(db,signer,db.last_id(),body)
         _ = db.rows("INSERT INTO message_search_index(rowid,body) VALUES(?,?)",[reply_id,plain])
-        _ = db.rows("UPDATE rooms SET updated_at=?,messages_count=messages_count+1 WHERE id=?",[now,row[0]])
+        _ = db.rows("UPDATE rooms SET updated_at=? WHERE id=?",[now,row[0]])
         _ = db.rows("UPDATE memberships SET unread_at=?,updated_at=? WHERE room_id=? AND user_id<>? AND involvement<>'invisible' AND (unread_at IS NULL OR (SELECT type FROM rooms WHERE id=room_id)='Rooms::Direct') AND (connected_at IS NULL OR connected_at<datetime('now','-60 seconds'))",[now,now,row[0],bot[0]])
         enqueue(db,reply_id,False)
         receipt(db,mid,"hook",bot[0])
-        _ = db.rows("COMMIT")
-        storage.commit(db)
         var message = db.rows(message_actions.COLUMNS+"WHERE m.id=?",[reply_id])[0].copy()
         var target = "messages_"+row[2].replace("::","_").lower()+"_"+row[0]
         var html = '<turbo-stream action="append" target="'+target+'"><template>'+views.message(db,signer,message)+'</template></turbo-stream>'
         broadcast(db,row[0],row[2],reply_id,html)
+        _ = db.rows("COMMIT")
+        storage.commit(db)
+        pubsub.flush(db)
         count(0)
     except e:
-        storage.rollback(db)
         try:
             _ = db.rows("ROLLBACK")
         except:
             pass
+        storage.rollback(db)
         raise e^
 
 

@@ -16,6 +16,11 @@ struct Database(Movable):
     var pending_files: List[String]
     var pending_events: List[String]
     var statements: Dict[String, Int]
+    # Request-owned immutable file plans; SQL admission remains atomic.
+    var preparing_media: Bool
+    var prepared_blobs: Dict[String, List[String]]
+    var prepared_variants: Dict[String, String]
+    var prepared_previews: Dict[String, String]
 
     def __init__(out self, var path: String) raises:
         self.handle = external_call["sql_open", Int](path.as_c_string_span())
@@ -25,6 +30,10 @@ struct Database(Movable):
         self.pending_files = List[String]()
         self.pending_events = List[String]()
         self.statements = Dict[String, Int]()
+        self.preparing_media = False
+        self.prepared_blobs = Dict[String,List[String]]()
+        self.prepared_variants = Dict[String,String]()
+        self.prepared_previews = Dict[String,String]()
         if self.handle == 0:
             raise Error("Cannot open database")
         _ = self.rows("PRAGMA journal_mode=WAL")
@@ -33,6 +42,7 @@ struct Database(Movable):
             raise Error("Invalid CAMPFIRE_SQLITE_SYNCHRONOUS")
         _ = self.rows("PRAGMA synchronous="+durability)
         _ = self.rows("PRAGMA foreign_keys=ON")
+        _ = self.rows("PRAGMA recursive_triggers=ON")
 
     def __deinit__(deinit self):
         if self.pending_download.fd>=0:

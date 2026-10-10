@@ -322,3 +322,21 @@ long dom_inner_html(long address,const char *value,long length) {
  for(xmlNodePtr child=root->children;child;child=child->next)xmlAddChild(node,xmlDocCopyNode(child,node->doc,1));
  xmlFreeDoc(doc);return 0;
 }
+
+long unicode_word(const char *utf8) {
+  gunichar cp=g_utf8_get_char_validated(utf8,-1);
+  if(cp==(gunichar)-1||cp==(gunichar)-2)return 0;
+  GUnicodeType t=g_unichar_type(cp);
+  return g_unichar_isalnum(cp)||t==G_UNICODE_NON_SPACING_MARK||t==G_UNICODE_SPACING_MARK||t==G_UNICODE_ENCLOSING_MARK||t==G_UNICODE_CONNECT_PUNCTUATION;
+}
+
+/* Rails encrypted-cookie primitive; metadata/expiry policy remains in Mojo. */
+long cookie_cipher(const char *keyhex,const void *iv,const void *input,long length,void *output,void *tag,long decrypt) {
+  unsigned char derived[64];if(unhex(keyhex,derived,64)!=64||length<0||length>8192)return -1;
+  EVP_CIPHER_CTX *ctx=EVP_CIPHER_CTX_new();int n=0,final=0,ok=0;
+  if(ctx){
+    if(decrypt)ok=EVP_DecryptInit_ex(ctx,EVP_aes_256_gcm(),NULL,derived,iv)&&EVP_DecryptUpdate(ctx,output,&n,input,(int)length)&&EVP_CIPHER_CTX_ctrl(ctx,EVP_CTRL_GCM_SET_TAG,16,tag)&&EVP_DecryptFinal_ex(ctx,(unsigned char*)output+n,&final);
+    else ok=EVP_EncryptInit_ex(ctx,EVP_aes_256_gcm(),NULL,derived,iv)&&EVP_EncryptUpdate(ctx,output,&n,input,(int)length)&&EVP_EncryptFinal_ex(ctx,(unsigned char*)output+n,&final)&&EVP_CIPHER_CTX_ctrl(ctx,EVP_CTRL_GCM_GET_TAG,16,tag);
+  }
+  EVP_CIPHER_CTX_free(ctx);OPENSSL_cleanse(derived,sizeof derived);return ok?n+final:-1;
+}

@@ -370,7 +370,7 @@ def resolve(mut db: Database, mut signer: Signer, node: Int, plain: Bool, mut me
             var gid = verified
             if gid=="" and sgid!="":
                 gid = display_user_gid(db,sgid)
-            var replacement = attrs.get("caption","") if plain else String("☒")
+            var replacement = String("☒")
             if regex("application/vnd.actiontext.opengraph-embed",attrs.get("content-type",""))[0]>=0:
                 var preview_attrs = attrs.copy()
                 if not wrap and "href" in preview_attrs:
@@ -404,6 +404,8 @@ def resolve(mut db: Database, mut signer: Signer, node: Int, plain: Bool, mut me
                 var content = attrs["content"]
                 if plain:
                     replacement = content_plain(content)
+                    if replacement=="" and String(action_sanitize(content).strip())=="":
+                        replacement = "☒"
                 elif attachment_depth<8:
                     var sanitized = sanitize_content(content)
                     replacement = (body_inner(db,signer,sanitized,attachment_depth+1) if wrap else resolved(db,signer,sanitized,False,True,attachment_depth+1)) if sanitized!="" else "☒"
@@ -411,7 +413,7 @@ def resolve(mut db: Database, mut signer: Signer, node: Int, plain: Bool, mut me
                     replacement = ""
                 if not plain and replacement!="☒":
                     replacement = '<figure class="attachment attachment--content">'+replacement+'</figure>'
-            elif "url" in attrs and (attrs.get("content-type","").startswith("image/") or attrs.get("content-type","")=="image"):
+            elif "url" in attrs and (attrs.get("url","").startswith("//") or regex("(?i)^[-a-z]+://|^(?:cid|data):",attrs.get("url",""))[0]>=0) and (attrs.get("content-type","").startswith("image/") or attrs.get("content-type","")=="image"):
                 var caption = attrs.get("caption","")
                 replacement = "["+(caption if caption!="" else "Image")+"]"
                 if not plain:
@@ -460,7 +462,6 @@ def resolved(mut db: Database, mut signer: Signer, var source: String, plain: Bo
         raise Error("Cannot parse attachments")
     try:
         var root = external_call["dom_root",Int](doc)
-        normalize_legacy(db,root)
         if not plain:
             if not preserve_style:
                 remove_solo_link(db,signer,root,source)
@@ -485,7 +486,6 @@ def mention_ids(mut db: Database, mut signer: Signer, var source: String) raises
     if doc==0:
         raise Error("Cannot parse mentions")
     try:
-        normalize_legacy(db,external_call["dom_root",Int](doc))
         verified_mentions(db,signer,external_call["dom_root",Int](doc),ids)
         external_call["dom_free",NoneType](doc)
         return ids^
@@ -521,7 +521,7 @@ def editable_nodes(mut db: Database, mut signer: Signer, node: Int, depth: Int =
             var content = String()
             var content_type = String()
             if regex("application/vnd.actiontext.opengraph-embed",attrs.get("content-type",""))[0]>=0:
-                content = embed(attrs.copy(),db.request_host).replace('<figure class="attachment attachment--content attachment--og">','<figure class="attachment attachment--content attachment--og"><actiontext-opengraph-embed>').replace("</figure>","</actiontext-opengraph-embed></figure>")
+                content = embed(attrs.copy(),db.request_host).replace(' rel="noreferrer" target="_blank"',"")
                 content_type = "application/vnd.actiontext.opengraph-embed"
             else:
                 var sgid = attrs.get("sgid","")
@@ -543,11 +543,17 @@ def editable_nodes(mut db: Database, mut signer: Signer, node: Int, depth: Int =
                     raise Error("Unsupported editable attachment type")
                 external_call["dom_remove",NoneType](current)
             else:
+                # Current Action Text rebuilds attachment nodes from its public
+                # attribute set and discards stale nested editor markup.
+                external_call["dom_clear_node",NoneType](current)
+                for field in ["sgid","content-type","url","href","filename","filesize","width","height","previewable","presentation","caption"]:
+                    if field in attrs:
+                        var value = attrs[field]
+                        var attribute_name = field.copy()
+                        external_call["dom_set_attr",NoneType](current,attribute_name.as_c_string_span(),value.as_c_string_span())
                 var key = String("content-type")
                 external_call["dom_set_attr",NoneType](current,key.as_c_string_span(),content_type.as_c_string_span())
                 key = "content"
-                if String(attrs.get("url","").strip())=="":
-                    content = json_string(content)
                 external_call["dom_set_attr",NoneType](current,key.as_c_string_span(),content.as_c_string_span())
         else:
             editable_nodes(db,signer,external_call["dom_child",Int](current),depth+1)
@@ -674,7 +680,7 @@ def plain_nodes(node: Int, lists: Int = 0, ordered: Bool = False, depth: Int = 0
             var inside = plain_nodes(external_call["dom_child",Int](current),lists+Int(is_list),name=="ol" if is_list else ordered,depth+1)
             if name=="br":
                 out += "\n"
-            elif name=="h1" or name=="p" or is_list:
+            elif name in ["h1","h2","h3","h4","h5","h6","p"] or is_list:
                 out += ("\n" if is_list and lists>0 else "")+chomp(inside)+"\n\n"
             elif name=="div":
                 out += chomp(inside)+"\n"
@@ -749,7 +755,6 @@ def canonical(mut db: Database, var source: String) raises -> String:
         raise Error("Cannot parse rich text")
     try:
         var root = external_call["dom_root",Int](doc)
-        normalize_legacy(db,root)
         var result = walk(root,False,True,0,True)
         external_call["dom_free",NoneType](doc)
         return result^
@@ -1184,7 +1189,6 @@ def body_inner(mut db: Database, mut signer: Signer, var source: String, depth: 
         raise Error("Cannot parse Action Text body")
     try:
         var root = external_call["dom_root",Int](doc)
-        normalize_legacy(db,root)
         var mentions = List[String]()
         resolve(db,signer,root,False,mentions,0,depth,True)
         galleries(root)

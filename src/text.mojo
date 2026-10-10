@@ -97,3 +97,11 @@ def plain_text(html: String) -> String:
         elif not inside:
             out += String(ch)
     return unescape(out)
+
+
+def search_query(value: String) -> String:
+    var result = String()
+    for point in value.codepoints():
+        var ch = String(point)
+        result += ch if external_call["unicode_word",Int](ch.as_c_string_span())==1 else " "
+    return result^

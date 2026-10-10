@@ -11,8 +11,10 @@ struct Upload(Copyable, Movable):
     var fd: Int
     var offset: Int
     var size: Int
+    var prepared_key: String
 
     def __init__(out self, filename: String, content_type: String, data: String, fd: Int = -1, offset: Int = 0, size: Int = 0):
+        self.prepared_key = ""
         self.filename = filename
         self.content_type = content_type
         self.data = data
@@ -24,10 +26,17 @@ struct Upload(Copyable, Movable):
 struct Form(Copyable, Movable):
     var fields: Dict[String, String]
     var files: Dict[String, Upload]
+    # Server-only preflight results; request field names cannot set these.
+    var password_digest: String
+    var endpoint_validated: Bool
+    var direct_info: List[String]
 
     def __init__(out self):
         self.fields = Dict[String,String]()
         self.files = Dict[String,Upload]()
+        self.password_digest = ""
+        self.endpoint_validated = False
+        self.direct_info = List[String]()
 
 
 def disposition(value: String, key: String) -> String:
@@ -49,18 +58,18 @@ def parse(mut db: Database, req: Request) raises -> Form:
     elif kind.startswith("multipart/form-data"):
         var boundary = disposition(kind,"boundary")
         if boundary == "" or boundary.byte_length()>70 or "\r" in boundary or "\n" in boundary:
-            raise Error("Invalid multipart boundary")
+            raise Error("HTTP 400: Invalid multipart boundary")
         var delimiter = "--"+boundary
         var parts = req.body.split(delimiter)
         if len(parts)>128:
-            raise Error("Too many multipart fields")
+            raise Error("HTTP 400: Too many multipart fields")
         for i in range(1,len(parts)-1):
             var part = String(parts[i])
             if not part.startswith("\r\n") or not part.endswith("\r\n"):
-                raise Error("Malformed multipart body")
+                raise Error("HTTP 400: Malformed multipart body")
             var end = part.find("\r\n\r\n")
             if end<0 or end>16384:
-                raise Error("Malformed multipart headers")
+                raise Error("HTTP 400: Malformed multipart headers")
             var head = String(part[byte=2:end])
             var body = String(unsafe_from_utf8=part.as_bytes()[end+4:part.byte_length()-2])
             var name = String()
@@ -69,14 +78,14 @@ def parse(mut db: Database, req: Request) raises -> Form:
             for line in head.split("\r\n"):
                 var bits = line.split(":",maxsplit=1)
                 if len(bits)!=2:
-                    raise Error("Invalid multipart header")
+                    raise Error("HTTP 400: Invalid multipart header")
                 if String(bits[0]).lower()=="content-disposition":
                     name = disposition(String(bits[1]),"name")
                     filename = disposition(String(bits[1]),"filename")
                 elif String(bits[0]).lower()=="content-type":
                     content_type = String(bits[1].strip())
             if name == "":
-                raise Error("Missing multipart field name")
+                raise Error("HTTP 400: Missing multipart field name")
             if filename != "":
                 form.files[name] = Upload(filename,content_type,body)
             elif name.endswith("[]"):
@@ -85,7 +94,7 @@ def parse(mut db: Database, req: Request) raises -> Form:
                 form.fields[name] = body
     elif kind.startswith("application/json"):
         if db.scalar("SELECT json_valid(?)",[req.body])!="1" or db.scalar("SELECT json_type(?)",[req.body])!="object":
-            raise Error("Invalid JSON object")
+            raise Error("HTTP 400: Invalid JSON object")
         var rows = db.rows("SELECT id,coalesce(parent,-1),coalesce(key,''),coalesce(cast(atom AS TEXT),''),type FROM json_tree(?) ORDER BY id",[req.body])
         var paths = Dict[String,String]()
         for row in rows:
@@ -104,11 +113,14 @@ def parse(mut db: Database, req: Request) raises -> Form:
         if ids != "":
             form.fields["user_ids[]"] = ids
     else:
-        raise Error("Unsupported content type")
+        raise Error("HTTP 400: Unsupported content type")
     for value in form.fields.values():
-        _ = String(from_utf8=value.as_bytes())
+        try:
+            _ = String(from_utf8=value.as_bytes())
+        except:
+            raise Error("HTTP 400: Invalid UTF-8 text field")
         if "\x00" in value:
-            raise Error("NUL is not valid in text fields")
+            raise Error("HTTP 400: NUL is not valid in text fields")
     return form^
 
 
@@ -136,16 +148,16 @@ def next_boundary(fd: Int, offset: Int, size: Int, boundary: String) raises -> I
             search = at+1
         var keep = min(data.byte_length(),needle.byte_length()+2)
         carry = String(unsafe_from_utf8=data.as_bytes()[data.byte_length()-keep:])
-    raise Error("Missing multipart boundary")
+    raise Error("HTTP 400: Missing multipart boundary")
 
 
 def parse_spooled(req: Request) raises -> Form:
     var boundary = disposition(req.header("content-type"),"boundary")
     if boundary=="" or boundary.byte_length()>70 or "\r" in boundary or "\n" in boundary:
-        raise Error("Invalid multipart boundary")
+        raise Error("HTTP 400: Invalid multipart boundary")
     var first = "--"+boundary
     if req.body_size<first.byte_length()+2 or read_slice(req.body_fd,0,first.byte_length())!=first:
-        raise Error("Invalid multipart preamble")
+        raise Error("HTTP 400: Invalid multipart preamble")
     var cursor = first.byte_length()
     var form = Form()
     var fields = 0
@@ -156,19 +168,19 @@ def parse_spooled(req: Request) raises -> Form:
         if suffix=="--":
             return form^
         if suffix!="\r\n":
-            raise Error("Invalid multipart delimiter")
+            raise Error("HTTP 400: Invalid multipart delimiter")
         cursor += 2
         var headers = read_slice(req.body_fd,cursor,min(16388,req.body_size-cursor))
         var end = headers.find("\r\n\r\n")
         if end<0 or end>16384:
-            raise Error("Invalid multipart headers")
+            raise Error("HTTP 400: Invalid multipart headers")
         var name = String()
         var filename = String()
         var kind = String("application/octet-stream")
         for line in String(headers[byte=:end]).split("\r\n"):
             var pair = line.split(":",maxsplit=1)
             if len(pair)!=2:
-                raise Error("Invalid multipart header")
+                raise Error("HTTP 400: Invalid multipart header")
             var header = String(pair[0]).lower()
             if header=="content-disposition":
                 name = disposition(String(pair[1]),"name")
@@ -176,23 +188,23 @@ def parse_spooled(req: Request) raises -> Form:
             elif header=="content-type":
                 kind = String(pair[1].strip())
         if name=="":
-            raise Error("Missing multipart field name")
+            raise Error("HTTP 400: Missing multipart field name")
         cursor += end+4
         var finish = next_boundary(req.body_fd,cursor,req.body_size,boundary)
         var length = finish-cursor
         fields += 1
         if fields>4096:
-            raise Error("Too many multipart fields")
+            raise Error("HTTP 400: Too many multipart fields")
         if filename!="":
             files += 1
             if files>128:
-                raise Error("Too many multipart files")
+                raise Error("HTTP 400: Too many multipart files")
             form.files[name] = Upload(filename,kind,"",req.body_fd,cursor,length)
         else:
             text_size += length
             if text_size>16777216:
-                raise Error("Multipart text too large")
+                raise Error("HTTP 400: Multipart text too large")
             var value = read_slice(req.body_fd,cursor,length)
             form.fields[name] = form.fields.get(name,"")+","+value if name.endswith("[]") else value
         cursor = finish+4+boundary.byte_length()
-    raise Error("Incomplete multipart body")
+    raise Error("HTTP 400: Incomplete multipart body")

@@ -70,7 +70,8 @@ def request(path, cookie="", method="GET", body=None, headers=None):
 
 
 def loadgen(*args, client_cpus="4-7"):
-    return json.loads(command(["taskset", "-c", client_cpus, LOADGEN, *args]))
+    affinity = [] if os.environ.get("CAMPFIRE_TEST_NO_AFFINITY") == "1" else ["taskset", "-c", client_cpus]
+    return json.loads(command([*affinity, LOADGEN, *args]))
 
 
 def check_sample(value):
@@ -145,7 +146,8 @@ def server(app, destination, server_cpus="0-3", cache=True, verify_log=False):
         args[0] = native_app / "campfire"
         cwd = native_app
         with (runtime / "server.log").open("w") as logfile:
-            proc = subprocess.Popen(["taskset", "-c", server_cpus, *map(str,args)], cwd=cwd,
+            affinity = [] if os.environ.get("CAMPFIRE_TEST_NO_AFFINITY") == "1" else ["taskset", "-c", server_cpus]
+            proc = subprocess.Popen([*affinity, *map(str,args)], cwd=cwd,
                                     env=env, stdout=logfile, stderr=logfile, start_new_session=True)
             try:
                 deadline = time.monotonic() + 90

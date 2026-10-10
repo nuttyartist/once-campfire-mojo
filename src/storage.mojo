@@ -22,7 +22,7 @@ def relative(key: String) raises -> String:
     if key.byte_length()<4 or key.byte_length()>128:
         raise Error("Invalid storage key")
     for c in key.as_bytes():
-        if not ((c>=48 and c<=57) or (c>=65 and c<=90) or (c>=97 and c<=122)):
+        if not ((c>=48 and c<=57) or (c>=65 and c<=90) or (c>=97 and c<=122) or c==45 or c==95):
             raise Error("Invalid storage key")
     return String(key[byte=:2])+"/"+String(key[byte=2:4])+"/"+key
 
@@ -102,16 +102,37 @@ def metadata(mut db: Database, data: String, kind: String) raises -> String:
     return meta^
 
 
+def blob_info(mut db: Database, blob: String) raises -> List[String]:
+    if blob.startswith("prepared:"):
+        return db.prepared_blobs[String(blob[byte=9:])].copy()
+    var rows = db.rows("SELECT key,filename,content_type,metadata,byte_size,checksum FROM active_storage_blobs WHERE id=?",[blob])
+    if len(rows)==0:
+        raise Error("Missing stored object")
+    return rows[0].copy()
+
+
+def persist_prepared(mut db: Database, key: String) raises -> String:
+    if db.preparing_media:
+        return "prepared:"+key
+    var existing = db.scalar("SELECT id FROM active_storage_blobs WHERE key=?",[key])
+    if existing!="":
+        return existing
+    var row = db.prepared_blobs[key].copy()
+    _ = db.rows("INSERT INTO active_storage_blobs(key,filename,content_type,metadata,byte_size,checksum,created_at,service_name) VALUES(?,?,?,?,?,?,strftime('%Y-%m-%d %H:%M:%f','now'),'local')",row)
+    return db.last_id()
+
+
 def upload(mut db: Database, file: Upload) raises -> String:
+    if file.prepared_key!="":
+        return persist_prepared(db,file.prepared_key)
     if file.fd>=0:
         return upload_spooled(db,file)
     var key = token()
-    var now = db.scalar("SELECT strftime('%Y-%m-%d %H:%M:%f','now')")
     var kind = identify(file.data)
     var meta = metadata(db,file.data,kind)
     store_bytes(db,key,file.data)
-    _ = db.rows("INSERT INTO active_storage_blobs(key,filename,content_type,metadata,byte_size,checksum,created_at,service_name) VALUES(?,?,?,?,?,?,?,'local')",[key,safe_filename(file.filename),kind,meta,String(file.data.byte_length()),checksum(file.data),now])
-    return db.last_id()
+    db.prepared_blobs[key] = List[String]([key,safe_filename(file.filename),kind,meta,String(file.data.byte_length()),checksum(file.data)])
+    return persist_prepared(db,key)
 
 
 def checksum_fd(fd: Int, offset: Int, size: Int) raises -> String:
@@ -159,8 +180,8 @@ def upload_spooled(mut db: Database, file: Upload) raises -> String:
     var digest = checksum_fd(file.fd,file.offset,file.size)
     store_spooled(db,key,file)
     var meta = metadata_file(db,key,kind)
-    _ = db.rows("INSERT INTO active_storage_blobs(key,filename,content_type,metadata,byte_size,checksum,created_at,service_name) VALUES(?,?,?,?,?,?,strftime('%Y-%m-%d %H:%M:%f','now'),'local')",[key,safe_filename(file.filename),kind,meta,String(file.size),digest])
-    return db.last_id()
+    db.prepared_blobs[key] = List[String]([key,safe_filename(file.filename),kind,meta,String(file.size),digest])
+    return persist_prepared(db,key)
 
 
 def open_blob(key: String) raises -> Int:
@@ -334,9 +355,20 @@ def variant(mut db: Database, blob: String, transformations: String, symbols: Bo
     var prior = db.scalar("SELECT a.blob_id FROM active_storage_variant_records v JOIN active_storage_attachments a ON a.record_type='ActiveStorage::VariantRecord' AND a.record_id=v.id AND a.name='image' WHERE v.blob_id=? AND v.variation_digest=?",[blob,hash])
     if prior!="":
         return prior
-    var row = db.rows("SELECT key,filename,content_type,metadata FROM active_storage_blobs WHERE id=?",[blob])
-    if len(row)==0:
-        raise Error("Missing image")
+    var row = List[List[String]]([blob_info(db,blob)])
+    var plan = row[0][0]+":"+hash
+    if plan in db.prepared_variants:
+        var key = db.prepared_variants[plan]
+        if key=="":
+            raise Error("Cannot decode image")
+        var result = persist_prepared(db,key)
+        if not db.preparing_media:
+            _ = db.rows("INSERT INTO active_storage_variant_records(blob_id,variation_digest) VALUES(?,?)",[blob,hash])
+            attach(db,result,"ActiveStorage::VariantRecord",db.last_id(),"image")
+        return result^
+    if not db.preparing_media:
+        raise Error("Image preparation must precede the write transaction")
+    db.prepared_variants[plan] = ""
     var values = db.rows("SELECT key FROM json_each(?)",[transformations])
     for item in values:
         if item[0] not in ["format","resize_to_limit","resize_to_fill","resize_to_fit"]:
@@ -360,8 +392,7 @@ def variant(mut db: Database, blob: String, transformations: String, symbols: Bo
     external_call["buffer_free",NoneType](output)
     var file = Upload(safe_filename(row[0][1])+"."+format,"image/"+format,body)
     var result = upload(db,file)
-    _ = db.rows("INSERT INTO active_storage_variant_records(blob_id,variation_digest) VALUES(?,?)",[blob,hash])
-    attach(db,result,"ActiveStorage::VariantRecord",db.last_id(),"image")
+    db.prepared_variants[plan] = String(result[byte=9:])
     return result^
 
 
@@ -369,7 +400,18 @@ def preview(mut db: Database, blob: String) raises -> String:
     var stored = db.scalar("SELECT blob_id FROM active_storage_attachments WHERE record_type='ActiveStorage::Blob' AND record_id=? AND name='preview_image'",[blob])
     if stored!="":
         return stored
-    var row = db.rows("SELECT key,filename,content_type,metadata FROM active_storage_blobs WHERE id=?",[blob])[0].copy()
+    var row = blob_info(db,blob)
+    if row[0] in db.prepared_previews:
+        var key = db.prepared_previews[row[0]]
+        if key=="":
+            raise Error("Cannot preview media")
+        var result = persist_prepared(db,key)
+        if not db.preparing_media:
+            attach(db,result,"ActiveStorage::Blob",blob,"preview_image")
+        return result^
+    if not db.preparing_media:
+        raise Error("Media preparation must precede the write transaction")
+    db.prepared_previews[row[0]] = ""
     var pixels = db.rows("SELECT coalesce(json_extract(?,'$.width'),0),coalesce(json_extract(?,'$.height'),0)",[row[3],row[3]])[0].copy()
     if row[2]!="application/pdf" and (Int(pixels[0])<1 or Int(pixels[1])<1 or Int(pixels[0])>250000000//Int(pixels[1])):
         raise Error("Media too large or undecodable")
@@ -387,22 +429,83 @@ def preview(mut db: Database, blob: String) raises -> String:
     if data!="":
         var pdf = row[2]=="application/pdf"
         stored = upload(db,Upload(row[1]+(".png" if pdf else ".jpg"),"image/png" if pdf else "image/jpeg",data))
-        attach(db,stored,"ActiveStorage::Blob",blob,"preview_image")
+        db.prepared_previews[row[0]] = String(stored[byte=9:])
         return stored^
 
     return blob
 
 
 def prepare(mut db: Database, blob: String) raises:
-    var kind = db.scalar("SELECT content_type FROM active_storage_blobs WHERE id=?",[blob])
+    var kind = blob_info(db,blob)[2]
     if variable(kind) or kind.startswith("video/") or kind=="application/pdf":
         try:
             var source = preview(db,blob) if kind.startswith("video/") or kind=="application/pdf" else blob
             var format = "webp" if kind.startswith("video/") else thumbnail_format(kind)
             _ = variant(db,source,'{"format":'+json_string(format)+',"resize_to_limit":[1200,800]}',kind.startswith("video/"))
-        except:
-            # A file remains downloadable when the media decoder cannot preview it.
-            pass
+        except e:
+            # Unpreviewable content stays downloadable. Admission/storage errors
+            # must still roll back instead of masquerading as decoder failures.
+            if not db.preparing_media and String(e) not in ["Cannot decode image","Cannot preview media"]:
+                raise Error(String(e))
+
+
+
+def preflight_form(mut db: Database, mut signer: Signer, mut form: Form) raises:
+    db.preparing_media = True
+    try:
+        plan_form(db,signer,form)
+        db.preparing_media = False
+    except e:
+        db.preparing_media = False
+        raise e^
+
+
+def plan_form(mut db: Database, mut signer: Signer, mut form: Form) raises:
+    for name in ["message[attachment]","user[avatar]","account[logo]"]:
+        if name in form.files and form.files[name].prepared_key=="":
+            var file = form.files[name].copy()
+            var blob = upload(db,file)
+            file.prepared_key = String(blob[byte=9:])
+            form.files[name] = file^
+            if name=="message[attachment]":
+                prepare(db,blob)
+    var signed = form.fields.get("message[attachment]","")
+    if signed!="":
+        var blob = signer.verify(db,"ActiveStorage",signed,"blob_id",False)
+        if blob!="" and db.scalar("SELECT 1 FROM active_storage_blobs WHERE id=?",[blob])=="1":
+            prepare(db,blob)
+
+
+def preflight_get(mut db: Database, mut signer: Signer, req: Request, authenticated: Bool) raises:
+    var parts = req.path.split("/")
+    var blob = String()
+    var transformations = String()
+    var symbols = False
+    if req.path=="/account/logo":
+        blob = db.scalar("SELECT blob_id FROM active_storage_attachments WHERE record_type='Account' AND name='logo' LIMIT 1")
+        var size = "192" if params(req.query).get("size","")=="small" else "512"
+        transformations = '{"format":"png","resize_to_limit":['+size+','+size+']}'
+        symbols = True
+    elif authenticated and len(parts)==4 and String(parts[1])=="users" and String(parts[3])=="avatar":
+        var uid = signer.verify(db,"active_record/signed_id",String(parts[2]),"user/avatar")
+        blob = db.scalar("SELECT blob_id FROM active_storage_attachments WHERE record_type='User' AND name='avatar' AND record_id=? LIMIT 1",[uid])
+        transformations = '{"format":"webp","resize_to_limit":[512,512]}'
+        symbols = True
+    elif len(parts)>=8 and req.path.startswith("/rails/active_storage/representations/"):
+        blob = signer.verify(db,"ActiveStorage",decode(String(parts[5])),"blob_id",False)
+        transformations = signer.verify(db,"ActiveStorage",decode(String(parts[6])),"variation",False)
+    if blob=="" or transformations=="" or db.scalar("SELECT 1 FROM active_storage_blobs WHERE id=?",[blob])!="1":
+        return
+    db.preparing_media = True
+    try:
+        var kind = blob_info(db,blob)[2]
+        if kind.startswith("video/") or kind=="application/pdf":
+            blob = preview(db,blob)
+        _ = variant(db,blob,transformations,symbols)
+    except:
+        # The route retains its normal invalid/unpreviewable response.
+        pass
+    db.preparing_media = False
 
 
 def image(mut db: Database, blob: String, req: Request, width: Int, height: Int, crop: Bool = False, format: String = "webp") raises -> Response:
@@ -527,30 +630,11 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
         if req.method=="PUT":
             if uid=="":
                 return html("Unauthorized",401)
-            var length = db.scalar("SELECT json_extract(?,'$.content_length')",[data])
-            var expected = db.scalar("SELECT json_extract(?,'$.checksum')",[data])
-            var actual_size = req.body_size if req.body_fd>=0 else req.body.byte_length()
-            var actual_checksum = checksum_fd(req.body_fd,0,actual_size) if req.body_fd>=0 else checksum(req.body)
-            if String(actual_size)!=length or actual_checksum!=expected:
-                return html("Upload checksum mismatch",422)
-            var existing = False
-            try:
-                var fd = open_blob(key)
-                try:
-                    existing = checksum_fd(fd,0,external_call["fs_size",Int](fd))==expected
-                except:
-                    existing = False
-                _ = external_call["os_close",Int](fd)
-            except:
-                pass
-            if not existing:
-                if req.body_fd>=0:
-                    store_spooled(db,key,Upload("","", "",req.body_fd,0,req.body_size))
-                else:
-                    store_bytes(db,key,req.body)
-            var sample = read_slice(req.body_fd,0,min(req.body_size,65536)) if req.body_fd>=0 else req.body
-            var kind = identify(sample)
-            _ = db.rows("UPDATE active_storage_blobs SET content_type=?,metadata=? WHERE key=?",[kind,metadata_file(db,key,kind),key])
+            if len(f.direct_info)!=3 or f.direct_info[0]!=key:
+                raise Error("Direct upload must be prepared before admission")
+            if db.scalar("SELECT 1 FROM active_storage_blobs WHERE key=?",[key])!="1":
+                return html("Missing upload",404)
+            _ = db.rows("UPDATE active_storage_blobs SET content_type=?,metadata=? WHERE key=?",[f.direct_info[1],f.direct_info[2],key])
             return html("",204)
         var blob = db.scalar("SELECT id FROM active_storage_blobs WHERE key=?",[key])
         var download_req = req.copy()
@@ -560,13 +644,29 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
     return html("",0)
 
 
+def discard_prepared(mut db: Database):
+    for file in db.pending_files:
+        var parts = file.split("/")
+        var key = String(parts[len(parts)-1])
+        try:
+            if db.scalar("SELECT 1 FROM active_storage_blobs WHERE key=?",[key])=="1":
+                continue
+            var name = file.copy()
+            _ = external_call["fs_unlink",Int](name.as_c_string_span())
+        except:
+            # Offline gc-files recovers interrupted preparations.
+            pass
+    db.pending_files.clear()
+    db.prepared_blobs.clear()
+    db.prepared_variants.clear()
+    db.prepared_previews.clear()
+    db.preparing_media = False
+
+
 def rollback(mut db: Database):
     db.pending_download.close()
     db.pending_deletes.clear()
-    for file in db.pending_files:
-        var name = file.copy()
-        _ = external_call["fs_unlink",Int](name.as_c_string_span())
-    db.pending_files.clear()
+    discard_prepared(db)
 
 
 def profile_upload(mut db: Database, f: Form, id: String, account: Bool = False) raises:
@@ -600,7 +700,8 @@ def purge(mut db: Database, blob: String, depth: Int = 0) raises:
     for child in children:
         purge(db,child[0],depth+1)
     _ = db.rows("DELETE FROM active_storage_blobs WHERE id=?",[blob])
-    db.pending_deletes.append(root()+"/"+relative(key))
+    _ = db.rows("INSERT OR IGNORE INTO mojo_file_purges(key) VALUES(?)",[key])
+    db.pending_deletes.append(key)
 
 
 def detach(mut db: Database, record: String, id: String, name: String = "") raises:
@@ -622,9 +723,69 @@ def remove_message(mut db: Database, mid: String) raises:
         detach(db,"ActionText::RichText",r[0])
 
 
+def cleanup_file(mut db: Database, key: String) raises:
+    # Imported/recovered databases can reintroduce a key. Never delete live data.
+    if db.scalar("SELECT 1 FROM active_storage_blobs WHERE key=?",[key])=="1":
+        _ = db.rows("DELETE FROM mojo_file_purges WHERE key=?",[key])
+        return
+    var path = root()+"/"+relative(key)
+    if external_call["fs_unlink",Int](path.as_c_string_span())==0:
+        _ = db.rows("DELETE FROM mojo_file_purges WHERE key=?",[key])
+    else:
+        _ = db.rows("UPDATE mojo_file_purges SET attempts=attempts+1,available_at=unixepoch()+min(3600,(attempts+1)*5),error='unlink or directory fsync failed' WHERE key=?",[key])
+
+
+def retry_cleanup(mut db: Database) raises:
+    for row in db.rows("SELECT key FROM mojo_file_purges WHERE available_at<=unixepoch() LIMIT 32"):
+        cleanup_file(db,row[0])
+
+
 def commit(mut db: Database):
-    db.pending_files.clear()
-    for file in db.pending_deletes:
-        var path = file.copy()
-        _ = external_call["fs_unlink",Int](path.as_c_string_span())
+    discard_prepared(db)
+    for key in db.pending_deletes:
+        var copy = key.copy()
+        try:
+            cleanup_file(db,copy)
+        except e:
+            # The committed purge row remains for the worker to retry.
+            print("Deferred file cleanup:",e)
     db.pending_deletes.clear()
+
+
+def preflight_direct(mut db: Database, mut signer: Signer, req: Request, uid: String, mut form: Form) raises -> Response:
+    if uid=="":
+        return html("Unauthorized",401)
+    var parts = req.path.split("/")
+    if len(parts)<5:
+        return html("Not found",404)
+    var data = signer.verify(db,"ActiveStorage",decode(String(parts[4])),"blob_token",False)
+    if data=="" or db.scalar("SELECT json_extract(?,'$.service_name')",[data])!="local":
+        return html("Invalid storage token",404)
+    var key = db.scalar("SELECT json_extract(?,'$.key')",[data])
+    if db.scalar("SELECT 1 FROM active_storage_blobs WHERE key=?",[key])!="1":
+        return html("Missing upload",404)
+    var length = db.scalar("SELECT json_extract(?,'$.content_length')",[data])
+    var expected = db.scalar("SELECT json_extract(?,'$.checksum')",[data])
+    var actual_size = req.body_size if req.body_fd>=0 else req.body.byte_length()
+    var actual_checksum = checksum_fd(req.body_fd,0,actual_size) if req.body_fd>=0 else checksum(req.body)
+    if String(actual_size)!=length or actual_checksum!=expected:
+        return html("Upload checksum mismatch",422)
+    var existing = False
+    try:
+        var fd = open_blob(key)
+        try:
+            existing = checksum_fd(fd,0,external_call["fs_size",Int](fd))==expected
+        except:
+            existing = False
+        _ = external_call["os_close",Int](fd)
+    except:
+        pass
+    if not existing:
+        if req.body_fd>=0:
+            store_spooled(db,key,Upload("","", "",req.body_fd,0,req.body_size))
+        else:
+            store_bytes(db,key,req.body)
+    var sample = read_slice(req.body_fd,0,min(req.body_size,65536)) if req.body_fd>=0 else req.body
+    var kind = identify(sample)
+    form.direct_info = List[String]([key,kind,metadata_file(db,key,kind)])
+    return html("",0)

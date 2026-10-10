@@ -14,12 +14,15 @@ def validate(var url: String) -> Bool:
 
 
 def request(var url: String, var method: String, var headers: String, body: String = "", allow_private: Bool = False, timeout: Int = 15000, capacity: Int = 1048576) raises -> Reply:
-    var buf = List[UInt8](length=capacity,fill=0)
+    var address = 0
     var count = 0
     var location = List[UInt8](length=8192,fill=0)
     var kind = List[UInt8](length=256,fill=0)
-    var status = external_call["net_request",Int](url.as_c_string_span(),method.as_c_string_span(),headers.as_c_string_span(),body.as_bytes().unsafe_ptr(),body.byte_length() if method!="GET" else -1,buf.unsafe_ptr(),len(buf),Pointer(to=count),Int(allow_private),kind.unsafe_ptr(),location.unsafe_ptr(),timeout)
-    return Reply(status,String(unsafe_from_utf8=Span(unsafe_ptr=buf.unsafe_ptr(),length=count)),String(unsafe_from_utf8_ptr=kind.unsafe_ptr()),String(unsafe_from_utf8_ptr=location.unsafe_ptr()))
+    var status = external_call["net_request",Int](url.as_c_string_span(),method.as_c_string_span(),headers.as_c_string_span(),body.as_bytes().unsafe_ptr(),body.byte_length() if method!="GET" else -1,Pointer(to=address),capacity,Pointer(to=count),Int(allow_private),kind.unsafe_ptr(),location.unsafe_ptr(),timeout)
+    var ptr = Pointer[UInt8,MutUntrackedOrigin](unsafe_from_address=address)
+    var data = String(unsafe_from_utf8=Span(unsafe_ptr=ptr,length=count)) if count>0 else String()
+    external_call["free",NoneType](ptr)
+    return Reply(status,data^,String(unsafe_from_utf8_ptr=kind.unsafe_ptr()),String(unsafe_from_utf8_ptr=location.unsafe_ptr()))
 
 
 def component(var url: String, part: Int = 0) -> String:

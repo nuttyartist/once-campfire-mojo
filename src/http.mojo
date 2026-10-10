@@ -163,7 +163,7 @@ struct Response(Copyable, Movable):
             + ("\r\nContent-Length: "+String(self.content_length if self.content_length>=0 else body.byte_length()) if self.status!=204 and self.status!=304 else "")
             + "\r\nVary: Accept-Encoding\r\n"
             + ("Cache-Control: no-store\r\n" if "Cache-Control:" not in self.extra else "")
-            + "X-Content-Type-Options: nosniff\r\n"
+            + "X-Content-Type-Options: nosniff\r\nX-Frame-Options: SAMEORIGIN\r\nReferrer-Policy: strict-origin-when-cross-origin\r\nX-XSS-Protection: 0\r\nX-Permitted-Cross-Domain-Policies: none\r\n"
             + encoding
             + self.extra
             + "\r\n"

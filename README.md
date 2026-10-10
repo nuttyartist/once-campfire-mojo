@@ -1,142 +1,63 @@
 # Campfire in Mojo
 
-A local Mojo 1.1 application port of Basecamp Campfire. Application routing, permissions, SQL, rendering, Action Cable, delivery and storage policy are written in Mojo. Generic C adapters connect POSIX, SQLite, OpenSSL, curl, Gumbo and libvips.
+A standalone Mojo 1.1 port of [Basecamp Campfire](https://github.com/basecamp/once-campfire), targeting the stock local Disk installation at Rails `b52b244`. Routing, authentication, permissions, SQL, rendering, Action Cable, storage policy and durable jobs are Mojo. Small C adapters expose POSIX and established native libraries; the server does not run Python, Ruby, or either reference Campfire implementation.
 
-**The previously listed large-upload, amd64 deployment and real-browser push gaps are closed and tested.** See [PORT_STATUS.md](PORT_STATUS.md) for evidence, compatibility differences and deployment limits, and [DEPLOYMENT.md](DEPLOYMENT.md) to run or migrate an installation. Nothing has been published or pushed.
+The ten findings from the local replacement audit have regression tests and fixes. The port also includes recoverable file cleanup, schema-checked Disk import, Rails encrypted session migration, large streamed uploads, Linux ARM64/amd64 images, browser/TLS tests and CI. [PORT_STATUS.md](PORT_STATUS.md) states the supported contract and intentional differences. This repository is prepared for upstream review; it has not been uploaded or released.
 
-The original five-workload benchmark implementation is preserved in Git commit `41edc39`. Its historical measurements remain under `bench/results/2026-10-09-m4-matched/`. A fresh comparison of the expanded application is recorded below.
+## Local comparison — 2026-10-10
 
-## Durable completed-work results — 2026-10-10
+<!-- FINAL_BENCHMARK_TABLE -->
 
-| Workload (completed requests/sec) | Rust* | C* | Mojo |
-|---|---:|---:|---:|
-| Room page | 64,171 | 75,605 | 112,941 |
-| Messages page | 61,043 | 78,479 | 126,717 |
-| Sidebar | 71,586 | 82,724 | 129,539 |
-| Search | 70,398 | 80,086 | 136,136 |
-| Post a message | 1,183 | 418 | 892 |
-| Backend KLOC | 30.9 | 94.8 | 7.1 |
+These are **local durability-patched Rust and C builds**, not stock upstream performance claims. Every application uses SQLite WAL `synchronous=FULL`, atomic message/outbox admission, persisted retry state and recipient receipts. Posting throughput includes the final queue drain. The harness requires every acknowledged message, exact body, FTS entry and expected recipient receipt, and rejects failed, pending or dropped work.
 
-Median of three rotating-order rounds on this Apple M4. **Rust and C are local durability-patched builds**, not stock upstream results. All three use SQLite WAL `synchronous=FULL`, atomic message/outbox admission and per-recipient receipts. Posting includes final queue-drain time. Every response and acknowledged message/FTS row passed validation; **281,807 accepted messages and 845,421 recipient completions** were audited, including warmups, with no missing work, failed jobs, queue drops or pending jobs.
+The timed workloads prepare three push recipients per message and exercise the same endpoint-policy rejection. They do not time external push encryption/network delivery, and have no connected Cable subscribers. Actual encryption, provider acceptance/retry and live browser fanout have separate correctness tests. External side effects are at-least-once; a crash after remote acceptance but before the local receipt can cause a duplicate.
 
-Posting runs (completed messages/sec): Rust **1,183 / 1,497 / 718**; C **418 / 423 / 413**; Mojo **889 / 892 / 899**. The substantial Rust spread and read-rate variation are retained in the raw results; the medians are not an isolated language-speed ranking. Requests accept gzip, and each port retains its native compression and scheduling behavior. C retains per-kind worker pools; Rust/Mojo share their durable workers. All have three push workers and the same total server CPU allocation.
+Method: Apple M4, 24 GiB RAM; native ARM64 Linux in Docker Desktop; three rounds in rotating Rust/C/Mojo order; 2-second warmups, 8-second samples, 16 keep-alive HTTP/1.1 clients accepting gzip. Servers and their job workers share VM CPUs `0-3`; load generation uses `4-7`. Each application has a 64 MiB response-cache budget. Each retains its own scheduler, cache implementation and compression strategy. This compares completed workloads under a stated configuration, not intrinsic language speed. amd64 emulation is excluded from timing.
 
-The timed push endpoints are rejected by the same guard: canonical payloads, recipient selection and badges are prepared, but external network delivery and encryption are outside the timed workloads. Actual Chrome/FCM delivery and independent cryptography pass separate acceptance checks. Cable has no connected subscribers during timing.
+The performance runner first checks nine live DOM/SQL/cookie/delivery scenarios. It verifies record-derived Mojo DOM IDs before adapting that known current-Rails security change for comparison with older Rust/C markup. One original C sidebar-initials difference remains explicit. [Reference patches](bench/reference-patches/README.md) record exact bases and the unchanged reference media-golden test limitation.
 
-Two crash modes pass on all three implementations: 160 posts with workers paused, and 1,200 posts followed by a kill with active leases and already-recorded receipts. Every expected message and subscription receipt survives recovery; a second restart adds no receipts. These are process-crash checks, not physical power-cut tests. External delivery remains at-least-once.
+## Build and run
 
-Measured revisions: Rust `ff8fe2e`, C `eb604c5`, Mojo `2e4edc0` (application source `19104f0`). Exact reference patches and their validation limits are in [bench/reference-patches](bench/reference-patches/README.md). Rust formatting/Clippy pass; the seeded Rust and C suites retain the same pinned-FFmpeg video golden-byte mismatch on ARM64, documented there without changing assertions.
-
-Raw rounds, hashes, exact write audits and server logs: `bench/results/2026-10-10-m4-durable-indexed/`. Backend source is 30,925 Rust, 94,787 C and 7,099 Mojo-port lines; the Mojo total includes 6,150 Mojo, 689 generic C adapter and 260 executable template lines. Source counting follows the same documented local convention for every implementation.
-
-## Application coverage
-
-The application now supports first-run setup and invitations, account/profile/admin and room management, text messages and edits, boosts, search, live Action Cable delivery and presence, private-room authorization and revocation, static frontend assets, binary multipart/direct uploads and signed downloads, avatars and logos, verified mentions, sounds, link previews, bot API and webhook replies, and encrypted Web Push transport. The server supervises its workers and persists delivery jobs in SQLite. The status file records the independent tests, reference-version differences and validation scope.
-
-## Benchmark workload and validation
-
-The first version emitted much smaller HTML and used a separate session mechanism.
-That version's performance numbers are superseded for comparisons of equal work.
-
-- **Rendering:** the upstream message controls, quick boosts, author avatars, signed URLs,
-  timestamps, layouts, styles/importmap tags, sidebar groups/placeholders, search history,
-  composer, and notification-help markup. Values come from live SQLite records. Static
-  MIT-licensed templates are compiled into Mojo; captured responses are never build inputs.
-- **Authentication:** Rails-compatible PBKDF2/HMAC signed `session_token` cookies, the shared
-  `sessions` table, 24-character base58 tokens, bcrypt login, activity refresh, revocation,
-  active-user and membership checks, and header/origin CSRF checks.
-- **Text writes:** canonical rich text, plain-text FTS entry, room timestamp/counter, and
-  unread updates for visible, disconnected recipients (the upstream 60-second cutoff).
-  The complete Turbo Stream response and room/unread broadcast payloads are prepared.
-- **Background work in this benchmark:** workers build room notification payloads,
-  select recipients, count badges, and apply the upstream push endpoint guard. All three
-  apps receive the same local endpoints, which the upstream guard rejects before network
-  delivery or encryption. The durable harness checks exact completion and recipient receipts
-  for all three implementations, with no pending, failed or dropped jobs. Local Rust/C
-  comparison branches add durable outboxes; all three use SQLite WAL `synchronous=FULL`.
-  Posting throughput includes queue-drain time. Historical stock-port posting numbers
-  below remain withdrawn as an equal-work comparison.
-- **Cache behavior:** bounded responses, data-version invalidation, authorization before
-  cache hits, and keys varying by user, URL, gzip, host, browser, Turbo frame and return-room
-  cookie. Foreign SQL edits and access revocation are tested.
-
-`tests/parity.py` compares nine scenarios against live Rust and C: all four measured GETs,
-three Turbo-frame variants, a room changed through SQL (body, author and boost), and posting.
-It compares normalized DOM (all text, elements and attributes), stored message/rich-text/FTS
-rows and unread state. It also tests Rust → Mojo → C session-cookie compatibility, expiry,
-wrong purpose, tampering, session deletion, notification payloads and broadcast recipients.
-Normalization is limited to HTML whitespace, attribute order, asset build fingerprints and
-write timestamps. One existing C/Rust difference is recorded explicitly: group initials use
-`J+K+J` in C and `J, K, and J` in Rust. Mojo follows Rust. Integration tests add concurrent
-writes, malformed HTTP, CSRF, Unicode, cache invalidation and upstream load-generator checks.
-
-## Build and reproduce
-
-Repositories are siblings under `/Users/ruby/Downloads/campfire-test`:
-`once-campfire`, `once-campfire-c`, `once-campfire-rust`,
-`once-campfire-verification`, and `once-campfire-mojo`.
-
-All measured programs use native ARM64 Linux in Docker Desktop on this Mac. The C port uses
-Linux APIs. The server, database, assets and logs are copied onto the VM's native filesystem
-before timing. Builds do not run during measurement.
+From this checkout, on a Docker host:
 
 ```sh
-docker build -f bench/Dockerfile.tools -t campfire-local-tools:latest .
-docker run --rm --init -v /Users/ruby/Downloads/campfire-test:/workspace \
-  campfire-local-tools:latest bash /workspace/once-campfire-mojo/bench/build.sh
-bash bench/test.sh
-bash bench/run-durable.sh
+docker build -f bench/Dockerfile.tools -t campfire-local-tools:verified .
+docker compose build
+docker compose up -d
 ```
 
-The existing canonical seed is `../once-campfire-verification/fixtures/default`; only copies
-are used. `bench/run-durable.sh` runs the parity gate automatically before collecting measurements.
-The unmodified upstream load generator validates every response; its acknowledged-write
-validator audits every returned message ID, exact body, room and FTS entry. Failed gates or
-invalid responses abort the comparison.
+Open `http://localhost:8080`. The first visit creates the account and administrator. [DEPLOYMENT.md](DEPLOYMENT.md) covers persistent data, TLS, importing a stopped Rails installation, backup/restore and recovery.
 
-Default method: 16 keep-alive HTTP/1.1 clients, gzip, three rotating-order rounds,
-2-second warmups and 8-second samples, medians. Server processes (including background jobs)
-share VM CPUs `0-3`; the client uses `4-7`. Each application gets a 64 MiB response-cache budget
-and upstream C/Rust retain other caches. These are VM CPU assignments, not physical-core
-pinning. Reads repeat warm-cache requests by one user; mixed-user chat, cold rendering and
-WebSocket fanout are different workloads.
+## Test from a clean checkout
 
-## Source and license
+Docker, Git, Ruby, Python 3, Node.js and npm are needed on the host. Application dependencies and compilers live in the toolchain image. Bootstrap fetches immutable Rails/verification revisions into sibling directories and generates independent Rails fixtures with fresh disposable credentials. It refuses to reset existing checkouts with a different revision.
 
-Routing, request parsing, sessions, SQL, render models, rich-text policy, job policy and the
-nonblocking HTTP loop are Mojo. No Python runtime, Rust Campfire library or C Campfire
-application is linked into or launched by the server. `native/platform.c` supplies generic
-POSIX, process-shared queue, SQLite, zlib, libxml2 and OpenSSL ABI adapters. The same vendored SQLite
-3.53.4 source as the C build is used. Python is used only for build-time template generation,
-benchmark orchestration, tests and offline import/backup tools.
+```sh
+docker build -f bench/Dockerfile.tools -t campfire-local-tools:verified .
+bash tools/bootstrap-tests.sh
+workspace=$(cd .. && pwd)
+docker run --rm --init -e CAMPFIRE_TEST_NO_AFFINITY=1 \
+  -v "$workspace:/workspace" -w /workspace/once-campfire-mojo \
+  campfire-local-tools:verified bash tools/check.sh
+docker build -t campfire-mojo:ci .
+bash tools/check-migration.sh
+bash tools/check-browser.sh
+```
 
-Templates are adapted from the MIT-licensed Basecamp Rust/Rails implementations. Their
-source expressions are mapped in `tools/import_templates.py`; regular builds use the vendored
-`templates/` and `assets/` inputs through `tools/compile_templates.py`. Retain `MIT-LICENSE`.
+`tools/check.sh` is independent of the Rust and C repositories. It runs application/security tests, network and storage fault injection, crash recovery for every persistent job kind, concurrent chat/media checks, large uploads, independent Rails rich-text/signing/encrypted-cookie vectors, Web Push cryptography and native ASan/UBSan fuzzing. The GitHub workflow runs these gates and packaged migration/browser/TLS tests on native Linux ARM64 and amd64 runners. The workflow is checked locally; no remote CI run has occurred.
 
-Source counts can be reproduced in the toolchain container with `python3 bench/count_source.py bench/results/recount` (requires all three sibling checkouts and the shared verification repository).
+## Reproduce the three-port comparison
 
-## Historical local HTTP results (posting comparison withdrawn)
+Place `once-campfire-rust`, `once-campfire-c`, `once-campfire-verification` and this repository alongside each other. Use the pinned revisions and apply the checked-in local durability patches described in `bench/reference-patches/README.md`. Build all applications with `bench/build.sh` in the toolchain container, then run:
 
-| HTTP workload (requests/sec) | Rust | C | Mojo |
-|---|---:|---:|---:|
-| Room page | 64,210 | 77,241 | 107,296 |
-| Messages page | 61,190 | 77,626 | 123,218 |
-| Sidebar | 67,116 | 80,770 | 131,318 |
-| Search | 68,367 | 79,781 | 127,550 |
-| Post a message | 5,805 | 3,669 | 1,869 |
-| Backend KLOC | 30.7 | 94.7 | 6.7 |
+```sh
+bash bench/run-durable.sh bench/results/local-durable
+```
 
-Median of three rounds on Apple M4 (24 GiB RAM), native ARM64 Linux in Docker Desktop. The HTTP/parity gates passed, but a later log audit found C dropped jobs and Mojo shutdown errors; 341,625 writes were individually audited. Mojo completed 54,921 jobs without errors or drops.
+The runner fails closed on parity, invalid responses, write-audit differences, job failures, queue drops and incomplete drain. Do not set `CAMPFIRE_TEST_NO_AFFINITY` for measurements. `tests/durable_comparison.py` and `tests/durable_inflight.py` separately verify paused-worker and active-lease crash recovery across all three builds. Raw data is local and ignored by Git. Historical stock-port posting measurements are superseded because their background-work and durability contracts differed.
 
-Locally recounted backend source: 5,835 Mojo + 637 generic C adapters + 260 executable template lines = 6,732. Rust and C were recounted from the measured checkouts too; these supersede the source counts quoted from older upstream README revisions. See `source-count.json` for the common counting method and exclusions.
+## Architecture and license
 
-Raw receipts, all rounds, compiler/image/source hashes and acceptance logs: `bench/results/2026-10-09-m4-full/`. This table measures five warm HTTP workloads, not every implemented feature.
+Caddy terminates TLS and proxies to a supervised Mojo parent, four HTTP/Cable processes and three durable-job processes by default. Each process owns a SQLite connection. HTTP workers use nonblocking socket loops; bounded synchronous media/network operations can occupy an individual worker. Expensive preparation happens before short database write transactions. Message, FTS, unread and outbox changes commit together, and live events are size-checked before commit. File deletions have a durable retry table; offline garbage collection recovers unfinished preparations.
 
-## Posting investigation — 2026-10-10
-
-The historical C runs dropped 26,824, 25,386 and 25,282 push jobs. Successful HTTP/SQL checks did not establish equal completed background work. Rust and C also have weaker job durability than Mojo. Do not use the old posting row as an equal-work language comparison. The runner now rejects job-drop and runtime-failure logs, including shutdown.
-
-Profiling and controlled variants are described in [bench/POSTING_DIAGNOSIS.md](bench/POSTING_DIAGNOSIS.md). The current implementation preserves durable jobs, copies UTF-8 spans during JSON encoding, reuses the encoded broadcast payload, skips disabled audit-payload construction, and exits forked workers after worker-local cleanup without tearing down the inherited parent runtime.
-
-Those previously outstanding items are now implemented and tested: disk-spooled uploads with a 10 GiB default limit, both Linux architectures, local Disk import, and actual Chrome/FCM delivery. The current durable comparison is documented above and in PORT_STATUS.md. C upstream explicitly does not support migrating existing installations.
+Native adapters wrap SQLite, OpenSSL, curl, Gumbo, libvips, zlib and POSIX operations. SQLite 3.53.4, the Nokogiri-compatible Gumbo parser and QR generator sources/licenses are vendored. Python serves build generation, testing and offline administration only. Frontend assets and templates derive from the MIT-licensed original/Rust references. See [PROVENANCE.md](PROVENANCE.md) and retain `MIT-LICENSE`.

@@ -206,7 +206,7 @@ cases = (handwritten + fuzz_cases + mutation_cases).each_with_index.map do |c, i
       "presentation_raised_message" => raw["message"],
       "plain_text" => outcome { message.body.to_plain_text },
       "body_html" => outcome { message.body.to_s },
-      "editable" => outcome { value = v.send(:render_custom_attachments_in, v.editable_body(message)); value&.to_s },
+      "editable" => outcome { tag = v.rich_textarea_tag("message[body]", v.editable_body(message)); Nokogiri::HTML5.fragment(tag).at_css("lexxy-editor")["value"] },
       "mentioned" => outcome { message.send(:mentioned_users).map(&:id) },
       "filtered" => outcome { ContentFilters::TextMessagePresentationFilters.apply(message.body.body).to_html }
     }

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Copy the independently generated Rails fixture into a disposable Docker volume."""
-import importlib.util,json,os,shlex,sqlite3,tempfile
+import importlib.util,json,os,shlex,sqlite3,tempfile,shutil
 from pathlib import Path
 spec=importlib.util.spec_from_file_location('manage',Path(__file__).resolve().parents[1]/'tools/manage.py');manage=importlib.util.module_from_spec(spec);spec.loader.exec_module(manage)
 source=Path('/workspace/once-campfire-verification/fixtures/default');destination=Path('/migration/site')
@@ -13,8 +13,16 @@ with tempfile.TemporaryDirectory() as temp:
  except SystemExit:pass
  else:raise AssertionError('Strict import must detect the fixture orphan')
  manage.import_rails(source/'db/production.sqlite3',source/'storage',destination,keys,allow_existing_orphans=True)
-with manage.connect((source/'db/production.sqlite3').as_uri()+'?mode=ro',uri=True) as original,manage.connect(destination/'production.sqlite3') as imported:
- for table in ['users','rooms','messages','memberships','sessions','action_text_rich_texts','active_storage_blobs','active_storage_attachments']:
-  assert original.execute('SELECT * FROM '+table+' ORDER BY 1').fetchall()==imported.execute('SELECT * FROM '+table+' ORDER BY 1').fetchall(),table
+with tempfile.TemporaryDirectory() as temp:
+ snapshot=Path(temp)/'original.sqlite3'
+ shutil.copyfile(source/'db/production.sqlite3',snapshot)
+ wal=source/'db/production.sqlite3-wal'
+ if wal.exists():shutil.copyfile(wal,Path(str(snapshot)+'-wal'))
+ with manage.connect(snapshot) as original,manage.connect(destination/'production.sqlite3') as imported:
+  for table in ['users','rooms','messages','memberships','sessions','action_text_rich_texts','active_storage_blobs','active_storage_attachments']:
+   columns=','.join(row[1] for row in original.execute('PRAGMA table_info('+table+')') if not (table=='rooms' and row[1]=='messages_count'))
+   assert original.execute('SELECT '+columns+' FROM '+table+' ORDER BY 1').fetchall()==imported.execute('SELECT '+columns+' FROM '+table+' ORDER BY 1').fetchall(),table
+  assert imported.execute('SELECT count(*) FROM rooms WHERE messages_count<>(SELECT count(*) FROM messages WHERE room_id=rooms.id)').fetchone()==(0,)
+  assert imported.execute("SELECT count(*) FROM sqlite_master WHERE type='trigger' AND name LIKE 'messages_%_rooms_messages_count'").fetchone()[0]==3
 for path in [Path('/migration'),destination,*destination.rglob('*')]:os.chown(path,10001,10001)
-print('PASS: imported original Rails fixture without changing its rows, objects, or keys')
+print('PASS: imported original Rails fixture preserving content/objects/keys and upgrading derived room counters')

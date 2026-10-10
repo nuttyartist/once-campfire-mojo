@@ -3,7 +3,7 @@ from database import Database
 from crypto import Signer, json_string, url_encode, unbase64
 from http import Request, Response, html
 from parameters import Form
-from text import escape, params
+from text import escape, params, search_query
 import accounts
 import rooms
 import message_actions
@@ -21,7 +21,7 @@ from std.os import getenv
 
 def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Form) raises -> Response:
     if req.path=="/unfurl_link" and req.method=="POST":
-        return opengraph.unfurl(f.fields.get("url",""))
+        return preview(f)
     var response = accounts.route(db,signer,req,uid,f)
     if response.status != 0:
         return response^
@@ -32,7 +32,7 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
     if response.status != 0:
         return response^
     if req.path=="/searches" and req.method=="POST":
-        var query = f.fields.get("q","")
+        var query = search_query(f.fields.get("q",""))
         if String(query.strip())!="":
             var now = accounts.stamp(db)
             _ = db.rows("DELETE FROM searches WHERE user_id=? AND query=?",[uid,query])
@@ -51,14 +51,11 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
             webpush.deliver(db,sub[0][0],sub[0][1],sub[0][2],sub[0][3],'{"title":"Campfire Test","options":{"body":'+json_string(token())+',"icon":"/account/logo","data":{"path":'+json_string(req.origin()+"/users/me/push_subscriptions")+'}}}')
             return ui.redirect("/users/me/push_subscriptions")
         if req.method=="POST" and len(parts)==4:
+            if not f.endpoint_validated:
+                return html("Invalid push subscription",422)
             var endpoint = f.fields.get("push_subscription[endpoint]","")
-            if not jobs.push_endpoint_permitted(endpoint):
-                return html("Invalid push endpoint",422)
             var key = f.fields.get("push_subscription[p256dh_key]","")
             var auth = f.fields.get("push_subscription[auth_key]","")
-            var raw_key = unbase64(key)
-            if raw_key.byte_length()!=65 or unbase64(auth).byte_length()!=16 or external_call["p256_validate_public",Int](raw_key.as_bytes().unsafe_ptr())!=1 or not network.validate(endpoint):
-                return html("Invalid push subscription",422)
             var now = accounts.stamp(db)
             var id = db.scalar("SELECT id FROM push_subscriptions WHERE user_id=? AND endpoint=? AND p256dh_key=? AND auth_key=?",[uid,endpoint,key,auth])
             if id=="":
@@ -147,3 +144,16 @@ def public(mut db: Database, mut signer: Signer, req: Request, f: Form) raises -
         var values: Dict[String,String] = {"initials":initials,"wide":"1" if count>=3 else "0","color":colors[index]}
         return Response(200,templates.avatar(values),"image/svg+xml","")
     return html("",0)
+
+
+def preview(f: Form) raises -> Response:
+    return opengraph.unfurl(f.fields.get("url",""))
+
+
+def valid_subscription(f: Form) raises -> Bool:
+    var endpoint = f.fields.get("push_subscription[endpoint]","")
+    if not jobs.push_endpoint_permitted(endpoint):
+        return False
+    var key = unbase64(f.fields.get("push_subscription[p256dh_key]",""))
+    var auth = unbase64(f.fields.get("push_subscription[auth_key]",""))
+    return key.byte_length()==65 and auth.byte_length()==16 and external_call["p256_validate_public",Int](key.as_bytes().unsafe_ptr())==1 and network.validate(endpoint)

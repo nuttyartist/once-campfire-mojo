@@ -182,6 +182,53 @@ struct Signer(Movable):
         )
         return "/users/" + value + "/avatar?v=" + version
 
+    def encrypted_cookie(mut self, data: String, expiry: String, name: String = "_campfire_session") raises -> String:
+        var payload = '{"_rails":{"message":'+json_string(base64(data))+',"exp":'+json_string(expiry)+',"pur":'+json_string("cookie."+name)+'}}'
+        if payload.byte_length()>2800:
+            raise Error("HTTP 422: Session cookie exceeds browser limit")
+        var key = self.key("authenticated encrypted cookie")
+        var nonce = List[UInt8](length=12,fill=0)
+        if external_call["crypto_random",Int](nonce.unsafe_ptr(),12)!=0:
+            raise Error("Cookie random generator failed")
+        var tag = List[UInt8](length=16,fill=0)
+        var out = List[UInt8](length=payload.byte_length()+16,fill=0)
+        var n = external_call["cookie_cipher",Int](key.as_c_string_span(),nonce.unsafe_ptr(),payload.as_bytes().unsafe_ptr(),payload.byte_length(),out.unsafe_ptr(),tag.unsafe_ptr(),0)
+        if n<0:
+            raise Error("Cookie encryption failed")
+        return url_encode(base64(String(unsafe_from_utf8=Span(unsafe_ptr=out.unsafe_ptr(),length=n)))+"--"+base64(String(unsafe_from_utf8=Span(unsafe_ptr=nonce.unsafe_ptr(),length=12)))+"--"+base64(String(unsafe_from_utf8=Span(unsafe_ptr=tag.unsafe_ptr(),length=16))))
+
+    def decrypt_cookie(mut self, mut db: Database, wire: String, name: String = "_campfire_session") raises -> String:
+        if wire=="" or wire.byte_length()>8192:
+            return ""
+        try:
+            var parts = decode(wire).split("--")
+            if len(parts)!=3:
+                return ""
+            var body = unbase64(String(parts[0]))
+            var nonce = unbase64(String(parts[1]))
+            var tag = unbase64(String(parts[2]))
+            if nonce.byte_length()!=12 or tag.byte_length()!=16:
+                return ""
+            var key = self.key("authenticated encrypted cookie")
+            var out = List[UInt8](length=body.byte_length()+16,fill=0)
+            var n = external_call["cookie_cipher",Int](key.as_c_string_span(),nonce.as_bytes().unsafe_ptr(),body.as_bytes().unsafe_ptr(),body.byte_length(),out.unsafe_ptr(),tag.as_bytes().unsafe_ptr(),1)
+            if n<0:
+                return ""
+            var data = String(from_utf8=Span(unsafe_ptr=out.unsafe_ptr(),length=n))
+            if db.scalar("SELECT json_valid(?)",[data])!="1":
+                return ""
+            if db.scalar("SELECT json_type(?,'$._rails')",[data])!="":
+                if db.scalar("SELECT coalesce(json_extract(?,'$._rails.pur'),'')",[data])!="cookie."+name:
+                    return ""
+                if db.scalar("SELECT CASE WHEN json_extract(?,'$._rails.exp') IS NULL THEN 1 WHEN julianday(json_extract(?,'$._rails.exp'))>julianday(?) THEN 1 ELSE 0 END",[data,data,self.clock])!="1":
+                    return ""
+                data = unbase64(db.scalar("SELECT json_extract(?,'$._rails.message')",[data]))
+            if db.scalar("SELECT json_valid(?)",[data])!="1":
+                return ""
+            return data^
+        except:
+            return ""
+
     def cookie(mut self, token: String, expiry: String) raises -> String:
         var payload = (
             '{"_rails":{"message":'

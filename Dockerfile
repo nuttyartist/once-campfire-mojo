@@ -1,5 +1,5 @@
 # Build the toolchain once using bench/Dockerfile.tools, then build this image.
-ARG TOOLCHAIN_IMAGE=campfire-local-tools:latest
+ARG TOOLCHAIN_IMAGE=campfire-local-tools:verified
 FROM ${TOOLCHAIN_IMAGE} AS build
 WORKDIR /build
 COPY . .
@@ -16,7 +16,7 @@ COPY --from=build /build/build/campfire /app/campfire
 COPY --from=build /mojo-runtime /usr/local/lib/mojo
 COPY public /app/public
 COPY deploy /app/deploy
-COPY tools/manage.py /app/tools/manage.py
+COPY tools/manage.py tools/schema_contract.json /app/tools/
 RUN test -s /app/campfire && test -s /app/deploy/start && test -s /app/tools/manage.py && test -s /app/public/service-worker.js \
     && mkdir -p /data && chown campfire:campfire /data
 ENV LD_LIBRARY_PATH=/usr/local/lib/mojo BIND_ADDRESS=127.0.0.1 PORT=3000 \

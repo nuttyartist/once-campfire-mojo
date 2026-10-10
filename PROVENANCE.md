@@ -1,0 +1,13 @@
+# Source, fixtures and dependencies
+
+- Original application: `basecamp/once-campfire` at `b52b244f384456d9ab5892ebb7bebd8cd8c696c9`, MIT. Schema contract and the current message-identity frontend correction come from this source.
+- Rust application/templates and independent compatibility vectors: `basecamp/once-campfire-rust` upstream `6dae2fd3c1a2dce61ca11beb731bcce2b42b67ad`, MIT. `tests/corpus/rails_compat.json` and `storage.json` are copied independent Ruby-generated vectors, not output from this implementation. Local durable comparison revision/patches are recorded separately.
+- C comparison: `basecamp/once-campfire-c` upstream `873a51f`, with explicit local durable patches under `bench/reference-patches`.
+- Shared independent load generator/seed contract: `basecamp/once-campfire-verification` at `ec02debb3e44f40b8778a6a42db3c4515b2f9eaf`. It generates its public-model fixture from Rails `90b330024dec3e757c79b6a7e6568f93da8e3148`. The older shared performance seed is intentionally distinct from the current-original rich-text corpus and schema contract.
+- Current rich-text corpus: exact current original Docker image, with its OCI revision label verified by `tools/regenerate-corpus.sh`; Ruby 4.0.7, Rails `e3d5c569d217`, Lexxy 0.9.24. The generator uses public `editable_body`/`rich_textarea_tag` APIs and retains original expected failures. Frontend asset fingerprints are in `assets/manifest.json`.
+- Browser workflow: shared MIT-licensed Campfire port smoke flows, extended with the current original's two-user DOM-identity security scenario. Default automated browser package: Playwright 1.63.0.
+- Vendored native libraries: SQLite 3.53.4, Nokogiri 1.19.4's Gumbo dependency `8cfb9daae9ee4a0837508eab43c40fbc8c4138c9`, and QR-Code-generator. Their upstream source/licenses are under `vendor/`.
+- Toolchain: Mojo 1.1.0; Rust 1.98.1 base image pinned by digest in `bench/Dockerfile.tools`; Debian Trixie packages for Clang, OpenSSL, curl, vips, FFmpeg and Poppler. OS packages are distribution-managed and not byte-reproducibly snapshot-pinned; record the actual built image digest with release/benchmark artifacts. Do not claim identical binaries across different package-update dates.
+- CI actions are pinned to immutable commits. No action receives write permissions or stored checkout credentials.
+
+Keep `MIT-LICENSE` and vendored license notices. The Mojo application does not copy/link the C or Rust Campfire servers. Small generic C ABI adapters are part of this port and included in its reported backend source count. Python is tooling/offline administration; it is not an HTTP application dependency.

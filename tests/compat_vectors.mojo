@@ -1,5 +1,5 @@
 from database import Database
-from crypto import Signer, base64
+from crypto import Signer, base64, url_encode
 from runtime import read_file, digest
 import marshal
 import opengraph
@@ -9,7 +9,7 @@ def main() raises:
     var db = Database(":memory:")
     if db.scalar("SELECT CASE WHEN ?='' AND ?='value' AND ?='' THEN 'ok' ELSE 'bad' END",["","value",""])!="ok":
         raise Error("Empty SQL string binding differs from NULL")
-    var vectors = read_file("/workspace/once-campfire-rust/vectors","storage.json")
+    var vectors = read_file("tests/corpus","storage.json")
     var rows = db.rows("SELECT json_extract(value,'$.decoded_inspect'),json_extract(value,'$.key'),json_extract(value,'$.decoded_digest') FROM json_each(?,'$.variations')",[vectors])
     # Independently generated Ruby Marshal vectors. Use the serialized verifier
     # data rather than hardcoding our own transformation output as expectations.
@@ -26,7 +26,7 @@ def main() raises:
     var meta = opengraph.document('<html><head><meta property="og:title" content="A &amp; B"><meta name="og:description" content="Description"><meta property="og:title" content="Last wins"></head></html>')
     if meta.get("title","")!="Last wins" or meta.get("description","")!="Description":
         raise Error("OpenGraph metadata differs")
-    var rails = read_file("/workspace/once-campfire-rust/vectors","rails_compat.json")
+    var rails = read_file("tests/corpus","rails_compat.json")
     var signer = Signer(db.scalar("SELECT json_extract(?,'$.secret_key_base')",[rails]))
     for row in db.rows("SELECT json_extract(value,'$.case'),json_extract(value,'$.sgid'),json_extract(value,'$.purpose'),json_extract(value,'$.now'),json_extract(value,'$.expected') FROM json_each(?,'$.sgids.verify')",[rails]):
         signer.clock = row[3]
@@ -43,3 +43,17 @@ def main() raises:
         if signer.verify(db,"active_record/signed_id",row[2],purpose)!=row[5]:
             raise Error("Rails signed ID differs: "+row[0])
     print("PASS: Ruby variant digests, 70 Rails signature/purpose/expiry vectors, and HTML5 OpenGraph metadata")
+    for row in db.rows("SELECT json_extract(value,'$.case'),json_extract(value,'$.name'),json_extract(value,'$.raw'),json_extract(value,'$.now'),json_type(value,'$.expected'),json_quote(json_extract(value,'$.expected')) FROM json_each(?,'$.encrypted_cookies.verify')",[rails]):
+        signer.clock = row[3]
+        var data = signer.decrypt_cookie(db,url_encode(row[2]),row[1])
+        if row[4]=="null":
+            if data!="":
+                raise Error("Encrypted cookie should reject: "+row[0])
+        elif data=="" or db.scalar("SELECT count(*) FROM (SELECT fullkey,type,atom FROM json_tree(?) EXCEPT SELECT fullkey,type,atom FROM json_tree(?))",[data,row[5]])!="0" or db.scalar("SELECT count(*) FROM (SELECT fullkey,type,atom FROM json_tree(?) EXCEPT SELECT fullkey,type,atom FROM json_tree(?))",[row[5],data])!="0":
+            raise Error("Encrypted cookie differs: "+row[0])
+    signer.clock = "now"
+    var original = '{"return_to_after_authenticating":"/rooms/1","flash":{"flashes":{"notice":"<escaped>"}}}'
+    var encrypted = signer.encrypted_cookie(original,"2046-01-01T00:00:00.000Z")
+    if signer.decrypt_cookie(db,encrypted)!=original:
+        raise Error("Encrypted session roundtrip failed")
+    print("PASS: 20 independent Rails encrypted-cookie vectors and session roundtrip")

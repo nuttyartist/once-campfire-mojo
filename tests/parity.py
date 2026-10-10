@@ -8,7 +8,7 @@ import base64,contextlib,hashlib,hmac,json,os,re,sys,tempfile,time,urllib.parse
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'bench'))
 import local
-from dom_compare import differences
+from dom_compare import differences, DOM
 
 OUT=Path(os.environ.get('PARITY_RESULTS',str(local.MOJO/'bench/results/parity-gate')))
 LABELS=json.loads((local.SEED/'labels.json').read_text())
@@ -56,6 +56,28 @@ def validate_cookie(cookie):
  token=json.loads(base64.b64decode(envelope['message']))
  assert re.fullmatch('[1-9A-HJ-NP-Za-km-z]{24}',token),token
  return token
+
+def compare_legacy_identity(html, ids, app):
+ # Check each live database identity before adapting only the old client-ID DOM
+ # convention. Security/optimistic behavior is independently tested in Chromium.
+ for item in DOM(html).items:
+  if item[0]!='start':continue
+  attrs=dict(item[2])
+  mid=attrs.get('data-message-id')
+  if not mid:continue
+  assert mid in ids,(app,'unknown record ID',mid)
+  expected='message_'+(mid if app=='mojo' else ids[mid])
+  assert attrs.get('id')==expected,(app,'incorrect DOM identity',mid,attrs)
+  if app=='mojo':assert attrs.get('data-client-message-id')==ids[mid]
+ if app!='mojo':return html
+ for mid,cid in ids.items():
+  for prefix in ['message_','edit_message_','presentation_message_','boosts_message_','new_boost_message_','boosting_message_']:
+   for attribute in ['id','data-turbo-frame','target']:
+    html=html.replace(attribute+'="'+prefix+mid+'"',attribute+'="'+prefix+cid+'"')
+  html=html.replace('data-client-message-id="'+cid+'"','')
+ html=html.replace('data-pending-message="true"','').replace('data-client-message-id="$clientMessageId$"','')
+ return html
+
 
 def capture(app,imported_session=None):
  dest=OUT/app;dest.mkdir(parents=True,exist_ok=True)
@@ -126,6 +148,9 @@ def capture(app,imported_session=None):
    state['database']=normalized_times(json.loads(json.dumps(state['database'])))
    assert conn.execute('pragma integrity_check').fetchone()==('ok',)
    state['push_subscriptions']=conn.execute('select count(*) from push_subscriptions').fetchone()[0]
+  with local.connection(db) as conn:
+   identities={str(mid):cid for mid,cid in conn.execute('SELECT id,client_message_id FROM messages')}
+  responses={name:compare_legacy_identity(html,identities,app) for name,html in responses.items()}
   local.write_json(dest/'state.json',state)
  return responses,state,(exported,cookie)
 
@@ -144,7 +169,7 @@ def main():
    elif delta:failures.append((app,name,delta))
   if state['database']!=rs['database']:failures.append((app,'database',state['database'],rs['database']))
   assert state['push_subscriptions']==rs['push_subscriptions']
- local.write_json(OUT/'comparison.json',{'passed':not failures,'normalization':['HTML whitespace','attribute order','asset fingerprints','write timestamps'],'failures':failures,'scenarios':list(rust),'mojo_jobs':ms['jobs'],'upstream_differences':upstream_differences})
+ local.write_json(OUT/'comparison.json',{'passed':not failures,'normalization':['HTML whitespace','attribute order','asset fingerprints','write timestamps','verified database ID to legacy client-ID DOM convention; new pending-only attributes'],'failures':failures,'scenarios':list(rust),'mojo_jobs':ms['jobs'],'upstream_differences':upstream_differences})
  if failures:
   for f in failures:print(str(f)[:4000])
   raise AssertionError(f'{len(failures)} parity failures')

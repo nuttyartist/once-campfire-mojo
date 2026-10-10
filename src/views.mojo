@@ -69,9 +69,10 @@ def render_message(
     set_user(db, signer, v, row[3])
     v["id"] = row[0]
     v["room_name"] = row[6]
-    v["dom_id"] = "message_" + row[1]
+    v["client_id"] = row[1]
+    v["dom_id"] = "message_" + row[0]
     for prefix in ["edit", "boosting", "new_boost", "boosts", "presentation"]:
-        v[prefix + "_dom"] = prefix + "_message_" + row[1]
+        v[prefix + "_dom"] = prefix + "_message_" + row[0]
     v["created_iso"] = db.scalar(
         "SELECT strftime('%Y-%m-%dT%H:%M:%SZ',?)", [row[2]]
     )
@@ -169,6 +170,12 @@ def context(
     var v = Dict[String, String]()
     if uid != "":
         set_user(db, signer, v, uid)
+    v["session_flash"] = ""
+    var session = signer.decrypt_cookie(db,req.cookie("_campfire_session"))
+    if session!="":
+        for item in db.rows("SELECT key,value FROM json_each(?,'$.flash.flashes')",[session]):
+            if item[0] in ["notice","alert"]:
+                v["session_flash"] += '<p role="status" class="flash '+escape(item[0])+'">'+escape(item[1])+'</p>'
     v["title_tag"] = "<title>" + escape(title) + "</title>"
     v["user_meta"] = (
         '<meta name="current-user-id" content="'
@@ -374,7 +381,7 @@ def search(
     var v = context(db, signer, uid, req, "Search", "sidebar searches")
     v["query"] = query
     v["q"] = query
-    v["has_query"] = "1" if query != "" else "0"
+    v["has_query"] = "1" if String(query.strip()) != "" else "0"
     v["count"] = String(len(rows))
     v["messages"] = messages(db, signer, rows)
     var recents = db.rows(

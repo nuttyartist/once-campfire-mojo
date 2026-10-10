@@ -20,8 +20,15 @@ def wire_user(mut db: Database, mut signer: Signer, uid: String, req: Request) r
     return '{"id":'+uid+',"name":'+json_string(user[0])+',"role":'+json_string(role)+',"avatar_url":'+json_string(req.origin()+signer.avatar(uid,user[2]))+'}'
 
 
+def plain_body(mut db: Database, mut signer: Signer, mid: String, raw: String) raises -> String:
+    var plain = richtext.resolved(db,signer,raw,True)
+    if String(plain.strip())=="":
+        plain = db.scalar("SELECT b.filename FROM active_storage_blobs b JOIN active_storage_attachments a ON a.blob_id=b.id WHERE a.record_type='Message' AND a.record_id=? AND a.name='attachment' LIMIT 1",[mid])
+    return plain^
+
+
 def wire_message(mut db: Database, mut signer: Signer, row: List[String], req: Request) raises -> String:
-    return '{"id":'+row[0]+',"created_at":'+json_string(row[2].replace(" ","T")+"Z")+',"body":{"plain_text":'+json_string(richtext.resolved(db,signer,row[7],True))+',"html":'+json_string(richtext.body_html(db,signer,row[7]))+'},"creator":'+wire_user(db,signer,row[3],req)+',"room":{"id":'+row[5]+'},"url":'+json_string(req.origin()+"/rooms/"+row[5]+"/messages/"+row[0])+'}'
+    return '{"id":'+row[0]+',"created_at":'+json_string(row[2].replace(" ","T")+"Z")+',"body":{"plain_text":'+json_string(plain_body(db,signer,row[0],row[7]))+',"html":'+json_string(richtext.body_html(db,signer,row[7]))+'},"creator":'+wire_user(db,signer,row[3],req)+',"room":{"id":'+row[5]+'},"url":'+json_string(req.origin()+"/rooms/"+row[5]+"/messages/"+row[0])+'}'
 
 
 def wire_boost(mut db: Database, mut signer: Signer, bid: String, req: Request) raises -> String:
@@ -86,7 +93,7 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
         if len(new)>0:
             body += ui.stream("append","messages_"+kind+"_"+rid,views.messages(db,signer,new))
         for row in updated:
-            body += ui.stream("replace","message_"+row[1],views.message(db,signer,row))
+            body += ui.stream("replace","message_"+row[0],views.message(db,signer,row))
         return Response(200,body,"text/vnd.turbo-stream.html; charset=utf-8","")
     else:
         return html("",0)
@@ -109,7 +116,7 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
             bid = db.last_id()
             _ = db.rows("UPDATE messages SET updated_at=? WHERE id=?",[now,mid])
             _ = db.rows("UPDATE rooms SET updated_at=? WHERE id=?",[now,rid])
-            pubsub.room(db,rid,ui.stream("append","boosts_message_"+row[1],render_boost(db,signer,bid)))
+            pubsub.room(db,rid,ui.stream("append","boosts_message_"+row[0],render_boost(db,signer,bid)))
             return ui.redirect("/messages/"+mid+"/boosts")
         if verb=="DELETE":
             if db.scalar("SELECT 1 FROM boosts WHERE id=? AND message_id=? AND booster_id=?",[bid,mid,uid])!="1":
@@ -123,21 +130,23 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
         if verb!="GET":
             return html("Not found",404)
         if edit:
-            return html('<turbo-frame id="new_boost_message_'+row[1]+'">'+ui.form("/messages/"+mid+"/boosts",ui.input("boost[content]","","Boost"),"post","Boost")+'</turbo-frame>')
+            return html('<turbo-frame id="new_boost_message_'+row[0]+'">'+ui.form("/messages/"+mid+"/boosts",ui.input("boost[content]","","Boost"),"post","Boost")+'</turbo-frame>')
         var boosts = db.rows("SELECT id FROM boosts WHERE message_id=? ORDER BY created_at",[mid])
         var body = String()
         for b in boosts:
             body += render_boost(db,signer,b[0])
-        return html('<turbo-frame id="boosts_message_'+row[1]+'">'+body+'</turbo-frame>')
+        return html('<turbo-frame id="boosts_message_'+row[0]+'">'+body+'</turbo-frame>')
     if (edit or verb!="GET") and row[3]!=uid and db.scalar("SELECT role FROM users WHERE id=?",[uid])!="1":
         return html("Forbidden",403)
     if verb=="GET" and edit:
         var action = "/rooms/"+rid+"/messages/"+mid
         var editor = '<lexxy-editor name="message[body]" value="'+escape(richtext.editable(db,signer,row[7]))+'" aria-label="Edit message" class="input lexxy-content" autofocus></lexxy-editor>'
-        return html('<turbo-frame id="edit_message_'+row[1]+'">'+ui.form(action,editor,"patch")+ui.form(action,"","delete","Delete message")+'</turbo-frame>')
+        return html('<turbo-frame id="edit_message_'+row[0]+'">'+ui.form(action,editor,"patch")+ui.form(action,"","delete","Delete message")+'</turbo-frame>')
     if verb=="PATCH" or verb=="PUT":
         var raw = f.fields.get("message[body]",row[7])
         var plain = richtext.resolved(db,signer,raw,True)
+        if plain.byte_length()>65536:
+            return html("Text message exceeds 65536 bytes",422)
         if String(plain.strip())=="" and "message[attachment]" not in f.files and f.fields.get("message[attachment]","")=="" and db.scalar("SELECT 1 FROM active_storage_attachments WHERE record_type='Message' AND record_id=? AND name='attachment'",[mid])!="1":
             return html("Message is empty",422)
         if "message[attachment]" in f.files:
@@ -152,11 +161,11 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
             storage.prepare(db,blob)
         _ = db.rows("UPDATE action_text_rich_texts SET body=?,updated_at=? WHERE record_type='Message' AND record_id=? AND name='body'",[richtext.canonical(db,raw),now,mid])
         richtext.sync_embeds(db,signer,db.scalar("SELECT id FROM action_text_rich_texts WHERE record_type='Message' AND record_id=? AND name='body'",[mid]),raw)
-        _ = db.rows("UPDATE message_search_index SET body=? WHERE rowid=?",[plain,mid])
+        _ = db.rows("UPDATE message_search_index SET body=? WHERE rowid=?",[plain_body(db,signer,mid,raw),mid])
         _ = db.rows("UPDATE messages SET updated_at=? WHERE id=?",[now,mid])
         _ = db.rows("UPDATE rooms SET updated_at=? WHERE id=?",[now,rid])
         var updated = db.rows(COLUMNS+"WHERE m.id=?",[mid])[0].copy()
-        pubsub.room(db,rid,ui.stream("replace","message_"+row[1],views.message(db,signer,updated)))
+        pubsub.room(db,rid,ui.stream("replace","message_"+row[0],views.message(db,signer,updated)))
         if "application/json" in req.header("accept"):
             return Response(200,wire_message(db,signer,updated,req),"application/json","")
         return ui.redirect("/rooms/"+rid+"/messages/"+mid)
@@ -182,7 +191,7 @@ def destroy_message(mut db: Database, mid: String) raises -> String:
     _ = db.rows("DELETE FROM messages WHERE id=?",[mid])
     _ = db.rows("DELETE FROM mojo_deliveries WHERE message_id=?",[mid])
     _ = db.rows("DELETE FROM mojo_jobs WHERE message_id=? AND kind='message'",[mid])
-    _ = db.rows("UPDATE rooms SET messages_count=max(0,messages_count-1),updated_at=? WHERE id=?",[stamp(db),row[0]])
-    var body = ui.stream("remove","message_"+row[1])
+    _ = db.rows("UPDATE rooms SET updated_at=? WHERE id=?",[stamp(db),row[0]])
+    var body = ui.stream("remove","message_"+mid)
     pubsub.room(db,row[0],body)
     return body^

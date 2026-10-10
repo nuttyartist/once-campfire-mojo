@@ -1,0 +1,172 @@
+{
+  "rails_revision": "b52b244f384456d9ab5892ebb7bebd8cd8c696c9",
+  "schema_sha256": "280970e5ecd9fcfed40699966dd4db41aa8211396d5a2ef2405475dcfc3a9eea",
+  "maximum_rails_version": "20261007190000",
+  "versions": [
+    "20231215043540",
+    "20231220143106",
+    "20240110071740",
+    "20240115124901",
+    "20240130003150",
+    "20240130213001",
+    "20240131105830",
+    "20240209110503",
+    "20250825100957",
+    "20250825100958",
+    "20250825100959",
+    "20251126092013",
+    "20251126115722",
+    "20251126130131",
+    "20251212154340",
+    "20261004225000",
+    "20261005022000",
+    "20261007190000"
+  ],
+  "tables": {
+    "accounts": [
+      "id",
+      "created_at",
+      "custom_styles",
+      "join_code",
+      "name",
+      "settings",
+      "singleton_guard",
+      "updated_at"
+    ],
+    "action_text_rich_texts": [
+      "id",
+      "body",
+      "created_at",
+      "name",
+      "record_id",
+      "record_type",
+      "updated_at"
+    ],
+    "active_storage_attachments": [
+      "id",
+      "blob_id",
+      "created_at",
+      "name",
+      "record_id",
+      "record_type"
+    ],
+    "active_storage_blobs": [
+      "id",
+      "byte_size",
+      "checksum",
+      "content_type",
+      "created_at",
+      "filename",
+      "key",
+      "metadata",
+      "service_name"
+    ],
+    "active_storage_variant_records": [
+      "id",
+      "blob_id",
+      "variation_digest"
+    ],
+    "bans": [
+      "id",
+      "created_at",
+      "ip_address",
+      "updated_at",
+      "user_id"
+    ],
+    "boosts": [
+      "id",
+      "booster_id",
+      "content",
+      "created_at",
+      "message_id",
+      "updated_at"
+    ],
+    "memberships": [
+      "id",
+      "connected_at",
+      "connections",
+      "created_at",
+      "involvement",
+      "room_id",
+      "unread_at",
+      "updated_at",
+      "user_id"
+    ],
+    "messages": [
+      "id",
+      "client_message_id",
+      "created_at",
+      "creator_id",
+      "room_id",
+      "updated_at"
+    ],
+    "push_subscriptions": [
+      "id",
+      "auth_key",
+      "created_at",
+      "endpoint",
+      "p256dh_key",
+      "updated_at",
+      "user_agent",
+      "user_id"
+    ],
+    "rooms": [
+      "id",
+      "created_at",
+      "creator_id",
+      "name",
+      "type",
+      "updated_at",
+      "messages_count"
+    ],
+    "searches": [
+      "id",
+      "created_at",
+      "query",
+      "updated_at",
+      "user_id"
+    ],
+    "sessions": [
+      "id",
+      "created_at",
+      "ip_address",
+      "last_active_at",
+      "token",
+      "updated_at",
+      "user_agent",
+      "user_id"
+    ],
+    "users": [
+      "id",
+      "bio",
+      "bot_token",
+      "created_at",
+      "email_address",
+      "name",
+      "password_digest",
+      "role",
+      "status",
+      "updated_at"
+    ],
+    "webhooks": [
+      "id",
+      "created_at",
+      "updated_at",
+      "url",
+      "user_id"
+    ],
+    "message_search_index": [
+      "body"
+    ]
+  },
+  "upgradable_columns": {
+    "rooms": [
+      "messages_count"
+    ]
+  },
+  "message_count_triggers": {
+    "messages_ai_rooms_messages_count": "AFTER INSERT ON messages BEGIN UPDATE rooms SET messages_count = messages_count + 1 WHERE id = NEW.room_id; END",
+    "messages_ad_rooms_messages_count": "AFTER DELETE ON messages BEGIN UPDATE rooms SET messages_count = messages_count - 1 WHERE id = OLD.room_id; END",
+    "messages_au_rooms_messages_count": "AFTER UPDATE OF room_id ON messages WHEN OLD.room_id IS NOT NEW.room_id BEGIN UPDATE rooms SET messages_count = messages_count - 1 WHERE id = OLD.room_id; UPDATE rooms SET messages_count = messages_count + 1 WHERE id = NEW.room_id; END"
+  }
+}

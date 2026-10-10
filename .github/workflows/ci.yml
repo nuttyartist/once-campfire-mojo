@@ -1,0 +1,56 @@
+name: Mojo compatibility
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojo-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  application:
+    name: Application / ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: once-campfire-mojo
+          persist-credentials: false
+      - name: Build pinned toolchain
+        working-directory: once-campfire-mojo
+        run: docker build -f bench/Dockerfile.tools -t campfire-local-tools:verified .
+      - name: Bootstrap pinned independent fixtures
+        env:
+          CAMPFIRE_WORKSPACE: ${{ github.workspace }}
+        run: bash once-campfire-mojo/tools/bootstrap-tests.sh
+      - name: Application, fault recovery, crypto and native sanitizer tests
+        run: |
+          docker run --rm --init -e CAMPFIRE_TEST_NO_AFFINITY=1 \
+            -v "$GITHUB_WORKSPACE:/workspace" -w /workspace/once-campfire-mojo \
+            campfire-local-tools:verified bash tools/check.sh
+      - name: Build production image
+        run: docker build --build-arg TOOLCHAIN_IMAGE=campfire-local-tools:verified -t campfire-mojo:ci once-campfire-mojo
+      - name: Browser and packaged deployment gates
+        run: |
+          bash once-campfire-mojo/tools/check-migration.sh
+          bash once-campfire-mojo/tools/check-browser.sh
+
+  workflow:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check workflow syntax
+        uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca # v1.7.12

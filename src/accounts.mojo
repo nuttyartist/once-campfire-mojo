@@ -7,7 +7,6 @@ from http import Request, Response, html
 from parameters import Form
 from text import escape, token, positive, params
 import templates
-from runtime import password_hash
 import ui
 import views
 import pubsub
@@ -23,7 +22,7 @@ def start_session(mut db: Database, mut signer: Signer, uid: String, req: Reques
     var now = stamp(db)
     _ = db.rows("INSERT INTO sessions(token,user_id,last_active_at,created_at,updated_at,ip_address,user_agent) VALUES(?,?,?,?,?,?,?)",[tok,uid,now,now,now,req.peer,req.header("user-agent")])
     var expiry = db.scalar("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now','+20 years')")
-    return html("",303,"Location: "+post_login(db,signer,req)+"\r\nSet-Cookie: mojo_return_to=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0\r\nSet-Cookie: session_token="+signer.cookie(tok,expiry)+"; Path=/; HttpOnly; SameSite=Lax; Max-Age=631152000"+("; Secure" if req.origin().startswith("https://") else "")+"\r\n")
+    return html("",303,"Location: "+post_login(db,signer,req)+"\r\n"+consume_return(db,signer,req)+"Set-Cookie: mojo_return_to=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0\r\nSet-Cookie: session_token="+signer.cookie(tok,expiry)+"; Path=/; HttpOnly; SameSite=Lax; Max-Age=631152000"+("; Secure" if req.origin().startswith("https://") else "")+"\r\n")
 
 
 def signup(mut db: Database, mut signer: Signer, req: Request, f: Form, first: Bool) raises -> Response:
@@ -42,12 +41,14 @@ def signup(mut db: Database, mut signer: Signer, req: Request, f: Form, first: B
     if req.method != "POST":
         return html("Not found",404)
     var name = String(f.fields.get("user[name]","").strip())
-    var email = f.fields.get("user[email_address]","").strip().lower()
+    var email = f.fields.get("user[email_address]","")
     if name == "" or email == "" or "@" not in email:
         return html("Name and email address are required",422)
     if db.scalar("SELECT 1 FROM users WHERE email_address=?",[email]) == "1":
         return ui.redirect("/session/new")
-    var digest = password_hash(f.fields.get("user[password]",""))
+    var digest = f.password_digest
+    if digest=="":
+        return html("Password is required",422)
     var now = stamp(db)
     if first:
         _ = db.rows("INSERT INTO accounts(name,join_code,created_at,updated_at,settings) VALUES('Campfire',?,?,?,'{}')",[session_token(),now,now])
@@ -90,7 +91,7 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
         var tok = signer.verify_cookie(db,req.cookie("session_token"))
         _ = db.rows("DELETE FROM sessions WHERE user_id=? AND token=?",[uid,tok])
         _ = db.rows("DELETE FROM push_subscriptions WHERE user_id=? AND endpoint=?",[uid,f.fields.get("push_subscription_endpoint","")])
-        return html("",303,"Location: /session/new\r\nSet-Cookie: session_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0\r\n")
+        return html("",303,"Location: /session/new\r\nSet-Cookie: _campfire_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0\r\nSet-Cookie: session_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0\r\n")
     if path == "/users/me/profile":
         if verb == "PATCH" or verb == "PUT":
             storage.profile_upload(db,f,uid)
@@ -102,7 +103,7 @@ def route(mut db: Database, mut signer: Signer, req: Request, uid: String, f: Fo
                     _ = db.rows("UPDATE users SET "+column+"=?,updated_at=? WHERE id=?",[value,now,uid])
             var password = f.fields.get("user[password]","")
             if password != "":
-                _ = db.rows("UPDATE users SET password_digest=?,updated_at=? WHERE id=?",[password_hash(password),now,uid])
+                _ = db.rows("UPDATE users SET password_digest=?,updated_at=? WHERE id=?",[f.password_digest,now,uid])
             return ui.redirect(path)
         if verb!="GET":
             return html("Not found",404)
@@ -311,13 +312,34 @@ def request_login(mut db: Database, mut signer: Signer, req: Request) raises -> 
     var target = req.target
     if target.byte_length()>2048:
         target = "/"
-    var expiry = db.scalar("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now','+30 minutes')")
-    var value = url_encode(signer.envelope("signed cookie",json_string(target),"cookie.mojo_return_to",expiry))
-    return html("",302,"Location: /session/new\r\nSet-Cookie: mojo_return_to="+value+"; Path=/; HttpOnly; SameSite=Lax; Max-Age=1800"+("; Secure" if req.origin().startswith("https://") else "")+"\r\n")
+    var session = read_session(db,signer,req)
+    session = db.scalar("SELECT json_set(?,'$.return_to_after_authenticating',?)",[session,req.origin()+target])
+    return html("",302,"Location: /session/new\r\n"+session_header(db,signer,req,session))
 
 
 def post_login(mut db: Database, mut signer: Signer, req: Request) raises -> String:
-    var path = signer.verify(db,"signed cookie",decode(req.cookie("mojo_return_to")),"cookie.mojo_return_to",False)
+    var path = db.scalar("SELECT coalesce(json_extract(?,'$.return_to_after_authenticating'),'')",[read_session(db,signer,req)])
+    if path.startswith(req.origin()+"/"):
+        var relative_path = String(path[byte=req.origin().byte_length():])
+        path = relative_path^
+    if path=="":
+        path = signer.verify(db,"signed cookie",decode(req.cookie("mojo_return_to")),"cookie.mojo_return_to",False)
     if not path.startswith("/") or path.startswith("//") or "\\" in path or "\r" in path or "\n" in path or path.startswith("/session"):
         return "/"
     return path
+
+
+def read_session(mut db: Database, mut signer: Signer, req: Request) raises -> String:
+    var session = signer.decrypt_cookie(db,req.cookie("_campfire_session"))
+    if session=="" or db.scalar("SELECT json_type(?)",[session])!="object":
+        return '{"session_id":'+json_string(session_token())+'}'
+    return session^
+
+
+def session_header(mut db: Database, mut signer: Signer, req: Request, session: String) raises -> String:
+    var expiry = db.scalar("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now','+20 years')")
+    return "Set-Cookie: _campfire_session="+signer.encrypted_cookie(session,expiry)+"; Path=/; HttpOnly; SameSite=Lax; Max-Age=631152000"+("; Secure" if req.origin().startswith("https://") else "")+"\r\n"
+
+
+def consume_return(mut db: Database, mut signer: Signer, req: Request) raises -> String:
+    return session_header(db,signer,req,db.scalar("SELECT json_remove(?,'$.return_to_after_authenticating')",[read_session(db,signer,req)]))

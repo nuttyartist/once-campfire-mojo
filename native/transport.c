@@ -95,7 +95,7 @@ static long restricted_resolve(CURLU *url,char *rule,size_t capacity,long allow_
  char lookup[256];snprintf(lookup,sizeof lookup,"%s",host);
  if(lookup[0]=='['){memmove(lookup,lookup+1,strlen(lookup));char *end=strchr(lookup,']');if(end)*end=0;}
  if(strchr(lookup,'%'))goto done;
- struct resolved_addresses ips;if(bounded_dns(lookup,port,&ips,timeout<2000?timeout:2000))goto done;
+ struct resolved_addresses ips;if(bounded_dns(lookup,port,&ips,timeout<2000?timeout:2000)){rc=-4;goto done;}
  for(int i=0;i<ips.count;i++)if(!allow_private&&!public_ip((struct sockaddr*)&ips.addresses[i]))goto done;
  struct sockaddr_storage *first=&ips.addresses[0];char address[INET6_ADDRSTRLEN];const void *binary=first->ss_family==AF_INET?(const void*)&((struct sockaddr_in*)first)->sin_addr:(const void*)&((struct sockaddr_in6*)first)->sin6_addr;
  if(!inet_ntop(first->ss_family,binary,address,sizeof address))goto done;
@@ -113,22 +113,27 @@ long net_validate(const char *url) {
  if(!curl_url_set(parsed,CURLUPART_URL,url,0))rc=restricted_resolve(parsed,rule,sizeof rule,0,2000);
  curl_url_cleanup(parsed);return rc;
 }
-struct response_buffer {char *bytes;long used,capacity;};
+struct response_buffer {char *bytes;long used,capacity,allocated;};
 static size_t receive_body(char *ptr,size_t size,size_t count,void *context) {
- struct response_buffer *b=context;size_t n=size*count;if(n>(size_t)(b->capacity-b->used))return 0;memcpy(b->bytes+b->used,ptr,n);b->used+=n;return n;
+ struct response_buffer *b=context;if(size&&count>SIZE_MAX/size)return 0;size_t n=size*count;if(n>(size_t)(b->capacity-b->used))return 0;
+ if(b->used+(long)n>b->allocated){long next=b->allocated?b->allocated*2:4096;if(next<b->used+(long)n)next=b->used+(long)n;if(next>b->capacity)next=b->capacity;void *p=realloc(b->bytes,(size_t)next);if(!p)return 0;b->bytes=p;b->allocated=next;}
+ if(n)memcpy(b->bytes+b->used,ptr,n);b->used+=n;return n;
 }
-long net_request(const char *url,const char *method,const char *header_lines,const void *body,long length,void *output,long capacity,long *received,long allow_private,char *content_type,char *location,long timeout) {
+long net_request(const char *url,const char *method,const char *header_lines,const void *body,long length,void **output,long capacity,long *received,long allow_private,char *content_type,char *location,long timeout) {
+ struct response_buffer buffer={NULL,0,capacity,0};*output=NULL;*received=0;
  long started=clock_ms();
  CURLU *parsed=curl_url();CURL *curl=NULL;struct curl_slist *resolved=NULL,*headers=NULL;char rule[600];long status=-2;
- if(!parsed||curl_url_set(parsed,CURLUPART_URL,url,0)||restricted_resolve(parsed,rule,sizeof rule,allow_private,timeout))goto done;
+ if(!parsed||curl_url_set(parsed,CURLUPART_URL,url,0))goto done;
+ status=restricted_resolve(parsed,rule,sizeof rule,allow_private,timeout);if(status)goto done;
  curl=curl_easy_init();if(!curl){status=-1;goto done;}
  resolved=curl_slist_append(NULL,rule);char *copy=strdup(header_lines),*save=NULL;
  for(char *line=strtok_r(copy,"\n",&save);line;line=strtok_r(NULL,"\n",&save)){
   if(strchr(line,'\r')){free(copy);goto done;}headers=curl_slist_append(headers,line);
  }free(copy);
- struct response_buffer buffer={output,0,capacity};
  curl_easy_setopt(curl,CURLOPT_URL,url);curl_easy_setopt(curl,CURLOPT_RESOLVE,resolved);
  curl_easy_setopt(curl,CURLOPT_PROXY,"");curl_easy_setopt(curl,CURLOPT_PROTOCOLS_STR,"http,https");
+ const char *ca_bundle=getenv("CAMPFIRE_CA_BUNDLE");
+ if(ca_bundle&&*ca_bundle)curl_easy_setopt(curl,CURLOPT_CAINFO,ca_bundle);
  long remaining=timeout-(clock_ms()-started);if(remaining<=0){status=-3;goto done;}
  curl_easy_setopt(curl,CURLOPT_FOLLOWLOCATION,0L);curl_easy_setopt(curl,CURLOPT_CONNECTTIMEOUT_MS,remaining<7000?remaining:7000);curl_easy_setopt(curl,CURLOPT_TIMEOUT_MS,remaining);curl_easy_setopt(curl,CURLOPT_NOSIGNAL,1L);
  curl_easy_setopt(curl,CURLOPT_WRITEFUNCTION,receive_body);curl_easy_setopt(curl,CURLOPT_WRITEDATA,&buffer);curl_easy_setopt(curl,CURLOPT_HTTPHEADER,headers);
@@ -138,7 +143,7 @@ long net_request(const char *url,const char *method,const char *header_lines,con
  CURLcode result=curl_easy_perform(curl);*received=buffer.used;status=-1;
  if(result==CURLE_OK){curl_easy_getinfo(curl,CURLINFO_RESPONSE_CODE,&status);char *type=NULL;curl_easy_getinfo(curl,CURLINFO_CONTENT_TYPE,&type);if(type)snprintf(content_type,256,"%s",type);char *redirect=NULL;curl_easy_getinfo(curl,CURLINFO_REDIRECT_URL,&redirect);if(redirect&&strlen(redirect)<8192)strcpy(location,redirect);}
  if(result==CURLE_OPERATION_TIMEDOUT)status=-3;
- done:curl_easy_cleanup(curl);curl_slist_free_all(resolved);curl_slist_free_all(headers);curl_url_cleanup(parsed);return status;
+ done:*output=buffer.bytes;*received=buffer.used;curl_easy_cleanup(curl);curl_slist_free_all(resolved);curl_slist_free_all(headers);curl_url_cleanup(parsed);return status;
 }
 long p256_validate_public(const void *public_key) {
  EC_GROUP *group=EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1);if(!group)return 0;EC_POINT *point=EC_POINT_new(group);

@@ -117,10 +117,18 @@ struct Connection(Copyable, Movable):
         except e:
             app.db.pending_download.close()
             self.download.close()
-            print("Request failed:", e)
-            self.outgoing = html("Request could not be processed", 400).pack(
-                False
-            )
+            var reason = String(e)
+            if reason.startswith("HTTP 400: "):
+                self.outgoing = html("Malformed request parameters",400).pack(False)
+            elif reason.startswith("HTTP 422: "):
+                self.outgoing = html(String(reason[byte=10:]),422).pack(False)
+            elif reason in ["Invalid ID", "Truncated percent escape", "Invalid percent escape", "NUL is not valid in a form value"]:
+                self.outgoing = html("Malformed request",400).pack(False)
+            elif reason in ["Invalid attachment", "Invalid image", "Incomplete stored upload", "Cannot decode image", "Cannot preview media"]:
+                self.outgoing = html(reason,422).pack(False)
+            else:
+                print("Request failed:",req.method,req.path,e)
+                self.outgoing = html("Internal server error",500).pack(False)
         self.upload.close()
         self.sent = 0
 
@@ -133,7 +141,7 @@ def buffered_bytes(connections: List[Connection]) -> Int:
 
 
 def serve(listener: Int, db_path: String, cache_limit: Int) raises:
-    var app = App(db_path, cache_limit)
+    var app = App(db_path, cache_limit,False)
     var connections = List[Connection]()
     var buffer = List[UInt8](length=65536, fill=0)
     while external_call["os_running",Int]():

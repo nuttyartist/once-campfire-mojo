@@ -1,7 +1,7 @@
 from std.ffi import external_call
 from database import Database
 from http import Request, Response, html, conditional
-from text import params, positive, token, plain_text, escape
+from text import params, positive, token, plain_text, escape, search_query
 import views
 import jobs
 import richtext
@@ -39,9 +39,10 @@ struct App(Movable):
     var login_attempts: Int
     var login_window: Int
 
-    def __init__(out self, path: String, cache_limit: Int) raises:
+    def __init__(out self, path: String, cache_limit: Int, initialize_schema: Bool = True) raises:
         self.db = Database(path)
-        schema.initialize(self.db)
+        if initialize_schema:
+            schema.initialize(self.db)
         self.signer = Signer()
         self.cache = Dict[String, String]()
         self.cache_bytes = 0
@@ -50,34 +51,32 @@ struct App(Movable):
         self.expires = 0
         self.login_attempts = 0
         self.login_window = 0
-        _ = self.db.rows(
-            "CREATE INDEX IF NOT EXISTS"
-            " index_messages_on_room_id_and_created_at ON"
-            " messages(room_id,created_at)"
-        )
-        var columns = self.db.rows("PRAGMA table_info(rooms)")
-        var has_count = False
-        for column in columns:
-            if column[1] == "messages_count":
-                has_count = True
-        if not has_count:
-            _ = self.db.rows(
-                "ALTER TABLE rooms ADD COLUMN messages_count INTEGER NOT NULL"
-                " DEFAULT 0"
-            )
-            _ = self.db.rows(
-                "UPDATE rooms SET messages_count=(SELECT COUNT(*) FROM messages"
-                " WHERE room_id=rooms.id)"
-            )
 
     def invalidate(mut self):
         self.cache.clear()
         self.cache_bytes = 0
 
-    def handle(mut self, var req: Request) raises -> String:
+    def handle(mut self, req: Request) raises -> String:
+        var result: String
+        try:
+            result = self.handle_request(req.copy())
+            storage.discard_prepared(self.db)
+        except e:
+            storage.discard_prepared(self.db)
+            raise e^
+        # Consume a migrated flash only when HTML has actually displayed it.
+        if req.method=="GET" and req.cookie("_campfire_session")!="" and result.startswith("HTTP/1.1 200") and "Content-Type: text/html" in String(result.split("\r\n\r\n",maxsplit=1)[0]):
+            var session = accounts.read_session(self.db,self.signer,req)
+            if self.db.scalar("SELECT json_type(?,'$.flash')",[session])!="":
+                session = self.db.scalar("SELECT json_remove(?,'$.flash')",[session])
+                var end = result.find("\r\n")
+                result = String(result[byte=:end+2])+accounts.session_header(self.db,self.signer,req,session)+String(result[byte=end+2:])
+        return result^
+
+    def handle_request(mut self, var req: Request) raises -> String:
         self.db.request_host = req.header("host")
-        if self.db.scalar("SELECT 1 FROM bans WHERE ip_address=? LIMIT 1",[req.peer])=="1":
-            return html("Forbidden",403).pack(False)
+        if req.method not in ["GET", "HEAD"] and self.db.scalar("SELECT 1 FROM bans WHERE ip_address=? LIMIT 1",[req.peer])=="1":
+            return html("Too many requests",429).pack(False)
         if req.method == "HEAD":
             req.method = "GET"
         if req.path.startswith("/assets/") and req.method=="GET":
@@ -96,7 +95,7 @@ struct App(Movable):
         var form = parameters.Form()
         if req.method != "GET":
             var site = req.header("sec-fetch-site")
-            if site != "" and site != "same-origin" and site != "same-site" and site != "none":
+            if site not in ["same-origin", "same-site"] and (site != "" or req.origin().startswith("https://")):
                 return html("Cross-site request rejected",422).pack(False)
             var origin = req.header("origin")
             if origin != "" and origin != req.origin():
@@ -109,6 +108,33 @@ struct App(Movable):
                     req.method = override
         if req.method!="GET" and req.method!="POST" and req.method!="PATCH" and req.method!="PUT" and req.method!="DELETE":
             return html("Method not supported",405).pack(False)
+        if req.path=="/unfurl_link" and req.method=="POST":
+            if self.user(req)=="":
+                return accounts.request_login(self.db,self.signer,req).pack(False)
+            return controllers.preview(form).pack(req.gzip())
+        # Slow cryptography and remote validation do not own the SQLite writer.
+        # Authorization and uniqueness are checked again in the write transaction.
+        var preflight_uid = self.user(req) if req.method!="GET" else String()
+        if req.method=="POST" and (req.path=="/first_run" or req.path.startswith("/join/")):
+            var allowed = self.db.scalar("SELECT 1 FROM accounts LIMIT 1")!="1" if req.path=="/first_run" else self.db.scalar("SELECT 1 FROM accounts WHERE join_code=?",[String(req.path[byte=6:])])=="1"
+            if allowed and form.fields.get("user[password]","")!="":
+                form.password_digest = runtime.password_hash(form.fields.get("user[password]",""))
+        if preflight_uid!="" and req.path=="/users/me/profile" and req.method in ["PATCH","PUT"] and form.fields.get("user[password]","")!="":
+            form.password_digest = runtime.password_hash(form.fields.get("user[password]",""))
+        if preflight_uid!="" and req.path=="/users/me/push_subscriptions" and req.method=="POST":
+            form.endpoint_validated = controllers.valid_subscription(form)
+        if preflight_uid!="" and req.path.startswith("/users/me/push_subscriptions/") and req.path.endswith("/test_notifications") and req.method=="POST":
+            return controllers.route(self.db,self.signer,req,preflight_uid,form).pack(req.gzip())
+        if req.method=="PUT" and req.path.startswith("/rails/active_storage/disk/"):
+            var prepared = storage.preflight_direct(self.db,self.signer,req,preflight_uid,form)
+            if prepared.status!=0:
+                return prepared.pack(False)
+        if req.method=="GET" and (req.path.startswith("/rails/active_storage/representations/") or req.path.endswith("/avatar") or req.path=="/account/logo"):
+            storage.preflight_get(self.db,self.signer,req,self.user(req)!="")
+        elif req.method!="GET" and (preflight_uid!="" or form.password_digest!=""):
+            # New message creation prepares its separately parsed form in post().
+            if not (len(segments)==4 and String(segments[1])=="rooms" and String(segments[3])=="messages" and req.method=="POST"):
+                storage.preflight_form(self.db,self.signer,form)
         var mutation = req.method != "GET"
         _ = self.db.rows("BEGIN IMMEDIATE" if mutation or req.path.startswith("/rails/active_storage/") or req.path.endswith("/avatar") or req.path=="/account/logo" else "BEGIN")
         try:
@@ -159,21 +185,21 @@ struct App(Movable):
                 self.db.pending_events.clear()
                 storage.rollback(self.db)
             else:
+                if mutation and (req.path.startswith("/rooms/") or req.path.startswith("/account/")):
+                    pubsub.refresh_sidebars(self.db,self.signer,req)
                 _ = self.db.rows("COMMIT")
                 storage.commit(self.db)
                 pubsub.flush(self.db)
                 if mutation:
                     self.invalidate()
-                    if req.path.startswith("/rooms/") or req.path.startswith("/account/"):
-                        pubsub.refresh_sidebars(self.db,self.signer,req)
             return result.pack(req.gzip())
         except e:
-            storage.rollback(self.db)
             self.db.pending_events.clear()
             try:
                 _ = self.db.rows("ROLLBACK")
             except:
                 pass
+            storage.rollback(self.db)
             raise e^
 
     def bot(mut self, var req: Request) raises -> Response:
@@ -246,6 +272,7 @@ struct App(Movable):
             return response^
         if req.method not in ["PATCH","PUT","DELETE"] and not (boost and req.method=="POST" and len(segments)==7):
             return html("Not found",404)
+        storage.preflight_form(self.db,self.signer,form)
         _ = self.db.rows("BEGIN IMMEDIATE")
         try:
             var result = message_actions.route(self.db,self.signer,req,uid,form)
@@ -266,8 +293,8 @@ struct App(Movable):
             var row = self.db.rows(message_actions.COLUMNS+"WHERE m.id=?",[mid])[0].copy()
             return Response(200,message_actions.wire_message(self.db,self.signer,row,req),"application/json","")
         except e:
-            storage.rollback(self.db)
             _ = self.db.rows("ROLLBACK")
+            storage.rollback(self.db)
             self.db.pending_events.clear()
             raise e^
 
@@ -318,7 +345,7 @@ struct App(Movable):
                 " status=0 AND NOT EXISTS(SELECT 1 FROM bans WHERE"
                 " user_id=users.id)"
             ),
-            [fields.get("email_address", "").strip().lower()],
+            [fields.get("email_address", "")],
         )
         var password = fields.get("password", "")
         var digest = String(
@@ -348,7 +375,7 @@ struct App(Movable):
         return html(
             "",
             302,
-            "Location: "+accounts.post_login(self.db,self.signer,req)+"\r\nSet-Cookie: mojo_return_to=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0\r\nSet-Cookie: session_token="
+            "Location: "+accounts.post_login(self.db,self.signer,req)+"\r\n"+accounts.consume_return(self.db,self.signer,req)+"Set-Cookie: mojo_return_to=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0\r\nSet-Cookie: session_token="
             + self.signer.cookie(tok, expiry)
             + "; Path=/; HttpOnly; SameSite=Lax; Max-Age=631152000"+("; Secure" if req.origin().startswith("https://") else "")+"\r\n",
         )
@@ -398,7 +425,7 @@ struct App(Movable):
             + ":"
             + req.header("turbo-frame")
             + ":"
-            + req.cookie("last_room_visited")+req.cookie("last_room")+req.header("if-none-match")
+            + req.cookie("last_room_visited")+req.cookie("last_room")+req.header("if-none-match")+req.cookie("_campfire_session")
         )
         if key in self.cache:
             return self.cache[key]
@@ -407,9 +434,9 @@ struct App(Movable):
             result = html(views.sidebar(self.db, self.signer, uid, req))
         elif req.path == "/searches":
             var fields = params(req.query)
-            var query = String(fields.get("q", "").strip())
+            var query = search_query(fields.get("q", ""))
             var matches = List[List[String]]()
-            if query != "":
+            if String(query.strip()) != "":
                 var terms = List[String]()
                 for word in query.split():
                     terms.append('"' + String(word).replace('"', '""') + '"')
@@ -542,6 +569,13 @@ struct App(Movable):
             client_id = token()
         if client_id.byte_length() > 128:
             return html("Client ID too long", 422)
+        if has_file:
+            var uid = uid_override if uid_override!="" else self.user(req)
+            if uid=="":
+                return html("Unauthorized",401)
+            if self.db.scalar("SELECT 1 FROM memberships WHERE room_id=? AND user_id=?",[rid,uid])!="1":
+                return html("Room not found",404)
+            storage.preflight_form(self.db,self.signer,parsed)
         _ = self.db.rows("BEGIN IMMEDIATE")
         try:
             var uid = uid_override if uid_override != "" else self.user(req)
@@ -599,7 +633,7 @@ struct App(Movable):
             _ = self.db.rows(
                 (
                     "UPDATE rooms SET"
-                    " updated_at=?,messages_count=messages_count+1 WHERE id=?"
+                    " updated_at=? WHERE id=?"
                 ),
                 [now, rid],
             )
@@ -614,9 +648,6 @@ struct App(Movable):
                 [now, now, rid, uid],
             )
             jobs.enqueue(self.db,mid)
-            _ = self.db.rows("COMMIT")
-            storage.commit(self.db)
-            jobs.count(0)
             var rows = self.db.rows(MESSAGE_COLUMNS + "WHERE m.id=?", [mid])
             var body = (
                 '<turbo-stream action="append" target="messages_'
@@ -631,14 +662,19 @@ struct App(Movable):
             jobs.webhook_candidates(
                 self.db, rid, uid, rooms[0][0] == "Rooms::Direct"
             )
+            _ = self.db.rows("COMMIT")
+            storage.commit(self.db)
+            pubsub.flush(self.db)
+            jobs.count(0)
             self.invalidate()
             return Response(
                 200, body, "text/vnd.turbo-stream.html; charset=utf-8", ""
             )
         except e:
-            storage.rollback(self.db)
+            self.db.pending_events.clear()
             try:
                 _ = self.db.rows("ROLLBACK")
             except:
                 pass
+            storage.rollback(self.db)
             raise e^

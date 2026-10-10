@@ -14,7 +14,7 @@ const errors = []
 let browser
 try {
   let ready = false
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < 600; i++) {
     try {
       ready = (await fetch(`${base}/up`)).ok
     } catch {}
@@ -99,6 +99,7 @@ try {
       .locator('form:has(input[name="user[name]"]) button[type="submit"]')
       .click(),
   ])
+  await settled(first)
   const roomURL = first.url()
   const second = await context.newPage()
   const secondSubscribed = watch(second)
@@ -112,14 +113,17 @@ try {
       ).unref(),
     ),
   ])
+  await first.bringToFront()
   await first
     .getByRole("textbox", { name: "Write a message", exact: true })
     .fill("Hello from the first tab")
+  await first.waitForFunction(() => document.querySelector("lexxy-editor#message_body").value.includes("Hello from the first tab"))
   await first.getByRole("button", { name: "Send Message", exact: true }).click()
   await second
     .locator(".messages > .message[data-message-id]")
     .filter({ hasText: "Hello from the first tab" })
     .waitFor()
+  await second.bringToFront()
   await second
     .getByRole("textbox", { name: "Write a message", exact: true })
     .fill("Reply from the second tab")
@@ -130,6 +134,7 @@ try {
     .locator(".messages > .message[data-message-id]")
     .filter({ hasText: "Reply from the second tab" })
     .waitFor()
+  await first.bringToFront()
   await first.locator("lexxy-editor#message_body").evaluate((el) => {
     el.value =
       '<img src=x onerror="window.injected=true"><b>safe browser text</b>'
@@ -444,6 +449,48 @@ try {
     .waitFor()
   await settled(first)
   await settled(joined)
+  // A separate non-admin user may reuse a client UUID, but it must never
+  // replace, edit, boost-target or delete the other user's persisted DOM node.
+  const victimSubscribed = watch(first)
+  const attackerSubscribed = watch(joined)
+  await navigate(first, roomURL)
+  await navigate(joined, roomURL)
+  await Promise.all([victimSubscribed, attackerSubscribed])
+  const victim = first.locator(`[id="${messageID}"]`)
+  const clientID = await victim.getAttribute("data-client-message-id")
+  if (!clientID) throw new Error("Missing optimistic correlation ID")
+  const attack = await joined.evaluate(async ({ roomURL, clientID }) => {
+    const response = await fetch(`${roomURL}/messages`, {
+      method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "text/vnd.turbo-stream.html" },
+      body: new URLSearchParams({ "message[body]": "Client ID collision regression", "message[client_message_id]": clientID }),
+    })
+    return { status: response.status, body: await response.text() }
+  }, { roomURL, clientID })
+  if (attack.status !== 200) throw new Error(`Collision post: ${attack.status}`)
+  const attackerID = attack.body.match(/data-message-id="(\d+)"/)?.[1]
+  if (!attackerID || attackerID === numericID) throw new Error("Client ID reused database identity")
+  await first.locator(`[data-message-id="${attackerID}"]`).waitFor()
+  if (await victim.innerText().then(text => !text.includes("Edited in the browser")))
+    throw new Error("Another user's client ID displaced the victim message")
+  async function changeMessage(id, method, body = "") {
+    return joined.evaluate(async ({ roomURL, id, method, body }) => {
+      const response = await fetch(`${roomURL}/messages/${id}`, { method, headers: { "Content-Type": "application/x-www-form-urlencoded" }, body })
+      return response.status
+    }, { roomURL, id, method, body })
+  }
+  const deniedResponse = await joinedContext.request.patch(`${roomURL}/messages/${numericID}`, {
+    headers: { "Sec-Fetch-Site": "same-origin" }, form: { "message[body]": "forged" },
+  })
+  const forbidden = deniedResponse.status()
+  if (![403, 404].includes(forbidden)) throw new Error(`Cross-user edit: ${forbidden}`)
+  if (await changeMessage(attackerID, "PATCH", "message%5Bbody%5D=Collision+edited") !== 200) throw new Error("Attacker edit failed")
+  await first.locator(`[data-message-id="${attackerID}"]`).filter({ hasText: "Collision edited" }).waitFor()
+  if (await changeMessage(attackerID, "DELETE") !== 200) throw new Error("Attacker delete failed")
+  await first.locator(`[data-message-id="${attackerID}"]`).waitFor({ state: "detached" })
+  if (await victim.count() !== 1 || !(await victim.innerText()).includes("Edited in the browser"))
+    throw new Error("Attacker edit/delete changed the victim")
+  if (await first.locator('[data-pending-message="true"]').count()) throw new Error("Unreconciled optimistic message")
+  console.log("PASS: two-user client-ID collision, authorized edit/delete isolation, and optimistic reconciliation")
   await joinedContext.close()
   if (errors.length) throw new Error(errors.join("\n"))
   console.log(

@@ -3,6 +3,75 @@
 import argparse,base64,contextlib,fcntl,hashlib,json,os,re,secrets,shlex,shutil,sqlite3,subprocess,tempfile
 from pathlib import Path
 
+SCHEMA = json.loads(Path(__file__).with_name('schema_contract.json').read_text())
+
+def sync_directory(path):
+    fd=os.open(path,os.O_RDONLY|os.O_DIRECTORY)
+    try:os.fsync(fd)
+    finally:os.close(fd)
+
+def sync_tree(folder):
+    for path in folder.rglob('*'):
+        if path.is_symlink():raise SystemExit('Symlinks are not permitted in application data.')
+        if path.is_file():
+            with path.open('rb') as stream:os.fsync(stream.fileno())
+    for path in sorted((p for p in folder.rglob('*') if p.is_dir()),key=lambda p:len(p.parts),reverse=True):sync_directory(path)
+    sync_directory(folder)
+
+def validate_schema(db,allow_upgrade=True):
+    tables={row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if 'schema_migrations' in tables:
+        version=db.execute("SELECT coalesce(max(version),'0') FROM schema_migrations").fetchone()[0]
+        if version>SCHEMA['maximum_rails_version']:raise SystemExit('Unsupported newer Rails schema; upgrade Mojo first.')
+    for table,columns in SCHEMA['tables'].items():
+        present={row[1] for row in db.execute('PRAGMA table_info('+table+')')}
+        missing=set(columns)-present
+        if allow_upgrade:missing-=set(SCHEMA['upgradable_columns'].get(table,[]))
+        if missing:raise SystemExit('Unsupported Campfire schema: missing '+table+'.'+sorted(missing)[0]+'. Upgrade the source with Rails first.')
+
+def migrate_database(db):
+    validate_schema(db)
+    db.execute('BEGIN IMMEDIATE')
+    try:
+        columns={row[1] for row in db.execute('PRAGMA table_info(rooms)')}
+        if 'messages_count' not in columns:db.execute('ALTER TABLE rooms ADD COLUMN messages_count INTEGER NOT NULL DEFAULT 0')
+        db.execute('UPDATE rooms SET messages_count=(SELECT count(*) FROM messages WHERE room_id=rooms.id)')
+        for name,sql in SCHEMA['message_count_triggers'].items():
+            db.execute('DROP TRIGGER IF EXISTS '+name)
+            db.execute('CREATE TRIGGER '+name+' '+sql)
+        for column in ['created_at','updated_at']:db.execute('CREATE INDEX IF NOT EXISTS index_messages_on_room_id_and_'+column+' ON messages(room_id,'+column+')')
+        db.execute('CREATE TABLE IF NOT EXISTS schema_migrations(version VARCHAR NOT NULL PRIMARY KEY)')
+        db.executemany('INSERT OR IGNORE INTO schema_migrations(version) VALUES(?)',[(v,) for v in SCHEMA['versions']])
+        validate_schema(db,False)
+        db.commit()
+    except BaseException:
+        db.rollback()
+        raise
+
+def collect_garbage(data):
+    # Stop/exclude the server: an in-flight upload may not have its blob row yet.
+    with stopped(data),connect(data/'production.sqlite3') as db:
+        validate_schema(db)
+        files=data/'files'
+        manifest(files)
+        keys={row[0] for row in db.execute('SELECT key FROM active_storage_blobs')}
+        db.execute("CREATE TABLE IF NOT EXISTS mojo_file_purges(key TEXT PRIMARY KEY,attempts INTEGER NOT NULL DEFAULT 0,available_at INTEGER NOT NULL DEFAULT (unixepoch()),error TEXT)")
+        for path in files.rglob('*'):
+            key=path.name
+            if path.is_file() and re.fullmatch('[A-Za-z0-9_-]{4,128}',key) and path.relative_to(files)==Path(key[:2])/key[2:4]/key and key not in keys:
+                db.execute('INSERT OR IGNORE INTO mojo_file_purges(key) VALUES(?)',(key,))
+        db.commit()
+        removed=0
+        for key, in db.execute('SELECT key FROM mojo_file_purges').fetchall():
+            if key in keys:raise SystemExit('A purge key is still referenced; refusing to delete it.')
+            if not re.fullmatch('[A-Za-z0-9_-]{4,128}',key):raise SystemExit('Invalid cleanup key.')
+            path=files/key[:2]/key[2:4]/key
+            path.unlink(missing_ok=True)
+            if path.parent.exists():sync_directory(path.parent)
+            db.execute('DELETE FROM mojo_file_purges WHERE key=?',(key,));db.commit();removed+=1
+        return removed
+
+
 @contextlib.contextmanager
 def connect(*args,**kwargs):
     with contextlib.closing(sqlite3.connect(*args,**kwargs)) as db:
@@ -17,7 +86,9 @@ def stopped(data):
 
 def private_write(path,text):
     fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
-    with os.fdopen(fd,'w') as out:out.write(text)
+    with os.fdopen(fd,'w') as out:
+        out.write(text);out.flush();os.fsync(out.fileno())
+    sync_directory(path.parent)
 
 def init(data):
     data.mkdir(parents=True,exist_ok=True,mode=0o700)
@@ -58,8 +129,11 @@ def backup(data,destination):
                 source.backup(target)
                 if target.execute('PRAGMA integrity_check').fetchone()[0]!='ok':raise SystemExit('Database integrity check failed.')
             shutil.copy2(data/'config.env',destination/'config.env')
+            if (data/'import.json').exists():shutil.copy2(data/'import.json',destination/'import.json')
             if (data/'files').exists():shutil.copytree(data/'files',destination/'files')
             private_write(destination/'backup.json',json.dumps({'format':1,'sha256':manifest(destination)},indent=2)+'\n')
+            sync_tree(destination)
+            sync_directory(destination.parent)
         except BaseException:
             shutil.rmtree(destination)
             raise
@@ -68,22 +142,29 @@ def restore(source,data):
     if data.exists() and any(data.iterdir()):raise SystemExit('Restore requires an empty destination; existing data will not be overwritten.')
     record=json.loads((source/'backup.json').read_text())
     if record.get('format')!=1 or record.get('sha256')!=manifest(source):raise SystemExit('Backup verification failed.')
-    if data.exists():data.rmdir()
-    shutil.copytree(source,data,ignore=shutil.ignore_patterns('backup.json'))
-    with connect(data/'production.sqlite3') as db:
-        if db.execute('PRAGMA integrity_check').fetchone()[0]!='ok':raise SystemExit('Restored database failed its integrity check.')
+    data.parent.mkdir(parents=True,exist_ok=True)
+    temporary=Path(tempfile.mkdtemp(prefix='.campfire-restore-',dir=data.parent))
+    try:
+        shutil.copytree(source,temporary,dirs_exist_ok=True,ignore=shutil.ignore_patterns('backup.json'))
+        with connect(temporary/'production.sqlite3') as db:
+            if db.execute('PRAGMA integrity_check').fetchone()[0]!='ok':raise SystemExit('Restored database failed its integrity check.')
+        sync_tree(temporary)
+        if data.exists():data.rmdir()
+        temporary.rename(data)
+        sync_directory(data.parent)
+    finally:
+        if temporary.exists():shutil.rmtree(temporary)
+
 
 def verify_database(db,files=None,allow_existing_orphans=False):
     foreign=db.execute('PRAGMA foreign_key_check').fetchall()
     if db.execute('PRAGMA integrity_check').fetchall()!=[('ok',)] or (foreign and not allow_existing_orphans):
         raise SystemExit('Database integrity check failed.')
-    required={'accounts','users','rooms','memberships','messages','sessions','action_text_rich_texts','active_storage_blobs','active_storage_attachments','message_search_index'}
-    tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-    if required-tables:raise SystemExit('Not a supported Campfire database: required tables are missing.')
+    validate_schema(db)
     if files is None:return
     for key,size,checksum,service,attached in db.execute('SELECT b.key,b.byte_size,b.checksum,b.service_name,EXISTS(SELECT 1 FROM active_storage_attachments a WHERE a.blob_id=b.id) FROM active_storage_blobs b'):
         if service!='local':raise SystemExit('Import supports the original local Disk service; export remote objects to local storage first.')
-        if not re.fullmatch('[A-Za-z0-9_-]{4,}',key):raise SystemExit('Invalid Active Storage object key.')
+        if not re.fullmatch('[A-Za-z0-9_-]{4,128}',key):raise SystemExit('Invalid Active Storage object key.')
         path=files/key[:2]/key[2:4]/key
         # An uncompleted direct upload may have a database row but no file yet.
         if not path.exists() and not attached:continue
@@ -118,12 +199,17 @@ def import_rails(source,files,data,config=None,allow_existing_orphans=False):
     data.parent.mkdir(parents=True,exist_ok=True)
     temporary=Path(tempfile.mkdtemp(prefix='.campfire-import-',dir=data.parent))
     try:
-        # Read-only SQLite backup includes committed WAL data without writing or
-        # checkpointing the source. Hash both data files to detect concurrent
-        # writers. SQLite data_version can change spuriously when a read-only
-        # WAL index is rebuilt on a macOS/Docker shared filesystem.
-        with connect(source.as_uri()+'?mode=ro',uri=True) as original:
-            version=source_state(source)
+        # Snapshot the stopped source with plain reads, including its committed
+        # WAL. SQLite may need writable -shm even for mode=ro; it must only create
+        # those files beside our private copy, never in the original directory.
+        version=source_state(source)
+        snapshot=temporary/'.source'
+        snapshot.mkdir()
+        copied=snapshot/source.name
+        shutil.copyfile(source,copied)
+        wal=Path(str(source)+'-wal')
+        if wal.exists():shutil.copyfile(wal,Path(str(copied)+'-wal'))
+        with connect(copied) as original:
             verify_database(original,allow_existing_orphans=allow_existing_orphans)
             source_orphans=original.execute('PRAGMA foreign_key_check').fetchall()
             subscriptions=original.execute('SELECT count(*) FROM push_subscriptions').fetchone()[0]
@@ -133,12 +219,14 @@ def import_rails(source,files,data,config=None,allow_existing_orphans=False):
             with connect(temporary/'production.sqlite3') as target:original.backup(target)
             shutil.copytree(files,temporary/'files')
             with connect(temporary/'production.sqlite3') as target:
+                migrate_database(target)
                 verify_database(target,temporary/'files',allow_existing_orphans)
                 if target.execute('PRAGMA foreign_key_check').fetchall()!=source_orphans:
                     raise SystemExit('Foreign key state changed during import.')
                 counts={table:target.execute('SELECT count(*) FROM '+table).fetchone()[0] for table in ['users','rooms','messages','active_storage_blobs']}
             if source_state(source)!=version:
                 raise SystemExit('Source database changed during import. Stop all source writers and retry.')
+        shutil.rmtree(snapshot)
         previous=os.environ.copy()
         try:
             os.environ.update(keys)
@@ -147,14 +235,16 @@ def import_rails(source,files,data,config=None,allow_existing_orphans=False):
             os.environ.clear();os.environ.update(previous)
         private_write(temporary/'import.json',json.dumps({'format':1,'source_database_sha256':hashlib.sha256((temporary/'production.sqlite3').read_bytes()).hexdigest(),'counts':counts,'preserved_source_foreign_key_violations':source_orphans},indent=2)+'\n')
         if data.exists():raise SystemExit('Import destination appeared during copying; refusing to overwrite it.')
+        sync_tree(temporary)
         temporary.rename(data)
+        sync_directory(data.parent)
         if source_orphans:print('Preserved existing foreign-key violations:',len(source_orphans),'; details are recorded in import.json.')
     finally:
         if temporary.exists():shutil.rmtree(temporary)
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command',choices=['init','backup','restore','import-rails','check','retry-jobs'])
+    parser.add_argument('command',choices=['init','backup','restore','import-rails','check','retry-jobs','gc-files'])
     parser.add_argument('--data',type=Path,default=Path(os.environ.get('CAMPFIRE_DATA','storage')))
     parser.add_argument('--destination',type=Path);parser.add_argument('--source',type=Path)
     parser.add_argument('--files',type=Path,help='Original Rails storage/files directory for import-rails')
@@ -171,13 +261,19 @@ def main():
     elif args.command=='import-rails':
         if not args.source or not args.files:parser.error('--source (database) and --files (Disk root) are required')
         import_rails(args.source.resolve(),args.files.resolve(),data,args.config_env,args.allow_existing_orphans)
+    elif args.command=='gc-files':print('Recovered orphan/deferred files:',collect_garbage(data))
     elif args.command=='check':
         with connect(data/'production.sqlite3') as db:
             result=db.execute('PRAGMA integrity_check').fetchall();foreign=db.execute('PRAGMA foreign_key_check').fetchall()
-            if result!=[('ok',)] or foreign:raise SystemExit('Database integrity check failed.')
-            print('Database integrity: ok')
+            imported=data/'import.json'
+            allowed={tuple(row) for row in json.loads(imported.read_text()).get('preserved_source_foreign_key_violations',[])} if imported.exists() else set()
+            if result!=[('ok',)] or not set(foreign)<=allowed:raise SystemExit('Database integrity check failed or new foreign-key violations appeared.')
+            if foreign:print('Previously accepted source foreign-key violations:',len(foreign))
+            validate_schema(db,False)
+            print('Database integrity and schema: ok')
             tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             if 'mojo_jobs' in tables:print('Queued / failed jobs:',db.execute('SELECT count(*),coalesce(sum(failed),0) FROM mojo_jobs').fetchone())
+            if 'mojo_file_purges' in tables:print('Deferred file deletions:',db.execute('SELECT count(*) FROM mojo_file_purges').fetchone()[0])
     elif args.command=='retry-jobs':
         with stopped(data),connect(data/'production.sqlite3') as db:
             db.execute('UPDATE mojo_jobs SET failed=0,attempts=0,lease_until=0,available_at=unixepoch(),error=NULL WHERE failed=1')

@@ -35,6 +35,7 @@ def new_ids(db,room,baseline):
  with b.connection(db) as c:return {r[0] for r in c.execute('SELECT id FROM messages WHERE room_id=?',(room,))}-baseline
 
 def run_one(app,round_no,args,labels):
+ assert os.environ.get('CAMPFIRE_TEST_NO_AFFINITY')!='1','Benchmark requires explicit CPU affinity; unset the CI test override'
  dest=args.output/f'{app}-{round_no}';samples=[];audit_files=[];acknowledged=0
  with b.server(app,dest,args.server_cpus,not args.no_cache,verify_log=True) as (db,runtime,binary):
   cookie=b.login(labels,args.client_cpus)
