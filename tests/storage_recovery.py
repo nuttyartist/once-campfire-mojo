@@ -31,7 +31,7 @@ def restarted(runtime, logfile, updates=None):
     for entry in Path("/proc").glob("[0-9]*"):
         try:
             pid = int(entry.name)
-            if os.readlink(entry / "exe") == str(binary) and os.getpgid(pid) == pid:
+            if (os.readlink(entry / "exe") == str(binary) or str(binary).encode() in (entry / "cmdline").read_bytes().split(b"\0")) and os.getpgid(pid) == pid:
                 parents.append(pid)
         except (OSError, ValueError):
             pass

@@ -231,7 +231,7 @@ class Full(unittest.TestCase):
    if item.name.isdigit():
     try:
      executable=Path(os.readlink(item/'exe'))
-     if executable==self.runtime/'app/campfire':
+     if executable==self.runtime/'app/campfire' or str(self.runtime/'app/campfire').encode() in (item/'cmdline').read_bytes().split(b'\0'):
       parent=int((item/'stat').read_text().split()[3]);candidates.append((int(item.name),parent))
     except (OSError,ValueError):pass
   ids={p for p,_ in candidates};root=next(p for p,parent in candidates if parent not in ids)
