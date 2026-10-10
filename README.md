@@ -11,19 +11,21 @@ Binary data uses owned byte buffers with explicit UTF-8 decoding. FFI and raw-po
 <!-- BENCHMARK_BEGIN -->
 | Workload (completed requests/sec) | Rust* | C* | Mojo |
 |---|---:|---:|---:|
-| Room page | 60,644 | 70,577 | 60,668 |
-| Messages page | 51,635 | 65,858 | 60,781 |
-| Sidebar | 60,455 | 66,963 | 76,689 |
-| Search | 58,033 | 66,958 | 71,122 |
-| Post a message | 1,259 | 422 | 865 |
+| Room page | 44,403 | 55,590 | 55,743 |
+| Messages page | 41,337 | 55,509 | 59,515 |
+| Sidebar | 50,500 | 59,726 | 62,094 |
+| Search | 49,577 | 62,785 | 59,204 |
+| Post a message | 1,180 | 382 | 1,090 |
 | Backend KLOC | 30.9 | 94.8 | 8.0 |
 
-**277,605 messages and 832,815 recipient completions audited across all timed runs and warmups. No missing messages, FTS rows or receipts; no pending, failed or dropped jobs.** Posting rounds (completed messages/sec): Rust: 1,189, 1,344, 1,259; C: 342, 429, 422; Mojo: 878, 853, 865. Raw results: `bench/results/2026-10-10-m4-byte-safety-lock-budget/`.
+**256,162 messages and 768,486 recipient completions audited across timed runs and warmups. No missing messages, FTS rows or receipts; no pending, failed or dropped jobs.** Posting rounds (completed messages/sec): Rust: 1,190, 1,107, 1,180; C: 278, 382, 401; Mojo: 1,101, 1,090, 1,018. Raw results: `bench/results/2026-10-10-m4-posting-optimized/`.
 
-Measured commits: Rust `aea2e0768426`, C `f5db6695873b`, Mojo `c62f43845715`. Audited Mojo application source is `cf7be91`; later commits change comparison tooling, tests or documentation only.
+Measured commits: Rust `aea2e0768426`, C `f5db6695873b`, Mojo `3b7440dc3f84`.
 <!-- BENCHMARK_END -->
 
-The tracked [comparison summary](bench/acceptance/2026-10-10-byte-safety.json) records all rounds, binary hashes and completion audits. Raw acknowledgement files are kept locally and excluded from Git. An earlier attempt stopped on a C HTTP 503 caused by writer contention under its shorter lock budget. The controlled regression reproduced the failure; after aligning the opt-in reference budgets with Mojo, all nine runs were repeated. The aborted attempt remains in `bench/results/2026-10-10-m4-byte-safety/` and is not mixed into the table.
+The tracked [comparison summary](bench/acceptance/2026-10-10-posting-optimized.json) records every round, binary hash, completion audit and validation gate. Raw acknowledgement files are local and excluded from Git. Previous comparisons are preserved separately.
+
+A separate paired old/new/new/old experiment measured median completed posting rates of 796.4 before and 1,105.0 after: 38.8% higher. Its four runs retain all acknowledgements and exact receipts; it is not mixed into the nine-run table.
 
 These are **local durability-patched Rust and C builds**, not stock upstream performance claims. Every application uses SQLite WAL `synchronous=FULL`, atomic message/outbox admission, persisted retry state, recipient receipts and a 10-second SQLite write-lock budget. Posting throughput includes the final queue drain. The harness requires every acknowledged message, exact body, FTS entry and expected recipient receipt, and rejects failed, pending or dropped work.
 
@@ -76,5 +78,7 @@ The runner fails closed on parity, invalid responses, write-audit differences, j
 ## Architecture and license
 
 Caddy terminates TLS and proxies to a supervised Mojo parent, four HTTP/Cable processes and three durable-job processes by default. Each process owns a SQLite connection. HTTP workers use nonblocking socket loops; bounded synchronous media/network operations can occupy an individual worker. Expensive preparation happens before short database write transactions. Message, FTS, unread and outbox changes commit together, and live events are size-checked before commit. File deletions have a durable retry table; offline garbage collection recovers unfinished preparations.
+
+Posting transfers the parsed form to its existing atomic transaction. Idle job workers poll without acquiring the writer lock; eligible jobs use an indexed atomic claim. Ten-minute job leases are renewed when five minutes or less remain, using persisted state so rollback cannot suppress a later renewal. Per-recipient receipts and FULL durability are unchanged. `tests/posting_optimizations.py` and `tests/job_leases.mojo` cover these contracts in both CI architectures.
 
 Native adapters wrap SQLite, OpenSSL, curl, Gumbo, libvips, zlib and POSIX operations. SQLite 3.53.4, the Nokogiri-compatible Gumbo parser and QR generator sources/licenses are vendored. Python serves build generation, testing and offline administration only. Frontend assets and templates derive from the MIT-licensed original/Rust references. See [PROVENANCE.md](PROVENANCE.md) and retain `MIT-LICENSE`.
