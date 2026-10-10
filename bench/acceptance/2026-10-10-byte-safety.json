@@ -1,0 +1,873 @@
+{
+  "date": "2026-10-10",
+  "local_only": true,
+  "application_revision": "cf7be919e63b150d11b80649c66e93f6b2438980",
+  "measurement_revision": "c62f43845715ca2c144560aadc65b52e0e530c8a",
+  "repository": "/Users/ruby/Downloads/campfire-test/once-campfire-mojo",
+  "changes": [
+    "Owned byte buffers now carry socket data, HTTP bodies, uploads/downloads, compressed responses, WebSocket frames/fragments, Marshal values, keys, hashes and ciphertext. Text decoding validates UTF-8 explicitly.",
+    "All Mojo FFI and raw-pointer APIs are confined to src/native_boundary.mojo. Typed wrappers check lengths, capacities, cryptographic key sizes, native descriptor ranges and C-string NULs; returned allocations are copied and freed inside that boundary.",
+    "Native SQL resources are owned together and statements reset on failure. DOM addresses were replaced with opaque validated identifiers that invalidate freed nodes/attributes and tolerate repeated cleanup.",
+    "The rest of the Mojo audit also fixed malformed signature byte slicing, invalid percent-encoded UTF-8 handling, single-character quoted fields, helper range/allocation checks, complete framing size limits, and minimum-integer Marshal encoding.",
+    "Seven new HTTP/WebSocket cases verify malformed-input rejection without worker replacement. Native and independent binary regressions plus a source-boundary guard run in both CI architectures. A pre-existing cleanup-test observation race now waits for both file removal and durable SQL completion."
+  ],
+  "checks": {
+    "arm64": {
+      "application_cases": 77,
+      "full_suite": true,
+      "binary_and_native_contract_regressions": true,
+      "independent_binary_encodings": 6,
+      "native_fuzz_executions": 10000,
+      "browser": true,
+      "migration": true
+    },
+    "amd64": {
+      "application_cases": 77,
+      "full_suite": true,
+      "binary_and_native_contract_regressions": true,
+      "independent_binary_encodings": 6,
+      "native_fuzz_executions": 10000,
+      "browser": true,
+      "migration": true
+    }
+  },
+  "actionlint_passed": true,
+  "unsafe_mojo_modules": [
+    "src/native_boundary.mojo"
+  ],
+  "unchecked_utf8_constructors": 0,
+  "source_counts": {
+    "rust": {
+      "backend": 30053,
+      "template": 873,
+      "total": 30926
+    },
+    "c": {
+      "backend": 94795,
+      "template": 0,
+      "total": 94795
+    },
+    "mojo": {
+      "mojo": 6950,
+      "c": 789,
+      "template": 261,
+      "total": 8000
+    }
+  },
+  "benchmark": {
+    "metadata": {
+      "complete": true,
+      "started_at_utc": "2026-10-10T11:49:45Z",
+      "platform": [
+        "Linux",
+        "d0225611071f",
+        "6.10.14-linuxkit",
+        "#1 SMP Wed Sep  3 15:35:15 UTC 2025",
+        "aarch64"
+      ],
+      "server_cpus": "0-3",
+      "client_cpus": "4-7",
+      "rounds": 3,
+      "order": "rotating Latin-square order: Rust/C/Mojo, C/Mojo/Rust, Mojo/Rust/C",
+      "duration_seconds": 8,
+      "warmup_seconds": 2,
+      "concurrency": 16,
+      "response_cache_mib": 64,
+      "seed_sha256": "f09f39eda2ef1e1e5d8ce7f4fd510fcdfc5324d329744c4993c32459bdd16da5",
+      "sqlite_write_busy_timeout_ms": 10000,
+      "durability": "SQLite WAL synchronous=FULL; atomic message/outbox; persisted retries and receipts; at-least-once recovery",
+      "completion": "Post rate includes HTTP plus final job drain, exact message IDs and subscription receipt sets required",
+      "notifications": "Three selected subscriptions/message; canonical notification preparation and identical endpoint-policy rejection; no remote push network in timed workloads",
+      "active_cable_subscribers": 0,
+      "parity_gate": {
+        "passed": true,
+        "normalization": [
+          "HTML whitespace",
+          "attribute order",
+          "asset fingerprints",
+          "write timestamps",
+          "verified database ID to legacy client-ID DOM convention; new pending-only attributes"
+        ],
+        "failures": [],
+        "scenarios": [
+          "room",
+          "messages",
+          "sidebar",
+          "search",
+          "room_frame",
+          "sidebar_frame",
+          "search_frame",
+          "mutated_room",
+          "post"
+        ],
+        "mojo_jobs": {
+          "queued": 1,
+          "completed": 1,
+          "notifications": 3,
+          "rejected_endpoints": 3,
+          "broadcasts": 1,
+          "unread_broadcasts": 5,
+          "errors": 0,
+          "queue_full": 0,
+          "webhook_candidates": 0,
+          "unsupported_deliveries": 0
+        },
+        "upstream_differences": [
+          {
+            "app": "c",
+            "scenario": "sidebar",
+            "difference": "C joins the three direct-room initials with +; Rust uses an English sentence."
+          },
+          {
+            "app": "c",
+            "scenario": "sidebar_frame",
+            "difference": "C joins the three direct-room initials with +; Rust uses an English sentence."
+          }
+        ]
+      },
+      "local_reference_patches": true,
+      "environment": {
+        "CAMPFIRE_DURABLE_JOBS": "1",
+        "CAMPFIRE_SQLITE_SYNCHRONOUS": "FULL",
+        "CAMPFIRE_JOB_RECEIPTS": "1",
+        "CF_JOB_WORKERS": "3"
+      },
+      "revisions": {
+        "rust": "aea2e0768426e779d0d3389a0d3dd63428308b11",
+        "c": "f5db6695873be7fdf1e3c603f40deb154d2dc86d",
+        "mojo": "c62f43845715ca2c144560aadc65b52e0e530c8a"
+      },
+      "patch_sha256": {
+        "rust": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "c": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "mojo": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "loadgen_sha256": "0380ab98e89d931fec59f37fcb0ae86dc06d9fb18e4d68a167c579bce4ed7dc5",
+      "acknowledged_and_completed_messages": 277605,
+      "completed_notification_receipts": 832815
+    },
+    "results": {
+      "rust": {
+        "room_show": {
+          "median_rps": 60643.8,
+          "runs": [
+            68512.1,
+            60643.8,
+            59632.9
+          ]
+        },
+        "messages_page": {
+          "median_rps": 51635.2,
+          "runs": [
+            65155.7,
+            51635.2,
+            51086.6
+          ]
+        },
+        "sidebar": {
+          "median_rps": 60455.2,
+          "runs": [
+            75365.4,
+            60455.2,
+            58412.1
+          ]
+        },
+        "search": {
+          "median_rps": 58033.0,
+          "runs": [
+            73090.0,
+            50633.3,
+            58033.0
+          ]
+        },
+        "post_message": {
+          "median_rps": 1259.335849599247,
+          "runs": [
+            1188.5677934579396,
+            1344.3665258359956,
+            1259.335849599247
+          ]
+        }
+      },
+      "c": {
+        "room_show": {
+          "median_rps": 70577.4,
+          "runs": [
+            73622.6,
+            70577.4,
+            57818.5
+          ]
+        },
+        "messages_page": {
+          "median_rps": 65857.8,
+          "runs": [
+            72923.0,
+            65857.8,
+            62903.4
+          ]
+        },
+        "sidebar": {
+          "median_rps": 66963.1,
+          "runs": [
+            78240.4,
+            66963.1,
+            65318.8
+          ]
+        },
+        "search": {
+          "median_rps": 66957.7,
+          "runs": [
+            74060.4,
+            66957.7,
+            64613.7
+          ]
+        },
+        "post_message": {
+          "median_rps": 422.4319035435571,
+          "runs": [
+            341.53872156155927,
+            428.63106429983156,
+            422.4319035435571
+          ]
+        }
+      },
+      "mojo": {
+        "room_show": {
+          "median_rps": 60668.3,
+          "runs": [
+            79697.2,
+            57837.3,
+            60668.3
+          ]
+        },
+        "messages_page": {
+          "median_rps": 60780.8,
+          "runs": [
+            59046.4,
+            69705.5,
+            60780.8
+          ]
+        },
+        "sidebar": {
+          "median_rps": 76688.8,
+          "runs": [
+            76688.8,
+            78022.1,
+            74923.0
+          ]
+        },
+        "search": {
+          "median_rps": 71122.0,
+          "runs": [
+            73265.6,
+            71122.0,
+            63377.6
+          ]
+        },
+        "post_message": {
+          "median_rps": 865.3159428861703,
+          "runs": [
+            878.4422161364212,
+            852.9838161829941,
+            865.3159428861703
+          ]
+        }
+      }
+    }
+  },
+  "run_completion": [
+    {
+      "app": "c",
+      "round": 1,
+      "binary_sha256": "9333f5d25269f2f45f320eb1e8753261457c8856f064af78bbd2af472c737397",
+      "post_write_audit": {
+        "verified": true,
+        "acknowledged": 45296
+      },
+      "completed": {
+        "pending": 0,
+        "failed": 0,
+        "completed_messages": 45296,
+        "completed_notifications": 135888,
+        "drain_seconds": 0.09225950000018202
+      },
+      "server_log_gate": {
+        "passed": true
+      }
+    },
+    {
+      "app": "c",
+      "round": 2,
+      "binary_sha256": "9333f5d25269f2f45f320eb1e8753261457c8856f064af78bbd2af472c737397",
+      "post_write_audit": {
+        "verified": true,
+        "acknowledged": 47446
+      },
+      "completed": {
+        "pending": 0,
+        "failed": 0,
+        "completed_messages": 47446,
+        "completed_notifications": 142338,
+        "drain_seconds": 0.09777137499986566
+      },
+      "server_log_gate": {
+        "passed": true
+      }
+    },
+    {
+      "app": "c",
+      "round": 3,
+      "binary_sha256": "9333f5d25269f2f45f320eb1e8753261457c8856f064af78bbd2af472c737397",
+      "post_write_audit": {
+        "verified": true,
+        "acknowledged": 44250
+      },
+      "completed": {
+        "pending": 0,
+        "failed": 0,
+        "completed_messages": 44250,
+        "completed_notifications": 132750,
+        "drain_seconds": 0.08582425100030378
+      },
+      "server_log_gate": {
+        "passed": true
+      }
+    },
+    {
+      "app": "mojo",
+      "round": 1,
+      "binary_sha256": "4074d70be60c7b8bced898f529c4286a953c20d0df50297623b7340ea13dbf74",
+      "post_write_audit": {
+        "verified": true,
+        "acknowledged": 8930
+      },
+      "completed": {
+        "pending": 0,
+        "failed": 0,
+        "completed_messages": 8930,
+        "completed_notifications": 26790,
+        "drain_seconds": 0.014172208999752911
+      },
+      "server_log_gate": {
+        "passed": true
+      }
+    },
+    {
+      "app": "mojo",
+      "round": 2,
+      "binary_sha256": "4074d70be60c7b8bced898f529c4286a953c20d0df50297623b7340ea13dbf74",
+      "post_write_audit": {
+        "verified": true,
+        "acknowledged": 9240
+      },
+      "completed": {
+        "pending": 0,
+        "failed": 0,
+        "completed_messages": 9240,
+        "completed_notifications": 27720,
+        "drain_seconds": 0.014640333999977884
+      },
+      "server_log_gate": {
+        "passed": true
+      }
+    },
+    {
+      "app": "mojo",
+      "round": 3,
+      "binary_sha256": "4074d70be60c7b8bced898f529c4286a953c20d0df50297623b7340ea13dbf74",
+      "post_write_audit": {
+        "verified": true,
+        "acknowledged": 8688
+      },
+      "completed": {
+        "pending": 0,
+        "failed": 0,
+        "completed_messages": 8688,
+        "completed_notifications": 26064,
+        "drain_seconds": 0.013668624999809253
+      },
+      "server_log_gate": {
+        "passed": true
+      }
+    },
+    {
+      "app": "rust",
+      "round": 1,
+      "binary_sha256": "193a8d48e6ecb8976f8397da8da2b7a74108bdfdc022c6eeaf10d869919b05c0",
+      "post_write_audit": {
+        "verified": true,
+        "acknowledged": 37429
+      },
+      "completed": {
+        "pending": 0,
+        "failed": 0,
+        "completed_messages": 37429,
+        "completed_notifications": 112287,
+        "drain_seconds": 0.06923783299998831
+      },
+      "server_log_gate": {
+        "passed": true
+      }
+    },
+    {
+      "app": "rust",
+      "round": 2,
+      "binary_sha256": "193a8d48e6ecb8976f8397da8da2b7a74108bdfdc022c6eeaf10d869919b05c0",
+      "post_write_audit": {
+        "verified": true,
+        "acknowledged": 37714
+      },
+      "completed": {
+        "pending": 0,
+        "failed": 0,
+        "completed_messages": 37714,
+        "completed_notifications": 113142,
+        "drain_seconds": 0.0696165839999594
+      },
+      "server_log_gate": {
+        "passed": true
+      }
+    },
+    {
+      "app": "rust",
+      "round": 3,
+      "binary_sha256": "193a8d48e6ecb8976f8397da8da2b7a74108bdfdc022c6eeaf10d869919b05c0",
+      "post_write_audit": {
+        "verified": true,
+        "acknowledged": 38612
+      },
+      "completed": {
+        "pending": 0,
+        "failed": 0,
+        "completed_messages": 38612,
+        "completed_notifications": 115836,
+        "drain_seconds": 0.07161274999998568
+      },
+      "server_log_gate": {
+        "passed": true
+      }
+    }
+  ],
+  "writer_contention": [
+    {
+      "app": "rust",
+      "held_seconds": 6,
+      "elapsed_seconds": 6.114340127000105,
+      "completed": {
+        "pending": 0,
+        "failed": 0,
+        "completed_messages": 1,
+        "completed_notifications": 3,
+        "drain_seconds": 0.013896749999730673
+      }
+    },
+    {
+      "app": "c",
+      "held_seconds": 6,
+      "elapsed_seconds": 6.0935934609997275,
+      "completed": {
+        "pending": 0,
+        "failed": 0,
+        "completed_messages": 1,
+        "completed_notifications": 3,
+        "drain_seconds": 0.025095542000144633
+      }
+    },
+    {
+      "app": "mojo",
+      "held_seconds": 6,
+      "elapsed_seconds": 6.06190296099976,
+      "completed": {
+        "pending": 0,
+        "failed": 0,
+        "completed_messages": 1,
+        "completed_notifications": 3,
+        "drain_seconds": 0.012795749999895634
+      }
+    }
+  ],
+  "aborted_benchmark": {
+    "path": "/Users/ruby/Downloads/campfire-test/once-campfire-mojo/bench/results/2026-10-10-m4-byte-safety",
+    "reason": "C returned one HTTP 503 while posting in round 2. Its request writer had a 1-second SQLite lock budget, versus Rust 5 seconds and Mojo 10. A controlled lock reproduced C 503. Opt-in Rust/C durable write connections now use the same 10 seconds as Mojo; the full nine-run experiment was restarted. Earlier samples are preserved separately, not mixed into this table."
+  },
+  "crash_recovery": {
+    "paused": [
+      {
+        "app": "rust",
+        "acknowledged_before_crash": 160,
+        "jobs_pending_at_crash": 160,
+        "completed_after_restart": {
+          "pending": 0,
+          "failed": 0,
+          "completed_messages": 160,
+          "completed_notifications": 480,
+          "drain_seconds": 0.39960070899996936
+        },
+        "restart_did_not_duplicate_receipts": true
+      },
+      {
+        "app": "c",
+        "acknowledged_before_crash": 160,
+        "jobs_pending_at_crash": 160,
+        "completed_after_restart": {
+          "pending": 0,
+          "failed": 0,
+          "completed_messages": 160,
+          "completed_notifications": 480,
+          "drain_seconds": 0.5343276670000705
+        },
+        "restart_did_not_duplicate_receipts": true
+      },
+      {
+        "app": "mojo",
+        "acknowledged_before_crash": 160,
+        "jobs_pending_at_crash": 160,
+        "completed_after_restart": {
+          "pending": 0,
+          "failed": 0,
+          "completed_messages": 160,
+          "completed_notifications": 480,
+          "drain_seconds": 0.6564017919999969
+        },
+        "restart_did_not_duplicate_receipts": true
+      }
+    ],
+    "inflight": [
+      {
+        "app": "rust",
+        "acknowledged_before_crash": 1200,
+        "committed_before_crash": 1200,
+        "unacknowledged_commits_at_crash": 0,
+        "jobs_pending_at_crash": 1136,
+        "leased_jobs_at_crash": 2,
+        "recipient_receipts_at_crash": 196,
+        "mode": "inflight",
+        "completed_after_restart": {
+          "pending": 0,
+          "failed": 0,
+          "completed_messages": 1200,
+          "completed_notifications": 3600,
+          "drain_seconds": 9.626800503999675
+        },
+        "restart_did_not_duplicate_receipts": true
+      },
+      {
+        "app": "c",
+        "acknowledged_before_crash": 1201,
+        "committed_before_crash": 1202,
+        "unacknowledged_commits_at_crash": 1,
+        "jobs_pending_at_crash": 1195,
+        "leased_jobs_at_crash": 2,
+        "recipient_receipts_at_crash": 18,
+        "mode": "inflight",
+        "completed_after_restart": {
+          "pending": 0,
+          "failed": 0,
+          "completed_messages": 1202,
+          "completed_notifications": 3606,
+          "drain_seconds": 9.652973963000022
+        },
+        "restart_did_not_duplicate_receipts": true
+      },
+      {
+        "app": "mojo",
+        "acknowledged_before_crash": 1200,
+        "committed_before_crash": 1201,
+        "unacknowledged_commits_at_crash": 1,
+        "jobs_pending_at_crash": 2,
+        "leased_jobs_at_crash": 1,
+        "recipient_receipts_at_crash": 3596,
+        "mode": "inflight",
+        "completed_after_restart": {
+          "pending": 0,
+          "failed": 0,
+          "completed_messages": 1201,
+          "completed_notifications": 3603,
+          "drain_seconds": 0.0028068750002603338
+        },
+        "restart_did_not_duplicate_receipts": true
+      }
+    ]
+  },
+  "method": "Native ARM64 Linux in Docker Desktop on the same Apple M4 (24 GiB). Three rotating rounds, 2-second warmups, 8-second samples, 16 keep-alive clients accepting gzip, 64 MiB response caches, server CPUs 0\u20133 and client CPUs 4\u20137. SQLite WAL synchronous=FULL, atomic outbox, persisted recipient receipts and a common 10-second SQLite write-lock budget. Posting rates include final job drain. No builds or other task tests ran during timing.",
+  "limits": "Rust and C use the previously documented local durability patches. Timed posts exercise three identical push endpoint-policy rejections; external push encryption/network delivery and connected Cable subscribers are outside these five timed workloads and have separate correctness tests. External delivery remains at-least-once across a crash after provider acceptance. This compares implementations under one stated configuration, not intrinsic language speed.",
+  "images": [
+    {
+      "Id": "sha256:c4d0e96d197086e3da3ca62ea4f310f95268a9f7ca6bce99679ff7f0f7a53546",
+      "RepoTags": [
+        "campfire-mojo:byte-safety-arm64"
+      ],
+      "RepoDigests": [
+        "campfire-mojo@sha256:c4d0e96d197086e3da3ca62ea4f310f95268a9f7ca6bce99679ff7f0f7a53546"
+      ],
+      "Parent": "",
+      "Comment": "buildkit.dockerfile.v0",
+      "Created": "2026-10-10T11:22:14.391490177Z",
+      "DockerVersion": "",
+      "Author": "",
+      "Architecture": "arm64",
+      "Os": "linux",
+      "Size": 257235113,
+      "GraphDriver": {
+        "Data": null,
+        "Name": "overlayfs"
+      },
+      "RootFS": {
+        "Type": "layers",
+        "Layers": [
+          "sha256:258ba1f62b513e7bb7492d3cc8ce445e4ef176a14980f193f789b6d7270ae61c",
+          "sha256:a39f0f8fc9bdc9de85792ade8eac67891acdf178df4956c782de41ffc71a7f1c",
+          "sha256:c3bef5947d0e5df4855b473a167aa5114f8052a8fe16a09dd5fa568934b23d77",
+          "sha256:8967b9e6299680a8f1ed77759ea316de3ee1cf2dd7b52ed0889a72dd84c1324b",
+          "sha256:6ccd95664f1acae213cda08b8c1fb4f82ae7cb9c16bcef93dc582a6f15b4f318",
+          "sha256:0edfefc140e27da40a56a7190f299f1e9283b218363f074784c0b1a63580a285",
+          "sha256:4272dc4c8b4295d63bbf6e1e4a60f47ff4662367ce21c82346c31dfaf880c535",
+          "sha256:ce7c1605dd27b3b3151fa3246e8c225943f932f9bc619a12ed0e71e0e2b2f056",
+          "sha256:392bc9fc72a155a6694c269430469b51f576575828145bf94e768575440c817d"
+        ]
+      },
+      "Metadata": {
+        "LastTagTime": "2026-10-10T11:22:14.890765052Z"
+      },
+      "Descriptor": {
+        "mediaType": "application/vnd.oci.image.index.v1+json",
+        "digest": "sha256:c4d0e96d197086e3da3ca62ea4f310f95268a9f7ca6bce99679ff7f0f7a53546",
+        "size": 856
+      },
+      "Config": {
+        "Cmd": null,
+        "Entrypoint": [
+          "/usr/bin/tini",
+          "--",
+          "/app/deploy/start"
+        ],
+        "Env": [
+          "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "LD_LIBRARY_PATH=/usr/local/lib/mojo",
+          "BIND_ADDRESS=127.0.0.1",
+          "PORT=3000",
+          "DATABASE_PATH=/data/production.sqlite3",
+          "STORAGE_PATH=/data/files",
+          "PUBLIC_PATH=/app/public",
+          "CAMPFIRE_DATA=/data",
+          "TRUSTED_PROXY_IP=127.0.0.1",
+          "XDG_DATA_HOME=/data/caddy",
+          "XDG_CONFIG_HOME=/data/caddy"
+        ],
+        "ExposedPorts": {
+          "8080/tcp": {},
+          "8443/tcp": {}
+        },
+        "Labels": null,
+        "OnBuild": null,
+        "User": "campfire",
+        "Volumes": {
+          "/data": {}
+        },
+        "WorkingDir": "/app"
+      }
+    },
+    {
+      "Id": "sha256:a103372d631b6129ab92501a9f74baa53585c8582591109c50d68ec4399d7999",
+      "RepoTags": [
+        "campfire-mojo:byte-safety-amd64"
+      ],
+      "RepoDigests": [
+        "campfire-mojo@sha256:a103372d631b6129ab92501a9f74baa53585c8582591109c50d68ec4399d7999"
+      ],
+      "Parent": "",
+      "Comment": "buildkit.dockerfile.v0",
+      "Created": "2026-10-10T11:22:48.658683513Z",
+      "DockerVersion": "",
+      "Author": "",
+      "Architecture": "amd64",
+      "Os": "linux",
+      "Size": 264445922,
+      "GraphDriver": {
+        "Data": null,
+        "Name": "overlayfs"
+      },
+      "RootFS": {
+        "Type": "layers",
+        "Layers": [
+          "sha256:15f1c8eb1ab18eae260c7fb6296434cbe1ff0e1e30fd814ae92a80dd54005e62",
+          "sha256:2eaf497d88233e5d349328acf94aab29d26e9cbef3d5862f9cb04721f6735ae7",
+          "sha256:fcc16b185dbe87633f6ebd1663da84507219cf7d604843265e9cc567a58e9762",
+          "sha256:2f6c8a85ffb65360e2bb43693e496ab2ed65e69cceb4fe70d038a85a726a563f",
+          "sha256:c60e9bac5f27d6908ba006a9286e74ad3f115dbfcd1a38fd80ca25d5a6f59806",
+          "sha256:1cebac110dc26868f81ce197d23ffade69eeca791e8198f2b7cc65ec1746d148",
+          "sha256:0bef9a49f7da02b4911b5e4fff45761ae3bff3e7967c285e2d410d4f85ce40e6",
+          "sha256:c97b7484037deac87b73bff94cbca3b4e683eece7f97efb93b48115aba1e76a0",
+          "sha256:947fa323dbde1cfce5ea9a0d0991e06c00ce75b95a24da71177fd5560019ebf0"
+        ]
+      },
+      "Metadata": {
+        "LastTagTime": "2026-10-10T11:22:49.032018888Z"
+      },
+      "Descriptor": {
+        "mediaType": "application/vnd.oci.image.index.v1+json",
+        "digest": "sha256:a103372d631b6129ab92501a9f74baa53585c8582591109c50d68ec4399d7999",
+        "size": 856
+      },
+      "Config": {
+        "Cmd": null,
+        "Entrypoint": [
+          "/usr/bin/tini",
+          "--",
+          "/app/deploy/start"
+        ],
+        "Env": [
+          "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "LD_LIBRARY_PATH=/usr/local/lib/mojo",
+          "BIND_ADDRESS=127.0.0.1",
+          "PORT=3000",
+          "DATABASE_PATH=/data/production.sqlite3",
+          "STORAGE_PATH=/data/files",
+          "PUBLIC_PATH=/app/public",
+          "CAMPFIRE_DATA=/data",
+          "TRUSTED_PROXY_IP=127.0.0.1",
+          "XDG_DATA_HOME=/data/caddy",
+          "XDG_CONFIG_HOME=/data/caddy"
+        ],
+        "ExposedPorts": {
+          "8080/tcp": {},
+          "8443/tcp": {}
+        },
+        "Labels": null,
+        "OnBuild": null,
+        "User": "campfire",
+        "Volumes": {
+          "/data": {}
+        },
+        "WorkingDir": "/app"
+      }
+    },
+    {
+      "Id": "sha256:b4f3731207be333f3853c9deb118fb9050dc2afbff628fc82d49aca57447ed16",
+      "RepoTags": [
+        "campfire-local-tools:verified"
+      ],
+      "RepoDigests": [
+        "campfire-local-tools@sha256:b4f3731207be333f3853c9deb118fb9050dc2afbff628fc82d49aca57447ed16"
+      ],
+      "Parent": "",
+      "Comment": "buildkit.dockerfile.v0",
+      "Created": "2026-10-10T09:23:32.30219805Z",
+      "DockerVersion": "",
+      "Author": "",
+      "Architecture": "arm64",
+      "Os": "linux",
+      "Size": 1286756657,
+      "GraphDriver": {
+        "Data": null,
+        "Name": "overlayfs"
+      },
+      "RootFS": {
+        "Type": "layers",
+        "Layers": [
+          "sha256:fee3d105d5c8439c75356aecdc0d07666e08e0a54147c92eac4fb3572d80e6ac",
+          "sha256:5ef2542f71b5d3ac6eb3b35ef4334bd495e1e651a09f436a85fc0fea7a567ba1",
+          "sha256:fec2b0a29979263a083615f5c4c7bab0892258cb67e0e90096168e13d7dbee15",
+          "sha256:0b2c43fccc42b18d72073104944f46b8e5f864cacae7c16fe61fcb1682f8e907",
+          "sha256:47d547dbaaaedc8723175080184cf86c37939589f5b550b657ab833820961fb9",
+          "sha256:042403176c0347fb3fd6eef9e5b5f8f298934e0b1d7df656565c6c34e7f24368",
+          "sha256:f6b56b014bb4238195242b2ea00d49f986965291e6820cad50b7ce27827980fd",
+          "sha256:2ec8b9df760976705a2f382262da896342c1d7921e8b6a6c9eef1e036855281d",
+          "sha256:8a199f99cb805f3d7144ab09f81d56491fc9f4753f1c7ba3fac59222038c0fa6",
+          "sha256:41084f594230c0c4ce0a86d614264e70bc8053e85d93cac65ee7a72ff7284444"
+        ]
+      },
+      "Metadata": {
+        "LastTagTime": "2026-10-10T09:23:32.844681342Z"
+      },
+      "Descriptor": {
+        "mediaType": "application/vnd.oci.image.index.v1+json",
+        "digest": "sha256:b4f3731207be333f3853c9deb118fb9050dc2afbff628fc82d49aca57447ed16",
+        "size": 856
+      },
+      "Config": {
+        "Cmd": [
+          "bash"
+        ],
+        "Entrypoint": null,
+        "Env": [
+          "PATH=/opt/mojo/bin:/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "RUSTUP_HOME=/usr/local/rustup",
+          "CARGO_HOME=/usr/local/cargo",
+          "RUST_VERSION=1.98.1"
+        ],
+        "Labels": {
+          "org.opencontainers.image.source": "https://github.com/rust-lang/docker-rust"
+        },
+        "OnBuild": null,
+        "User": "",
+        "Volumes": null,
+        "WorkingDir": "/workspace"
+      }
+    },
+    {
+      "Id": "sha256:05ff0bedbbb4d278cc6009afb6610275e7ad6eccf8c67024c9876697d0cfa8bd",
+      "RepoTags": [
+        "campfire-local-tools:ci-amd64"
+      ],
+      "RepoDigests": [
+        "campfire-local-tools@sha256:05ff0bedbbb4d278cc6009afb6610275e7ad6eccf8c67024c9876697d0cfa8bd"
+      ],
+      "Parent": "",
+      "Comment": "buildkit.dockerfile.v0",
+      "Created": "2026-10-10T09:56:51.260163253Z",
+      "DockerVersion": "",
+      "Author": "",
+      "Architecture": "amd64",
+      "Os": "linux",
+      "Size": 1358963833,
+      "GraphDriver": {
+        "Data": null,
+        "Name": "overlayfs"
+      },
+      "RootFS": {
+        "Type": "layers",
+        "Layers": [
+          "sha256:119aaab78849620efdb76820b1033715e7f2b6878dcb17494fc30f2bbc18ab64",
+          "sha256:dff9076f696cfb52ac99baa50e1d148935117233667b6a145ae60109642637f6",
+          "sha256:bd0966898939cfb2895870cf662af1caeae35005a5bb9b7974a053884fbaacbf",
+          "sha256:03c1fc065307d6459f428a201304ea664403569cf69cd24c207ea85776e69193",
+          "sha256:c7459d6844f50d5966306502ab2883138bd0b4b0b320862583c93aa45a34427f",
+          "sha256:81f23d45f13cf94242d79ea65cff91273758e8d96745234331ba69ff81131ac4",
+          "sha256:8600eafd21ab64a2f252baf0ba4b2c7b0e6fbd8e7aa8c1a5958819ab079b95dd",
+          "sha256:c07b0300446ce62d604a15cd74649406bd12a81880fcab48c00c5048c71a9c17",
+          "sha256:9aa5e3428c6bf9e62667b5ce065e3d0285a1df5cf3464d4247b52dbd2717572f"
+        ]
+      },
+      "Metadata": {
+        "LastTagTime": "2026-10-10T09:57:24.774020005Z"
+      },
+      "Descriptor": {
+        "mediaType": "application/vnd.oci.image.index.v1+json",
+        "digest": "sha256:05ff0bedbbb4d278cc6009afb6610275e7ad6eccf8c67024c9876697d0cfa8bd",
+        "size": 856
+      },
+      "Config": {
+        "Cmd": [
+          "bash"
+        ],
+        "Entrypoint": null,
+        "Env": [
+          "PATH=/opt/mojo/bin:/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "RUSTUP_HOME=/usr/local/rustup",
+          "CARGO_HOME=/usr/local/cargo",
+          "RUST_VERSION=1.98.1"
+        ],
+        "Labels": {
+          "org.opencontainers.image.source": "https://github.com/rust-lang/docker-rust"
+        },
+        "OnBuild": null,
+        "User": "",
+        "Volumes": null,
+        "WorkingDir": "/workspace"
+      }
+    }
+  ],
+  "validation_note": "An intermediate amd64 run under concurrent validation missed one MP4 poster. The isolated regression and final serial full suite passed without an application-code change; the failed log is retained. The cleanup test also exposed a file/SQL observation race, now fixed by awaiting both completion conditions.",
+  "trust_boundary": "The boundary and C/library dependencies remain trusted native code. ASan/UBSan instrument the C fuzz harness, not Mojo code. The source rule and regression suite are not a formal proof of memory safety."
+}

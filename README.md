@@ -11,21 +11,21 @@ Binary data uses owned byte buffers with explicit UTF-8 decoding. FFI and raw-po
 <!-- BENCHMARK_BEGIN -->
 | Workload (completed requests/sec) | Rust* | C* | Mojo |
 |---|---:|---:|---:|
-| Room page | 44,009 | 58,828 | 55,287 |
-| Messages page | 40,509 | 60,794 | 61,141 |
-| Sidebar | 53,012 | 62,175 | 70,846 |
-| Search | 52,277 | 60,057 | 64,161 |
-| Post a message | 1,135 | 386 | 852 |
-| Backend KLOC | 30.9 | 94.8 | 7.5 |
+| Room page | 60,644 | 70,577 | 60,668 |
+| Messages page | 51,635 | 65,858 | 60,781 |
+| Sidebar | 60,455 | 66,963 | 76,689 |
+| Search | 58,033 | 66,958 | 71,122 |
+| Post a message | 1,259 | 422 | 865 |
+| Backend KLOC | 30.9 | 94.8 | 8.0 |
 
-**237,343 messages and 712,029 recipient completions** audited across timed runs and warmups, with no missing messages/FTS rows/receipts and no pending, failed or dropped jobs. Posting rounds (completed messages/sec): Rust: 1,361, 983, 1,135; C: 367, 387, 386; Mojo: 852, 871, 685. Raw metadata, every round, acknowledgement audits and logs: `bench/results/2026-10-10-m4-upstream/`.
+**277,605 messages and 832,815 recipient completions audited across all timed runs and warmups. No missing messages, FTS rows or receipts; no pending, failed or dropped jobs.** Posting rounds (completed messages/sec): Rust: 1,189, 1,344, 1,259; C: 342, 429, 422; Mojo: 878, 853, 865. Raw results: `bench/results/2026-10-10-m4-byte-safety-lock-budget/`.
 
-Measured commits: Rust `ff8fe2efa45e`, C `889530164ff9`, Mojo `ec9d2c2258ef`. Mojo application source is `d294123`; later commits change comparison tooling, tests and documentation only.
+Measured commits: Rust `aea2e0768426`, C `f5db6695873b`, Mojo `c62f43845715`. Audited Mojo application source is `cf7be91`; later commits change comparison tooling, tests or documentation only.
 <!-- BENCHMARK_END -->
 
-The tracked [comparison summary](bench/acceptance/2026-10-10-comparison.json) records all rounds, binary hashes and completion audits. Raw acknowledgement files are kept locally and excluded from Git.
+The tracked [comparison summary](bench/acceptance/2026-10-10-byte-safety.json) records all rounds, binary hashes and completion audits. Raw acknowledgement files are kept locally and excluded from Git. An earlier attempt stopped on a C HTTP 503 caused by writer contention under its shorter lock budget. The controlled regression reproduced the failure; after aligning the opt-in reference budgets with Mojo, all nine runs were repeated. The aborted attempt remains in `bench/results/2026-10-10-m4-byte-safety/` and is not mixed into the table.
 
-These are **local durability-patched Rust and C builds**, not stock upstream performance claims. Every application uses SQLite WAL `synchronous=FULL`, atomic message/outbox admission, persisted retry state and recipient receipts. Posting throughput includes the final queue drain. The harness requires every acknowledged message, exact body, FTS entry and expected recipient receipt, and rejects failed, pending or dropped work.
+These are **local durability-patched Rust and C builds**, not stock upstream performance claims. Every application uses SQLite WAL `synchronous=FULL`, atomic message/outbox admission, persisted retry state, recipient receipts and a 10-second SQLite write-lock budget. Posting throughput includes the final queue drain. The harness requires every acknowledged message, exact body, FTS entry and expected recipient receipt, and rejects failed, pending or dropped work.
 
 The timed workloads prepare three push recipients per message and exercise the same endpoint-policy rejection. They do not time external push encryption/network delivery, and have no connected Cable subscribers. Actual encryption, provider acceptance/retry and live browser fanout have separate correctness tests. External side effects are at-least-once; a crash after remote acceptance but before the local receipt can cause a duplicate.
 
