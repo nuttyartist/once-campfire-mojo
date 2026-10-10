@@ -1,0 +1,29 @@
+title = "Campfire publication scan"
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Independent public Rails crypto/storage golden fixtures; exact file hashes checked by the publication gate"
+targetRules = ["generic-api-key"]
+paths = ['''(^|/)tests/corpus/(rails_compat|storage)\.json$''']
+
+[[allowlists]]
+description = "Disposable imported attachment filename in the administration regression"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''(^|/)tests/operations\.py$''']
+regexes = ['''^abcdef123456$''']
+
+[[allowlists]]
+description = "SQLite API member names and FTS row constant, not credentials"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''(^|/)vendor/sqlite/sqlite3\.c$''']
+regexes = ['''^(column_bytes16|soft_heap_limit64|hard_heap_limit64|FTS5_AVERAGES_ROWID)$''']
+
+[[allowlists]]
+description = "Lexical selection state expression in the pinned Lexxy bundle"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''(^|/)public/assets/lexxy\.min-68f38983\.js$''']
+regexes = ['''^n=i\.focus\.key$''']

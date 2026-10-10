@@ -1,0 +1,34 @@
+name: Dependency advisories
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 8 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Build current distribution packages and local candidate
+        run: |
+          docker build --pull --no-cache -f bench/Dockerfile.tools -t campfire-local-tools:verified .
+          docker pull debian:trixie-slim
+          bash tools/build-image.sh campfire-mojo:ci --no-cache
+      - name: Scan locally with current public advisory databases
+        run: bash tools/check-security.sh
+      - name: Retain redacted reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: advisory-reports
+          path: build/security
+          if-no-files-found: warn
+          retention-days: 30

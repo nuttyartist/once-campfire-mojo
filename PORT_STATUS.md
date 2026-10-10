@@ -1,5 +1,12 @@
 # Replacement contract and acceptance
 
+Publication preparation now includes operator/developer documentation, reproducible
+asset verification, packaged notices, version identity, formatting, local release
+exports and security checks. [Release status](docs/releases.md) distinguishes
+functional acceptance from the unresolved dependency scan, deferred native amd64
+acceptance and deferred maintainer/security contact. This is an unreleased source
+candidate for review, not a supported production release.
+
 This port implements the stock Campfire application workflows against the original Rails `b52b244f384456d9ab5892ebb7bebd8cd8c696c9` source and local Active Storage Disk service. It is suitable for upstream review as a functional application port. Passing the documented gates is not a proof of equivalence for every input, deployment or optional Rails extension, nor a substitute for maintainer/security review before a public release.
 
 ## Audit findings closed

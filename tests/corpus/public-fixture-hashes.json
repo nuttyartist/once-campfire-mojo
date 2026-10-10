@@ -1,0 +1,8 @@
+{
+  "source": "basecamp/once-campfire-rust@6dae2fd3c1a2dce61ca11beb731bcce2b42b67ad",
+  "purpose": "Public cryptographic/storage test vectors, never deployment credentials. Pinning guards the narrow generic-api-key scanner exception.",
+  "sha256": {
+    "rails_compat.json": "4d5eb13617567e6dbd1974d880709d2a0d898cf4abc9ee66a6b432fb66a2c809",
+    "storage.json": "9fcd5f3e43d7d97cc39588239e44d319fffe95739d0aad55cc95bff2d37befa1"
+  }
+}

@@ -3,7 +3,7 @@
   "local_only": true,
   "application_revision": "cf7be919e63b150d11b80649c66e93f6b2438980",
   "measurement_revision": "c62f43845715ca2c144560aadc65b52e0e530c8a",
-  "repository": "/Users/ruby/Downloads/campfire-test/once-campfire-mojo",
+  "repository": "once-campfire-mojo",
   "changes": [
     "Owned byte buffers now carry socket data, HTTP bodies, uploads/downloads, compressed responses, WebSocket frames/fragments, Marshal values, keys, hashes and ciphertext. Text decoding validates UTF-8 explicitly.",
     "All Mojo FFI and raw-pointer APIs are confined to src/native_boundary.mojo. Typed wrappers check lengths, capacities, cryptographic key sizes, native descriptor ranges and C-string NULs; returned allocations are copied and freed inside that boundary.",
@@ -487,7 +487,7 @@
     }
   ],
   "aborted_benchmark": {
-    "path": "/Users/ruby/Downloads/campfire-test/once-campfire-mojo/bench/results/2026-10-10-m4-byte-safety",
+    "path": "once-campfire-mojo/bench/results/2026-10-10-m4-byte-safety",
     "reason": "C returned one HTTP 503 while posting in round 2. Its request writer had a 1-second SQLite lock budget, versus Rust 5 seconds and Mojo 10. A controlled lock reproduced C 503. Opt-in Rust/C durable write connections now use the same 10 seconds as Mojo; the full nine-run experiment was restarted. Earlier samples are preserved separately, not mixed into this table."
   },
   "crash_recovery": {

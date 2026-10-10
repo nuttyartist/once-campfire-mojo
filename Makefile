@@ -13,8 +13,13 @@ build/gumbo/%.o: vendor/gumbo/src/%.c
 build/libgumbo.a: $(GUMBO_OBJECTS)
 	ar rcs $@ $^
 
-.PHONY: all clean
+.PHONY: all clean FORCE
 all: build/campfire
+
+build/generated/build_info.mojo: VERSION tools/build_info.py FORCE
+	python3 tools/build_info.py --output $@
+
+FORCE:
 
 build/sqlite3.o: vendor/sqlite/sqlite3.c vendor/sqlite/sqlite3.h
 	mkdir -p build
@@ -43,8 +48,8 @@ build/runtime.o: native/runtime.c
 src/templates.mojo: $(wildcard templates/*.html) assets/manifest.json tools/compile_templates.py
 	python3 tools/compile_templates.py
 
-build/campfire: src/templates.mojo $(wildcard src/*.mojo) build/platform.o build/runtime.o build/qrcodegen.o build/libgumbo.a build/transport.o build/process.o $(filter build/%,$(SQLITE_LIB))
-	$(MOJO) build -O3 -I src src/main.mojo -o $@ -Xlinker build/platform.o -Xlinker build/runtime.o -Xlinker build/qrcodegen.o -Xlinker build/libgumbo.a -Xlinker build/transport.o -Xlinker build/process.o -Xlinker -lcurl -Xlinker $(SQLITE_LIB) -Xlinker -lm -Xlinker -lz -Xlinker -lcrypto -Xlinker -lcrypt -Xlinker -lxml2 $(foreach lib,$(shell pkg-config --libs vips),-Xlinker $(lib))
+build/campfire: build/generated/build_info.mojo src/templates.mojo $(wildcard src/*.mojo) build/platform.o build/runtime.o build/qrcodegen.o build/libgumbo.a build/transport.o build/process.o $(filter build/%,$(SQLITE_LIB))
+	$(MOJO) build -O3 -I src -I build/generated src/main.mojo -o $@ -Xlinker build/platform.o -Xlinker build/runtime.o -Xlinker build/qrcodegen.o -Xlinker build/libgumbo.a -Xlinker build/transport.o -Xlinker build/process.o -Xlinker -lcurl -Xlinker $(SQLITE_LIB) -Xlinker -lm -Xlinker -lz -Xlinker -lcrypto -Xlinker -lcrypt -Xlinker -lxml2 $(foreach lib,$(shell pkg-config --libs vips),-Xlinker $(lib))
 
 clean:
 	rm -rf build

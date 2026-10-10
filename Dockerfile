@@ -1,12 +1,23 @@
 # Build the toolchain once using bench/Dockerfile.tools, then build this image.
 ARG TOOLCHAIN_IMAGE=campfire-local-tools:verified
 FROM ${TOOLCHAIN_IMAGE} AS build
+ARG GIT_REVISION=unknown
+ENV GIT_REVISION=${GIT_REVISION}
 WORKDIR /build
 COPY . .
 RUN make -j3
 RUN mkdir /mojo-runtime && cp /opt/mojo/lib/python3.13/site-packages/modular/lib/libKGENCompilerRTShared.so /opt/mojo/lib/python3.13/site-packages/modular/lib/libMSupportGlobals.so /opt/mojo/lib/python3.13/site-packages/modular/lib/libAsyncRTRuntimeGlobals.so /mojo-runtime/
 
 FROM debian:trixie-slim
+ARG GIT_REVISION=unknown
+ARG APP_VERSION=0.1.0-dev
+ARG SOURCE_URL=local
+LABEL org.opencontainers.image.title="Campfire in Mojo" \
+    org.opencontainers.image.description="Campfire chat for Linux and local Disk storage; independent Mojo port" \
+    org.opencontainers.image.version=${APP_VERSION} \
+    org.opencontainers.image.revision=${GIT_REVISION} \
+    org.opencontainers.image.source=${SOURCE_URL} \
+    org.opencontainers.image.licenses="MIT"
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libcurl4t64 libcrypt1 libmagic1t64 libxml2 libvips42t64 ffmpeg poppler-utils \
     ca-certificates openssl python3 tini caddy && rm -rf /var/lib/apt/lists/* \
@@ -17,6 +28,10 @@ COPY --from=build /mojo-runtime /usr/local/lib/mojo
 COPY public /app/public
 COPY deploy /app/deploy
 COPY tools/manage.py tools/schema_contract.json /app/tools/
+COPY MIT-LICENSE THIRD_PARTY_NOTICES.md /app/
+COPY licenses /app/licenses
+COPY --from=build /build/VERSION /app/VERSION
+COPY --from=build /build/build/generated/build_info.mojo /app/build-info.txt
 RUN test -s /app/campfire && test -s /app/deploy/start && test -s /app/tools/manage.py && test -s /app/public/service-worker.js \
     && mkdir -p /data && chown campfire:campfire /data
 ENV LD_LIBRARY_PATH=/usr/local/lib/mojo BIND_ADDRESS=127.0.0.1 PORT=3000 \

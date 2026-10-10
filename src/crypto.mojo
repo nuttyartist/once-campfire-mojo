@@ -8,7 +8,7 @@ import marshal
 
 def json_string(s: String) -> String:
     # Copy UTF-8 spans intact between ASCII escapes, avoiding a String per character.
-    var out = String("\"")
+    var out = String('"')
     var start = 0
     var bytes = s.as_bytes()
     var digits = String("0123456789abcdef")
@@ -16,7 +16,7 @@ def json_string(s: String) -> String:
         var b = bytes[i]
         var replacement: String
         if b == 34:
-            replacement = "\\\""
+            replacement = '\\"'
         elif b == 92:
             replacement = "\\\\"
         elif b == 10:
@@ -26,7 +26,11 @@ def json_string(s: String) -> String:
         elif b == 9:
             replacement = "\\t"
         elif b < 32:
-            replacement = "\\u00" + String(digits[byte=Int(b)//16:Int(b)//16+1]) + String(digits[byte=Int(b)%16:Int(b)%16+1])
+            replacement = (
+                "\\u00"
+                + String(digits[byte = Int(b) // 16 : Int(b) // 16 + 1])
+                + String(digits[byte = Int(b) % 16 : Int(b) % 16 + 1])
+            )
         elif b == 60:
             replacement = "\\u003c"
         elif b == 62:
@@ -39,7 +43,7 @@ def json_string(s: String) -> String:
         out += replacement
         start = i + 1
     out += String(s[byte=start:])
-    return out + "\""
+    return out + '"'
 
 
 def base64(s: Bytes, url: Bool = False, padding: Bool = True) raises -> String:
@@ -102,10 +106,7 @@ def url_encode(s: String) -> String:
 
 
 def secure_equal(var a: String, var b: String) -> Bool:
-    return (
-        native.crypto_equal(a, b)
-        == 1
-    )
+    return native.crypto_equal(a, b) == 1
 
 
 struct Signer(Movable):
@@ -115,7 +116,7 @@ struct Signer(Movable):
 
     def __init__(out self, secret: String = "") raises:
         self.keys = Dict[String, String]()
-        self.secret = secret if secret!="" else getenv("SECRET_KEY_BASE", "")
+        self.secret = secret if secret != "" else getenv("SECRET_KEY_BASE", "")
         self.clock = "now"
         if self.secret.byte_length() < 32:
             raise Error("SECRET_KEY_BASE must contain at least 32 bytes")
@@ -123,10 +124,7 @@ struct Signer(Movable):
     def key(mut self, var salt: String) raises -> String:
         if salt not in self.keys:
             var buf = List[UInt8](length=129, fill=0)
-            if (
-                native.crypto_derive(self.secret, salt, buf)
-                != 0
-            ):
+            if native.crypto_derive(self.secret, salt, buf) != 0:
                 raise Error("PBKDF2 failed")
             self.keys[salt] = native.terminated(buf)
         return self.keys[salt]
@@ -137,7 +135,9 @@ struct Signer(Movable):
         var key = self.key(salt)
         var buf = List[UInt8](length=65, fill=0)
         if (
-            native.crypto_hmac(key, data.as_bytes(), data.byte_length(), Int(sha256), buf)
+            native.crypto_hmac(
+                key, data.as_bytes(), data.byte_length(), Int(sha256), buf
+            )
             != 0
         ):
             raise Error("HMAC failed")
@@ -165,40 +165,80 @@ struct Signer(Movable):
         )
         return "/users/" + value + "/avatar?v=" + version
 
-    def encrypted_cookie(mut self, data: String, expiry: String, name: String = "_campfire_session") raises -> String:
-        var payload = '{"_rails":{"message":'+json_string(base64(data))+',"exp":'+json_string(expiry)+',"pur":'+json_string("cookie."+name)+'}}'
-        if payload.byte_length()>2800:
+    def encrypted_cookie(
+        mut self,
+        data: String,
+        expiry: String,
+        name: String = "_campfire_session",
+    ) raises -> String:
+        var payload = (
+            '{"_rails":{"message":'
+            + json_string(base64(data))
+            + ',"exp":'
+            + json_string(expiry)
+            + ',"pur":'
+            + json_string("cookie." + name)
+            + "}}"
+        )
+        if payload.byte_length() > 2800:
             raise Error("HTTP 422: Session cookie exceeds browser limit")
         var key = self.key("authenticated encrypted cookie")
-        var nonce = List[UInt8](length=12,fill=0)
-        if native.crypto_random(nonce, 12)!=0:
+        var nonce = List[UInt8](length=12, fill=0)
+        if native.crypto_random(nonce, 12) != 0:
             raise Error("Cookie random generator failed")
-        var result = native.cookie_encrypt(key,Bytes(Span(nonce)),payload)
-        return url_encode(base64(result[0])+"--"+base64(Bytes(Span(nonce)))+"--"+base64(result[1]))
+        var result = native.cookie_encrypt(key, Bytes(Span(nonce)), payload)
+        return url_encode(
+            base64(result[0])
+            + "--"
+            + base64(Bytes(Span(nonce)))
+            + "--"
+            + base64(result[1])
+        )
 
-    def decrypt_cookie(mut self, mut db: Database, wire: String, name: String = "_campfire_session") raises -> String:
-        if wire=="" or wire.byte_length()>8192:
+    def decrypt_cookie(
+        mut self,
+        mut db: Database,
+        wire: String,
+        name: String = "_campfire_session",
+    ) raises -> String:
+        if wire == "" or wire.byte_length() > 8192:
             return ""
         try:
             var parts = decode(wire).split("--")
-            if len(parts)!=3:
+            if len(parts) != 3:
                 return ""
             var body = unbase64(String(parts[0]))
             var nonce = unbase64(String(parts[1]))
             var tag = unbase64(String(parts[2]))
-            if nonce.byte_length()!=12 or tag.byte_length()!=16:
+            if nonce.byte_length() != 12 or tag.byte_length() != 16:
                 return ""
             var key = self.key("authenticated encrypted cookie")
-            var data = native.cookie_decrypt(key,nonce,body,tag).text()
-            if db.scalar("SELECT json_valid(?)",[data])!="1":
+            var data = native.cookie_decrypt(key, nonce, body, tag).text()
+            if db.scalar("SELECT json_valid(?)", [data]) != "1":
                 return ""
-            if db.scalar("SELECT json_type(?,'$._rails')",[data])!="":
-                if db.scalar("SELECT coalesce(json_extract(?,'$._rails.pur'),'')",[data])!="cookie."+name:
+            if db.scalar("SELECT json_type(?,'$._rails')", [data]) != "":
+                if (
+                    db.scalar(
+                        "SELECT coalesce(json_extract(?,'$._rails.pur'),'')",
+                        [data],
+                    )
+                    != "cookie." + name
+                ):
                     return ""
-                if db.scalar("SELECT CASE WHEN json_extract(?,'$._rails.exp') IS NULL THEN 1 WHEN julianday(json_extract(?,'$._rails.exp'))>julianday(?) THEN 1 ELSE 0 END",[data,data,self.clock])!="1":
+                if (
+                    db.scalar(
+                        "SELECT CASE WHEN json_extract(?,'$._rails.exp') IS NULL THEN 1 WHEN julianday(json_extract(?,'$._rails.exp'))>julianday(?) THEN 1 ELSE 0 END",
+                        [data, data, self.clock],
+                    )
+                    != "1"
+                ):
                     return ""
-                data = unbase64(db.scalar("SELECT json_extract(?,'$._rails.message')",[data])).text()
-            if db.scalar("SELECT json_valid(?)",[data])!="1":
+                data = unbase64(
+                    db.scalar(
+                        "SELECT json_extract(?,'$._rails.message')", [data]
+                    )
+                ).text()
+            if db.scalar("SELECT json_valid(?)", [data]) != "1":
                 return ""
             return data^
         except:
@@ -214,52 +254,118 @@ struct Signer(Movable):
         )
         return url_encode(self.sign("signed cookie", payload, False))
 
-    def envelope(mut self, salt: String, data: String, purpose: String, expiry: String = "", url: Bool = False) raises -> String:
-        var metadata = '{"_rails":{"data":'+data
+    def envelope(
+        mut self,
+        salt: String,
+        data: String,
+        purpose: String,
+        expiry: String = "",
+        url: Bool = False,
+    ) raises -> String:
+        var metadata = '{"_rails":{"data":' + data
         if expiry != "":
-            metadata += ',"exp":'+json_string(expiry)
-        metadata += ',"pur":'+json_string(purpose)+'}}'
-        var encoded = base64(metadata,url,True)
-        return encoded+"--"+self.mac(salt,encoded,False)
+            metadata += ',"exp":' + json_string(expiry)
+        metadata += ',"pur":' + json_string(purpose) + "}}"
+        var encoded = base64(metadata, url, True)
+        return encoded + "--" + self.mac(salt, encoded, False)
 
-    def signed_id(mut self, mut db: Database, uid: String, purpose: String, hours: Int = 0) raises -> String:
+    def signed_id(
+        mut self, mut db: Database, uid: String, purpose: String, hours: Int = 0
+    ) raises -> String:
         var expiry = String()
         if hours > 0:
-            expiry = ',"exp":' + json_string(db.scalar("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now',?)", ["+"+String(hours)+" hours"]))
-        return self.sign("active_record/signed_id", '{"_rails":{"data":'+uid+',"pur":'+json_string(purpose)+expiry+'}}', True, True)
+            expiry = ',"exp":' + json_string(
+                db.scalar(
+                    "SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now',?)",
+                    ["+" + String(hours) + " hours"],
+                )
+            )
+        return self.sign(
+            "active_record/signed_id",
+            '{"_rails":{"data":'
+            + uid
+            + ',"pur":'
+            + json_string(purpose)
+            + expiry
+            + "}}",
+            True,
+            True,
+        )
 
-    def verify(mut self, mut db: Database, salt: String, wire: String, purpose: String = "", sha256: Bool = True) raises -> String:
+    def verify(
+        mut self,
+        mut db: Database,
+        salt: String,
+        wire: String,
+        purpose: String = "",
+        sha256: Bool = True,
+    ) raises -> String:
         if wire.byte_length() > 16384:
             return ""
         try:
             for byte in wire.as_bytes():
-                if byte>=128 or byte==0:
+                if byte >= 128 or byte == 0:
                     return ""
             var offset = wire.byte_length() - (66 if sha256 else 42)
-            if offset <= 0 or String(wire[byte=offset:offset+2]) != "--":
-                if sha256 and salt=="active_record/signed_id":
-                    return self.verify(db,salt,wire,purpose,False)
+            if offset <= 0 or String(wire[byte = offset : offset + 2]) != "--":
+                if sha256 and salt == "active_record/signed_id":
+                    return self.verify(db, salt, wire, purpose, False)
                 return ""
             var encoded = String(wire[byte=:offset])
-            if not secure_equal(self.mac(salt, encoded, sha256), String(wire[byte=offset+2:])):
+            if not secure_equal(
+                self.mac(salt, encoded, sha256),
+                String(wire[byte = offset + 2 :]),
+            ):
                 return ""
             var payload = unbase64(encoded).text()
             if db.scalar("SELECT json_valid(?)", [payload]) != "1":
                 return ""
-            if db.scalar("SELECT json_type(?,'$._rails')",[payload])=="":
-                if purpose=="":
-                    return db.scalar("SELECT json_extract(?,'$')",[payload])
-                if salt=="signed_global_ids" and db.scalar("SELECT json_extract(?,'$.purpose')",[payload])==purpose:
-                    if db.scalar("SELECT CASE WHEN json_extract(?,'$.expires_at') IS NULL THEN 1 WHEN julianday(json_extract(?,'$.expires_at'))>=julianday(?) THEN 1 ELSE 0 END",[payload,payload,self.clock])=="1":
-                        return db.scalar("SELECT json_extract(?,'$.gid')",[payload])
+            if db.scalar("SELECT json_type(?,'$._rails')", [payload]) == "":
+                if purpose == "":
+                    return db.scalar("SELECT json_extract(?,'$')", [payload])
+                if (
+                    salt == "signed_global_ids"
+                    and db.scalar(
+                        "SELECT json_extract(?,'$.purpose')", [payload]
+                    )
+                    == purpose
+                ):
+                    if (
+                        db.scalar(
+                            "SELECT CASE WHEN json_extract(?,'$.expires_at') IS NULL THEN 1 WHEN julianday(json_extract(?,'$.expires_at'))>=julianday(?) THEN 1 ELSE 0 END",
+                            [payload, payload, self.clock],
+                        )
+                        == "1"
+                    ):
+                        return db.scalar(
+                            "SELECT json_extract(?,'$.gid')", [payload]
+                        )
                 return ""
-            if db.scalar("SELECT json_extract(?,'$._rails.pur')", [payload]) != purpose:
+            if (
+                db.scalar("SELECT json_extract(?,'$._rails.pur')", [payload])
+                != purpose
+            ):
                 return ""
-            if db.scalar("SELECT CASE WHEN json_extract(?,'$._rails.exp') IS NULL THEN 0 WHEN julianday(json_extract(?,'$._rails.exp')) > julianday(?) THEN 0 ELSE 1 END", [payload,payload,self.clock]) == "1":
+            if (
+                db.scalar(
+                    "SELECT CASE WHEN json_extract(?,'$._rails.exp') IS NULL THEN 0 WHEN julianday(json_extract(?,'$._rails.exp')) > julianday(?) THEN 0 ELSE 1 END",
+                    [payload, payload, self.clock],
+                )
+                == "1"
+            ):
                 return ""
-            if db.scalar("SELECT json_type(?,'$._rails.data')", [payload]) != "":
-                return db.scalar("SELECT json_extract(?,'$._rails.data')", [payload])
-            var data = unbase64(db.scalar("SELECT json_extract(?,'$._rails.message')", [payload]))
+            if (
+                db.scalar("SELECT json_type(?,'$._rails.data')", [payload])
+                != ""
+            ):
+                return db.scalar(
+                    "SELECT json_extract(?,'$._rails.data')", [payload]
+                )
+            var data = unbase64(
+                db.scalar(
+                    "SELECT json_extract(?,'$._rails.message')", [payload]
+                )
+            )
             if not sha256 and data.startswith("\x04\x08"):
                 return marshal.load_string(data)
             return db.scalar("SELECT json_extract(?,'$')", [data.text()])
@@ -274,7 +380,7 @@ struct Signer(Movable):
         try:
             var raw = decode(wire)
             for byte in raw.as_bytes():
-                if byte>=128 or byte==0:
+                if byte >= 128 or byte == 0:
                     return ""
             var pos = raw.byte_length() - 42
             if pos <= 0 or String(raw[byte = pos : pos + 2]) != "--":
@@ -334,4 +440,4 @@ def session_token() raises -> String:
         for b in random:
             if b < 232 and len(out) < 24:
                 out.append(alphabet.as_bytes()[Int(b) % 58])
-    return String(from_utf8=Span(out)[:len(out)])
+    return String(from_utf8=Span(out)[: len(out)])

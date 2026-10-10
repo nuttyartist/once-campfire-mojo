@@ -104,5 +104,5 @@ def search_query(value: String) -> String:
     var result = String()
     for point in value.codepoints():
         var ch = String(point)
-        result += ch if native.unicode_word(ch)==1 else " "
+        result += ch if native.unicode_word(ch) == 1 else " "
     return result^

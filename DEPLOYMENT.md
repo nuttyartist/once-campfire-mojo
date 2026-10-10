@@ -1,11 +1,16 @@
-# Local deployment and data migration
+# Data migration and recovery
+
+For a fresh installation, public HTTPS, named-volume backup commands and image
+updates, start with [self-hosting](docs/self-hosting.md). See
+[configuration](docs/configuration.md) for settings/defaults and
+[release status](docs/releases.md) for platform acceptance and support scope.
 
 Build on ARM64 or amd64 Linux (Docker Desktop on Apple silicon is supported):
 
 ```sh
 docker build -f bench/Dockerfile.tools -t campfire-local-tools:verified .
-docker compose build
-docker compose up -d
+bash tools/build-image.sh campfire-mojo:local
+docker compose up -d --no-build
 ```
 
 Open `http://localhost:8080`. The first visit creates the account and administrator. The named `campfire` volume contains the SQLite database, Disk files, signing/VAPID keys, and Caddy data. Do not delete that volume to update the image. Compose binds published ports to loopback, limits the container to four CPUs and 2 GiB, and checks the application health endpoint.

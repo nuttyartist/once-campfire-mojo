@@ -1,0 +1,173 @@
+{
+  "schema": 1,
+  "notices": [
+    {
+      "path": "licenses/frontend/action_text-trix-LICENSE.txt",
+      "sha256": "fa0d1454375cbc7701bc13d916c3ae71e613b8ae718321641e678e09409393c4",
+      "source": "https://github.com/basecamp/once-campfire-rust/blob/6dae2fd3c1a2dce61ca11beb731bcce2b42b67ad/crates/assets/vendor/action_text-trix/LICENSE",
+      "component": "action_text-trix",
+      "version": "Rust pinned vendored gem; see assets/upstream-manifest.md"
+    },
+    {
+      "path": "licenses/frontend/actioncable-MIT-LICENSE.txt",
+      "sha256": "44c1d1bb166a4bc26983b892dc72a1c96cf81b30d14f95dbf2a9f37f72a1094a",
+      "source": "https://github.com/basecamp/once-campfire-rust/blob/6dae2fd3c1a2dce61ca11beb731bcce2b42b67ad/crates/assets/vendor/actioncable/MIT-LICENSE",
+      "component": "actioncable",
+      "version": "Rust pinned vendored gem; see assets/upstream-manifest.md"
+    },
+    {
+      "path": "licenses/frontend/actiontext-MIT-LICENSE.txt",
+      "sha256": "a5146eeb7e5f84a79d0f0595605b3d5c09f2f2b154ce3236f379ef9ed934f4c4",
+      "source": "https://github.com/basecamp/once-campfire-rust/blob/6dae2fd3c1a2dce61ca11beb731bcce2b42b67ad/crates/assets/vendor/actiontext/MIT-LICENSE",
+      "component": "actiontext",
+      "version": "Rust pinned vendored gem; see assets/upstream-manifest.md"
+    },
+    {
+      "path": "licenses/frontend/actionview-MIT-LICENSE.txt",
+      "sha256": "1abcf1f3e09902d5357287d17d7d83e72376916771ec48a812e34ae4ff2ba041",
+      "source": "https://github.com/basecamp/once-campfire-rust/blob/6dae2fd3c1a2dce61ca11beb731bcce2b42b67ad/crates/assets/vendor/actionview/MIT-LICENSE",
+      "component": "actionview",
+      "version": "Rust pinned vendored gem; see assets/upstream-manifest.md"
+    },
+    {
+      "path": "licenses/frontend/activestorage-MIT-LICENSE.txt",
+      "sha256": "70590234a6e1a83f038fc86f24b5a5144ab77eb142bda7b8c17a6d2ae325fc9d",
+      "source": "https://github.com/basecamp/once-campfire-rust/blob/6dae2fd3c1a2dce61ca11beb731bcce2b42b67ad/crates/assets/vendor/activestorage/MIT-LICENSE",
+      "component": "activestorage",
+      "version": "Rust pinned vendored gem; see assets/upstream-manifest.md"
+    },
+    {
+      "path": "licenses/frontend/lexxy-MIT-LICENSE.txt",
+      "sha256": "0f49a7faacbb216dfad40aa649bba6825b0ab886c31ddcad2737c2465de68507",
+      "source": "https://github.com/basecamp/once-campfire-rust/blob/6dae2fd3c1a2dce61ca11beb731bcce2b42b67ad/crates/assets/vendor/lexxy/MIT-LICENSE",
+      "component": "lexxy",
+      "version": "Rust pinned vendored gem; see assets/upstream-manifest.md"
+    },
+    {
+      "path": "licenses/frontend/stimulus-rails-MIT-LICENSE.txt",
+      "sha256": "b804b69f6b5f88d06dcc78c6850f2d4514c0c8f64f8b9add66159252baf18288",
+      "source": "https://github.com/basecamp/once-campfire-rust/blob/6dae2fd3c1a2dce61ca11beb731bcce2b42b67ad/crates/assets/vendor/stimulus-rails/MIT-LICENSE",
+      "component": "stimulus-rails",
+      "version": "Rust pinned vendored gem; see assets/upstream-manifest.md"
+    },
+    {
+      "path": "licenses/frontend/turbo-rails-MIT-LICENSE.txt",
+      "sha256": "feedd5e552890f07defcb9c2decc64f95ff198fb3606d4758c9671089f7b964c",
+      "source": "https://github.com/basecamp/once-campfire-rust/blob/6dae2fd3c1a2dce61ca11beb731bcce2b42b67ad/crates/assets/vendor/turbo-rails/MIT-LICENSE",
+      "component": "turbo-rails",
+      "version": "Rust pinned vendored gem; see assets/upstream-manifest.md"
+    },
+    {
+      "path": "licenses/frontend/lexical-0.44.0-LICENSE.txt",
+      "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
+      "source": "https://registry.npmjs.org/lexical/-/lexical-0.44.0.tgz#package/LICENSE",
+      "component": "lexical",
+      "version": "0.44.0"
+    },
+    {
+      "path": "licenses/frontend/prismjs-1.30.0-LICENSE.txt",
+      "sha256": "2b947f0901a7ffcf08a89957da9783c0e9c6e72cb6ce8e959f501ab5409e4d2b",
+      "source": "https://registry.npmjs.org/prismjs/-/prismjs-1.30.0.tgz#package/LICENSE",
+      "component": "prismjs",
+      "version": "1.30.0"
+    },
+    {
+      "path": "licenses/frontend/marked-16.4.1-LICENSE.md.txt",
+      "sha256": "8e3a3f82f59a60958f56ca08f445647c32a4733dc7ca6c2c46f6eb898471ab9c",
+      "source": "https://registry.npmjs.org/marked/-/marked-16.4.1.tgz#package/LICENSE.md",
+      "component": "marked",
+      "version": "16.4.1"
+    },
+    {
+      "path": "licenses/frontend/dompurify-3.3.0-LICENSE.txt",
+      "sha256": "1b02e03c3fb4f87d476c128f0eb9def1f5a1709d28b180465228bd41574623b7",
+      "source": "https://registry.npmjs.org/dompurify/-/dompurify-3.3.0.tgz#package/LICENSE",
+      "component": "dompurify",
+      "version": "3.3.0"
+    },
+    {
+      "path": "licenses/frontend/dompurify-3.4.2-LICENSE.txt",
+      "sha256": "968bdd5b053aa290a16cd073416c5ae4a8daa51076e43f2df423b9c4e2ccda0a",
+      "source": "https://registry.npmjs.org/dompurify/-/dompurify-3.4.2.tgz#package/LICENSE",
+      "component": "dompurify",
+      "version": "3.4.2"
+    },
+    {
+      "path": "licenses/frontend/dompurify-3.4.2-license_header.txt",
+      "sha256": "5803fa925ae1703b9c752921c95a321570e6cabf06fcf2de895ddaf1687cebef",
+      "source": "https://registry.npmjs.org/dompurify/-/dompurify-3.4.2.tgz#package/src/license_header",
+      "component": "dompurify",
+      "version": "3.4.2"
+    },
+    {
+      "path": "licenses/frontend/regenerator-runtime-0.14.1-LICENSE.txt",
+      "sha256": "51887a3d47051ac2fce1210562e5b9fe0830a8a8fabeb272c2d586eeb18a05fd",
+      "source": "https://registry.npmjs.org/regenerator-runtime/-/regenerator-runtime-0.14.1.tgz#package/LICENSE",
+      "component": "regenerator-runtime",
+      "version": "0.14.1"
+    },
+    {
+      "path": "licenses/frontend/highlight.js-11.9.0-LICENSE.txt",
+      "sha256": "6c081431591d9df696c82dc598fe1423765b8a299b200ed00b281afd0f64c490",
+      "source": "https://registry.npmjs.org/highlight.js/-/highlight.js-11.9.0.tgz#package/LICENSE",
+      "component": "highlight.js",
+      "version": "11.9.0"
+    },
+    {
+      "path": "licenses/frontend/spark-md5-3.0.2-LICENSE.txt",
+      "sha256": "9c4214d48030b7e877ed2fd76044ea079a987c9b3f01f9b6964ba4a475a5a13d",
+      "source": "https://registry.npmjs.org/spark-md5/-/spark-md5-3.0.2.tgz#package/LICENSE",
+      "component": "spark-md5",
+      "version": "3.0.2"
+    },
+    {
+      "path": "licenses/mojo/LICENSE.txt",
+      "sha256": "077ecef8fc610215df3319c555c2fa1b4d28df60ee67a72946b9338cbc90a8a0",
+      "source": "https://raw.githubusercontent.com/modular/modular/c6fa49f712fe15c99d0461ad2baaf2a15cbc58ce/LICENSE",
+      "component": "Mojo compiler/runtime distribution",
+      "version": "1.1.0"
+    },
+    {
+      "path": "licenses/mojo/Licenses-LICENSE.txt",
+      "sha256": "f35ac2dfeb4a3e9482468874a50ce4dfb16fc11c3aefd2a1b4d51c44515ed02d",
+      "source": "https://raw.githubusercontent.com/modular/modular/c6fa49f712fe15c99d0461ad2baaf2a15cbc58ce/Licenses/LICENSE",
+      "component": "Mojo compiler/runtime distribution",
+      "version": "1.1.0"
+    },
+    {
+      "path": "licenses/mojo/Licenses-Third-Party-Notices.txt",
+      "sha256": "3d178e4fc82279b8f943c2e76500fb494eeaabc1fbe66e7f457ed309b2aeba2c",
+      "source": "https://raw.githubusercontent.com/modular/modular/c6fa49f712fe15c99d0461ad2baaf2a15cbc58ce/Licenses/Third-Party-Notices",
+      "component": "Mojo compiler/runtime distribution",
+      "version": "1.1.0"
+    },
+    {
+      "path": "licenses/native/gumbo-dependencies.txt",
+      "sha256": "ec46d18d39ebe8c6c89b9c2cc5e9e0745ead6a80e3caf4496c8ded89c638102d",
+      "source": "vendor/gumbo/LICENSE-DEPENDENCIES.md",
+      "component": "Gumbo and its upstream notices",
+      "version": "vendored source"
+    },
+    {
+      "path": "licenses/native/nokogiri.txt",
+      "sha256": "fdc2068b104e269be2946e21d271d340dfd003f0c8f964308cba4404f75db1aa",
+      "source": "vendor/gumbo/LICENSE.md",
+      "component": "Nokogiri",
+      "version": "vendored source"
+    },
+    {
+      "path": "licenses/native/qrcodegen.txt",
+      "sha256": "adf9fc352901c471b16017816d79d509299fd402488964781b01563478ee3834",
+      "source": "vendor/qrcodegen/qrcodegen.c",
+      "component": "QR Code generator",
+      "version": "vendored source"
+    },
+    {
+      "path": "licenses/native/sqlite.txt",
+      "sha256": "e120ba7ef7b2af4a24e46009732a7aeacd2a815d192382776f2ee7a34cf13c2b",
+      "source": "vendor/sqlite/sqlite3.c",
+      "component": "SQLite",
+      "version": "3.53.4"
+    }
+  ]
+}

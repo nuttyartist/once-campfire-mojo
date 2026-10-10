@@ -25,23 +25,25 @@ struct Database(Movable):
         self.pending_files = List[String]()
         self.pending_events = List[String]()
         self.preparing_media = False
-        self.prepared_blobs = Dict[String,List[String]]()
-        self.prepared_variants = Dict[String,String]()
-        self.prepared_previews = Dict[String,String]()
+        self.prepared_blobs = Dict[String, List[String]]()
+        self.prepared_variants = Dict[String, String]()
+        self.prepared_previews = Dict[String, String]()
         _ = self.rows("PRAGMA journal_mode=WAL")
-        var durability = getenv("CAMPFIRE_SQLITE_SYNCHRONOUS","FULL")
-        if durability!="FULL" and durability!="NORMAL":
+        var durability = getenv("CAMPFIRE_SQLITE_SYNCHRONOUS", "FULL")
+        if durability != "FULL" and durability != "NORMAL":
             raise Error("Invalid CAMPFIRE_SQLITE_SYNCHRONOUS")
-        _ = self.rows("PRAGMA synchronous="+durability)
+        _ = self.rows("PRAGMA synchronous=" + durability)
         _ = self.rows("PRAGMA foreign_keys=ON")
         _ = self.rows("PRAGMA recursive_triggers=ON")
 
     def __deinit__(deinit self):
-        if self.pending_download.fd>=0:
+        if self.pending_download.fd >= 0:
             _ = native.os_close(self.pending_download.fd)
 
-    def rows(mut self, sql: String, args: List[String] = List[String]()) raises -> List[List[String]]:
-        return self.connection.rows(sql,args)
+    def rows(
+        mut self, sql: String, args: List[String] = List[String]()
+    ) raises -> List[List[String]]:
+        return self.connection.rows(sql, args)
 
     def scalar(
         mut self, sql: String, args: List[String] = List[String]()

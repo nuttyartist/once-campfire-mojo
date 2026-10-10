@@ -1,0 +1,186 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "name": "Campfire vendored frontend"
+    },
+    "properties": [
+      {
+        "name": "inventory:scope",
+        "value": "Known nested browser packages retained in the frozen upstream export; not an inventory of a Rails server installation."
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "lexical",
+      "version": "0.44.0",
+      "purl": "pkg:npm/lexical@0.44.0",
+      "bom-ref": "pkg:npm/lexical@0.44.0"
+    },
+    {
+      "type": "library",
+      "name": "prismjs",
+      "version": "1.30.0",
+      "purl": "pkg:npm/prismjs@1.30.0",
+      "bom-ref": "pkg:npm/prismjs@1.30.0"
+    },
+    {
+      "type": "library",
+      "name": "marked",
+      "version": "16.4.1",
+      "purl": "pkg:npm/marked@16.4.1",
+      "bom-ref": "pkg:npm/marked@16.4.1"
+    },
+    {
+      "type": "library",
+      "name": "dompurify",
+      "version": "3.3.0",
+      "purl": "pkg:npm/dompurify@3.3.0",
+      "bom-ref": "pkg:npm/dompurify@3.3.0"
+    },
+    {
+      "type": "library",
+      "name": "dompurify",
+      "version": "3.4.2",
+      "purl": "pkg:npm/dompurify@3.4.2",
+      "bom-ref": "pkg:npm/dompurify@3.4.2"
+    },
+    {
+      "type": "library",
+      "name": "regenerator-runtime",
+      "version": "0.14.1",
+      "purl": "pkg:npm/regenerator-runtime@0.14.1",
+      "bom-ref": "pkg:npm/regenerator-runtime@0.14.1"
+    },
+    {
+      "type": "library",
+      "name": "highlight.js",
+      "version": "11.9.0",
+      "purl": "pkg:npm/highlight.js@11.9.0",
+      "bom-ref": "pkg:npm/highlight.js@11.9.0"
+    },
+    {
+      "type": "library",
+      "name": "spark-md5",
+      "version": "3.0.2",
+      "purl": "pkg:npm/spark-md5@3.0.2",
+      "bom-ref": "pkg:npm/spark-md5@3.0.2"
+    },
+    {
+      "type": "library",
+      "name": "trix",
+      "version": "2.1.19",
+      "purl": "pkg:npm/trix@2.1.19",
+      "bom-ref": "pkg:npm/trix@2.1.19"
+    },
+    {
+      "type": "library",
+      "group": "@lexical",
+      "name": "clipboard",
+      "version": "0.44.0",
+      "purl": "pkg:npm/%40lexical/clipboard@0.44.0",
+      "bom-ref": "pkg:npm/%40lexical/clipboard@0.44.0"
+    },
+    {
+      "type": "library",
+      "group": "@lexical",
+      "name": "code",
+      "version": "0.44.0",
+      "purl": "pkg:npm/%40lexical/code@0.44.0",
+      "bom-ref": "pkg:npm/%40lexical/code@0.44.0"
+    },
+    {
+      "type": "library",
+      "group": "@lexical",
+      "name": "extension",
+      "version": "0.44.0",
+      "purl": "pkg:npm/%40lexical/extension@0.44.0",
+      "bom-ref": "pkg:npm/%40lexical/extension@0.44.0"
+    },
+    {
+      "type": "library",
+      "group": "@lexical",
+      "name": "history",
+      "version": "0.44.0",
+      "purl": "pkg:npm/%40lexical/history@0.44.0",
+      "bom-ref": "pkg:npm/%40lexical/history@0.44.0"
+    },
+    {
+      "type": "library",
+      "group": "@lexical",
+      "name": "html",
+      "version": "0.44.0",
+      "purl": "pkg:npm/%40lexical/html@0.44.0",
+      "bom-ref": "pkg:npm/%40lexical/html@0.44.0"
+    },
+    {
+      "type": "library",
+      "group": "@lexical",
+      "name": "link",
+      "version": "0.44.0",
+      "purl": "pkg:npm/%40lexical/link@0.44.0",
+      "bom-ref": "pkg:npm/%40lexical/link@0.44.0"
+    },
+    {
+      "type": "library",
+      "group": "@lexical",
+      "name": "list",
+      "version": "0.44.0",
+      "purl": "pkg:npm/%40lexical/list@0.44.0",
+      "bom-ref": "pkg:npm/%40lexical/list@0.44.0"
+    },
+    {
+      "type": "library",
+      "group": "@lexical",
+      "name": "markdown",
+      "version": "0.44.0",
+      "purl": "pkg:npm/%40lexical/markdown@0.44.0",
+      "bom-ref": "pkg:npm/%40lexical/markdown@0.44.0"
+    },
+    {
+      "type": "library",
+      "group": "@lexical",
+      "name": "plain-text",
+      "version": "0.44.0",
+      "purl": "pkg:npm/%40lexical/plain-text@0.44.0",
+      "bom-ref": "pkg:npm/%40lexical/plain-text@0.44.0"
+    },
+    {
+      "type": "library",
+      "group": "@lexical",
+      "name": "rich-text",
+      "version": "0.44.0",
+      "purl": "pkg:npm/%40lexical/rich-text@0.44.0",
+      "bom-ref": "pkg:npm/%40lexical/rich-text@0.44.0"
+    },
+    {
+      "type": "library",
+      "group": "@lexical",
+      "name": "selection",
+      "version": "0.44.0",
+      "purl": "pkg:npm/%40lexical/selection@0.44.0",
+      "bom-ref": "pkg:npm/%40lexical/selection@0.44.0"
+    },
+    {
+      "type": "library",
+      "group": "@lexical",
+      "name": "table",
+      "version": "0.44.0",
+      "purl": "pkg:npm/%40lexical/table@0.44.0",
+      "bom-ref": "pkg:npm/%40lexical/table@0.44.0"
+    },
+    {
+      "type": "library",
+      "group": "@lexical",
+      "name": "utils",
+      "version": "0.44.0",
+      "purl": "pkg:npm/%40lexical/utils@0.44.0",
+      "bom-ref": "pkg:npm/%40lexical/utils@0.44.0"
+    }
+  ]
+}

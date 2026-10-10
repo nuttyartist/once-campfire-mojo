@@ -1,5 +1,7 @@
 #!/bin/sh
 set -eu
+# Informational CLI commands must not initialize a database or generate secrets.
+if [ "$#" -gt 0 ]; then exec /app/campfire "$@"; fi
 python3 /app/tools/manage.py init --data "$CAMPFIRE_DATA"
 set -a
 . "$CAMPFIRE_DATA/config.env"

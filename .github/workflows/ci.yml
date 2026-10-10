@@ -25,6 +25,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: once-campfire-mojo
+          fetch-depth: 0
           persist-credentials: false
       - name: Build pinned toolchain
         working-directory: once-campfire-mojo
@@ -35,15 +36,32 @@ jobs:
         run: bash once-campfire-mojo/tools/bootstrap-tests.sh
       - name: Application, byte safety, fault recovery, crypto and native sanitizer tests
         run: |
+          set -o pipefail
+          mkdir -p once-campfire-mojo/build/ci-logs
           docker run --rm --init -e CAMPFIRE_TEST_NO_AFFINITY=1 \
             -v "$GITHUB_WORKSPACE:/workspace" -w /workspace/once-campfire-mojo \
-            campfire-local-tools:verified bash tools/check.sh
+            campfire-local-tools:verified bash tools/check.sh 2>&1 | tee once-campfire-mojo/build/ci-logs/application.log
       - name: Build production image
-        run: docker build --build-arg TOOLCHAIN_IMAGE=campfire-local-tools:verified -t campfire-mojo:ci once-campfire-mojo
+        run: bash once-campfire-mojo/tools/build-image.sh campfire-mojo:ci
       - name: Browser and packaged deployment gates
         run: |
-          bash once-campfire-mojo/tools/check-migration.sh
-          bash once-campfire-mojo/tools/check-browser.sh
+          set -o pipefail
+          bash once-campfire-mojo/tools/check-package.sh 2>&1 | tee once-campfire-mojo/build/ci-logs/package.log
+          bash once-campfire-mojo/tools/check-compose.sh 2>&1 | tee once-campfire-mojo/build/ci-logs/compose.log
+          bash once-campfire-mojo/tools/check-migration.sh 2>&1 | tee once-campfire-mojo/build/ci-logs/migration.log
+          bash once-campfire-mojo/tools/check-browser.sh 2>&1 | tee once-campfire-mojo/build/ci-logs/browser.log
+      - name: Local secret and dependency scans
+        run: bash once-campfire-mojo/tools/check-security.sh
+      - name: Retain check logs and redacted scanner reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: checks-${{ matrix.runner }}
+          path: |
+            once-campfire-mojo/build/ci-logs
+            once-campfire-mojo/build/security
+          if-no-files-found: warn
+          retention-days: 30
 
   workflow:
     runs-on: ubuntu-24.04

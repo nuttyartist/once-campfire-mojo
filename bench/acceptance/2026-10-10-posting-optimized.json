@@ -2,7 +2,7 @@
   "validation_note": "An initial amd64 full run and repeated media diagnostics exposed intermittent Rosetta mmap failures while launching media helpers under the unchanged 2 GiB RLIMIT_AS safety bound. A disposable stderr-enabled diagnostic build identified the emulator error. It was discarded; final validation uses the original helper and the same limit. The failed runs are retained in the evidence. The final emulated run uses the same four-server-CPU affinity as native ARM64; earlier unrestricted-CPU emulated runs are retained. This is not a substitute for a native amd64 CI run, and the Rosetta limitation is not claimed to be fixed by application changes.",
   "date": "2026-10-10",
   "local_only": true,
-  "repository": "/Users/ruby/Downloads/campfire-test/once-campfire-mojo",
+  "repository": "once-campfire-mojo",
   "application_revision": "3b7440dc3f842af5f25197578d02963fe06b74dd",
   "changes": [
     "Move the already parsed form into the posting handler. Posting uses its own existing transaction directly, avoiding a second form parse and the empty outer write transaction.",

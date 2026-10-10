@@ -54,11 +54,13 @@ def emoji(s: String) -> Bool:
     return True
 
 
-def message(mut db: Database, mut signer: Signer, row: List[String]) raises -> String:
+def message(
+    mut db: Database, mut signer: Signer, row: List[String]
+) raises -> String:
     try:
-        return render_message(db,signer,row)
+        return render_message(db, signer, row)
     except e:
-        print("Could not render message",row[0],String(e))
+        print("Could not render message", row[0], String(e))
         return '<div class="message message--formatted message--failed center"><div class="message__body"><div class="message__body-content txt-align-center">Failed to load message content</div></div></div>'
 
 
@@ -93,15 +95,19 @@ def render_message(
     v["new_boost_path"] = v["boosts_path"] + "/new"
     v["all_emoji"] = "1" if emoji(richtext.convert(row[7], True)) else "0"
     try:
-        v["presentation"] = storage.presentation(db,signer,row[0])
+        v["presentation"] = storage.presentation(db, signer, row[0])
         if v["presentation"] == "":
-            var plain = richtext.resolved(db,signer,row[7],True)
+            var plain = richtext.resolved(db, signer, row[7], True)
             if plain.startswith("/play "):
                 v["presentation"] = sounds.presentation(String(plain[byte=6:]))
             if v["presentation"] == "":
-                v["presentation"] = '<div class="lexxy-content">\n  '+richtext.resolved(db,signer,row[7])+"\n</div>\n"
+                v["presentation"] = (
+                    '<div class="lexxy-content">\n  '
+                    + richtext.resolved(db, signer, row[7])
+                    + "\n</div>\n"
+                )
     except e:
-        print("Could not render message presentation",row[0],String(e))
+        print("Could not render message presentation", row[0], String(e))
         v["presentation"] = ""
     var reactions = List[String](["👍", "👏", "👋", "💪", "❤️", "😂", "🎉", "🔥"])
     var titles = List[String](
@@ -121,11 +127,16 @@ def render_message(
         v["character"] = reactions[i]
         v["title"] = titles[i]
         buttons += t.reaction(v)
-    var attachment = db.rows("SELECT b.id,b.filename FROM active_storage_blobs b JOIN active_storage_attachments a ON a.blob_id=b.id WHERE a.record_type='Message' AND a.name='attachment' AND a.record_id=?",[row[0]])
-    v["has_attachment"] = "1" if len(attachment)>0 else "0"
-    if len(attachment)>0:
-        v["blob_path"] = storage.blob_path(signer,attachment[0][0],attachment[0][1])
-        v["download_path"] = v["blob_path"]+"?disposition=attachment"
+    var attachment = db.rows(
+        "SELECT b.id,b.filename FROM active_storage_blobs b JOIN active_storage_attachments a ON a.blob_id=b.id WHERE a.record_type='Message' AND a.name='attachment' AND a.record_id=?",
+        [row[0]],
+    )
+    v["has_attachment"] = "1" if len(attachment) > 0 else "0"
+    if len(attachment) > 0:
+        v["blob_path"] = storage.blob_path(
+            signer, attachment[0][0], attachment[0][1]
+        )
+        v["download_path"] = v["blob_path"] + "?disposition=attachment"
         v["filename"] = attachment[0][1]
     v["reactions"] = buttons^
     v["actions"] = t.actions(v)
@@ -171,11 +182,19 @@ def context(
     if uid != "":
         set_user(db, signer, v, uid)
     v["session_flash"] = ""
-    var session = signer.decrypt_cookie(db,req.cookie("_campfire_session"))
-    if session!="":
-        for item in db.rows("SELECT key,value FROM json_each(?,'$.flash.flashes')",[session]):
-            if item[0] in ["notice","alert"]:
-                v["session_flash"] += '<p role="status" class="flash '+escape(item[0])+'">'+escape(item[1])+'</p>'
+    var session = signer.decrypt_cookie(db, req.cookie("_campfire_session"))
+    if session != "":
+        for item in db.rows(
+            "SELECT key,value FROM json_each(?,'$.flash.flashes')", [session]
+        ):
+            if item[0] in ["notice", "alert"]:
+                v["session_flash"] += (
+                    '<p role="status" class="flash '
+                    + escape(item[0])
+                    + '">'
+                    + escape(item[1])
+                    + "</p>"
+                )
     v["title_tag"] = "<title>" + escape(title) + "</title>"
     v["user_meta"] = (
         '<meta name="current-user-id" content="'
@@ -311,18 +330,25 @@ def room(
     kind: String,
     rows: List[List[String]],
 ) raises -> String:
-    if kind=="rooms_direct":
-        var members = db.rows("SELECT u.name FROM users u JOIN memberships mm ON mm.user_id=u.id WHERE mm.room_id=? AND u.id<>? ORDER BY u.name",[rid,uid])
+    if kind == "rooms_direct":
+        var members = db.rows(
+            "SELECT u.name FROM users u JOIN memberships mm ON mm.user_id=u.id WHERE mm.room_id=? AND u.id<>? ORDER BY u.name",
+            [rid, uid],
+        )
         var names = List[String]()
         for member in members:
             names.append(member[0])
-        name = db.scalar("SELECT name FROM users WHERE id=?",[uid])
-        if len(names)==1:
+        name = db.scalar("SELECT name FROM users WHERE id=?", [uid])
+        if len(names) == 1:
             name = names[0]
-        elif len(names)==2:
-            name = names[0]+" and "+names[1]
-        elif len(names)>2:
-            name = ", ".join(names[:len(names)-1])+", and "+names[len(names)-1]
+        elif len(names) == 2:
+            name = names[0] + " and " + names[1]
+        elif len(names) > 2:
+            name = (
+                ", ".join(names[: len(names) - 1])
+                + ", and "
+                + names[len(names) - 1]
+            )
     var v = context(db, signer, uid, req, name, "sidebar")
     v["room_id"] = rid
     v["room_name"] = name
@@ -332,9 +358,7 @@ def room(
     v["involvement_dom"] = "involvement_" + kind + "_" + rid
     v["messages_path"] = "/rooms/" + rid + "/messages"
     v["messages_url"] = req.origin() + v["messages_path"]
-    v["refresh_path"] = (
-        req.origin() + "/rooms/" + rid + "/refresh"
-    )
+    v["refresh_path"] = req.origin() + "/rooms/" + rid + "/refresh"
     v["room_edit_path"] = (
         "/rooms/" + kind.replace("rooms_", "") + "s/" + rid + "/edit"
     )
@@ -428,7 +452,7 @@ def first_name(name: String) -> String:
 
 def sidebar_values(
     mut db: Database, mut signer: Signer, uid: String, req: Request
-) raises -> Dict[String,String]:
+) raises -> Dict[String, String]:
     var v = context(db, signer, uid, req, "Campfire")
     var shared = String()
     var directs = String()
@@ -547,9 +571,11 @@ def sidebar_values(
     return v^
 
 
-def sidebar(mut db: Database, mut signer: Signer, uid: String, req: Request) raises -> String:
-    var v = sidebar_values(db,signer,uid,req)
-    return layout(v,req)
+def sidebar(
+    mut db: Database, mut signer: Signer, uid: String, req: Request
+) raises -> String:
+    var v = sidebar_values(db, signer, uid, req)
+    return layout(v, req)
 
 
 def login() -> String:

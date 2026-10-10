@@ -2,7 +2,6 @@ services:
   campfire:
     build: .
     image: campfire-mojo:local
-    init: true
     restart: unless-stopped
     ports:
       - "127.0.0.1:8080:8080"
@@ -10,6 +9,11 @@ services:
     environment:
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:8080}
       CAMPFIRE_SITE: ${CAMPFIRE_SITE:-http://:8080}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@example.invalid}
+      MOJO_WORKERS: ${MOJO_WORKERS:-4}
+      JOB_CONCURRENCY: ${JOB_CONCURRENCY:-3}
+      CAMPFIRE_RESPONSE_CACHE_MB: ${CAMPFIRE_RESPONSE_CACHE_MB:-64}
+      MULTIPART_BYTESIZE_LIMIT: ${MULTIPART_BYTESIZE_LIMIT:-10737418240}
     volumes:
       - campfire:/data
     stop_grace_period: 30s

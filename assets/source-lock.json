@@ -1,0 +1,2925 @@
+{
+  "schema": 1,
+  "files": [
+    {
+      "output": "public/404.html",
+      "sha256": "6e04b180174f49e36df7d4c24e65e0545575d68d69aadf094e4c697db299c477",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/404.html"
+      }
+    },
+    {
+      "output": "public/422.html",
+      "sha256": "6333cb93c372a54db0c344c95b87e1d6205a87a585b55b84744f975de9573f61",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/422.html"
+      }
+    },
+    {
+      "output": "public/500.html",
+      "sha256": "faa2c0fd9a62e4cf93e8358bb892632b870c46956ff9162f0fabaabdc7ddb92e",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/500.html"
+      }
+    },
+    {
+      "output": "public/502.html",
+      "sha256": "5d5877b558b7c02eb0db14900352652beec4f37b4c72d592d53026d5f2a3322a",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/502.html"
+      }
+    },
+    {
+      "output": "public/assets/56k-67359aa6.mp3",
+      "sha256": "2de12caf37f95c65ce8df06866aa4c232c25afccfbf91652278e0923cb2134b9",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/56k-67359aa6.mp3"
+      }
+    },
+    {
+      "output": "public/assets/@rails--request-3fc8489d.js",
+      "sha256": "2c5b5a8e9d3db02279bfc7adec7f46cdbd5fcb50459c85c6925f1f875bbce683",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/@rails--request-3fc8489d.js"
+      }
+    },
+    {
+      "output": "public/assets/_reset-9c3efd7b.css",
+      "sha256": "506e23f429d9d56fc5716e4dbe135c35dd0f017c6883290d58fab02ece4a141c",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/_reset-9c3efd7b.css"
+      }
+    },
+    {
+      "output": "public/assets/action_cable-5212cfee.js",
+      "sha256": "112297e3f1f766d2f385ef5f3c3f9c9068f72be615184c22193c6b7b0b1bc6f0",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/action_cable-5212cfee.js"
+      }
+    },
+    {
+      "output": "public/assets/actioncable-ac25813f.js",
+      "sha256": "1a239ff96644bc8fd626f87a74175b4ee7eafd201f5034034a433c22d8c4dc3e",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/actioncable-ac25813f.js"
+      }
+    },
+    {
+      "output": "public/assets/actioncable.esm-e0ec9819.js",
+      "sha256": "555679e44f119be7a7e54121fca0beb0a5832f2933c1a1edcd0515bbafad22e0",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/actioncable.esm-e0ec9819.js"
+      }
+    },
+    {
+      "output": "public/assets/actiontext-7b8d51ea.css",
+      "sha256": "50c73097191a00d22a7b3790c765bf8de60a4d987a3696dceb08cf3affddc2d9",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/actiontext-7b8d51ea.css"
+      }
+    },
+    {
+      "output": "public/assets/actiontext-c9c6c481.js",
+      "sha256": "2367b2c686d18f0e600d43f8e01b23b7e342a2911bae953fd400141c02ab7c1d",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/actiontext-c9c6c481.js"
+      }
+    },
+    {
+      "output": "public/assets/actiontext.esm-c376325e.js",
+      "sha256": "9573353c535ea6d824b0af1a860ee42773200f004b72370c919af2cbd215d852",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/actiontext.esm-c376325e.js"
+      }
+    },
+    {
+      "output": "public/assets/activestorage-f9e46063.js",
+      "sha256": "561e6e0d24999cfecaef66dc7b815b72fa3353d9387251aa8ce6b1f5d565c815",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/activestorage-f9e46063.js"
+      }
+    },
+    {
+      "output": "public/assets/activestorage.esm-81bb34bc.js",
+      "sha256": "30f138a8f0017ae30774450974d16be8af848d6b14014def8dc59aa70ff6998d",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/activestorage.esm-81bb34bc.js"
+      }
+    },
+    {
+      "output": "public/assets/add-f232d8a6.svg",
+      "sha256": "c2432767c10fa24794ff0242addab3ddf810662e15ed837ed805394b2a131b74",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/add-f232d8a6.svg"
+      }
+    },
+    {
+      "output": "public/assets/alert-b937985b.svg",
+      "sha256": "dc6971bdb81eb6d9b8af85681db5457cc0d740506782a5f72f20c0a7519c236c",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/alert-b937985b.svg"
+      }
+    },
+    {
+      "output": "public/assets/animation-bcdb4bab.css",
+      "sha256": "cf0129dc6ad0a300db39ee2c0cb53ae1433df4ebe75504ac0cbc3835fd0c48f6",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/animation-bcdb4bab.css"
+      }
+    },
+    {
+      "output": "public/assets/application-a54c74a7.js",
+      "sha256": "d06091d31ab4566b7bacb1b4ac8234cabf56f0bc24cc2ee8c62f1670dc4956dc",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/application-a54c74a7.js"
+      }
+    },
+    {
+      "output": "public/assets/arrow-down-3f174d76.svg",
+      "sha256": "aee7221f66896718af4dc7004b78c650b31a08b79d0bccacb6f7d7baec68b495",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/arrow-down-3f174d76.svg"
+      }
+    },
+    {
+      "output": "public/assets/arrow-left-abe40556.svg",
+      "sha256": "b2d77964ac8c40f68cd8d41ea02498d8edd16874b18af9d55c25f456509c22b1",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/arrow-left-abe40556.svg"
+      }
+    },
+    {
+      "output": "public/assets/arrow-right-8f3eb40d.svg",
+      "sha256": "dec2474c2245d348d8e14725a5e324c0ca30d9c876d453531e6fc73cdf07313f",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/arrow-right-8f3eb40d.svg"
+      }
+    },
+    {
+      "output": "public/assets/arrow-up-f96b3895.svg",
+      "sha256": "ae5cd51a256a68b98c77197801a35b016c3c4dfbaa3bba9a8c63a9275493498f",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/arrow-up-f96b3895.svg"
+      }
+    },
+    {
+      "output": "public/assets/art-ed709d32.svg",
+      "sha256": "dfb0711d60654690b051bbc25c816e7286cc30ec067a7086d16d9403fcff7895",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/art-ed709d32.svg"
+      }
+    },
+    {
+      "output": "public/assets/attachment-8bcccab0.svg",
+      "sha256": "6c335caae0526aa93498d5454f6bc5622f0c2db3de94fa82693b8b3b63c44b67",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/attachment-8bcccab0.svg"
+      }
+    },
+    {
+      "output": "public/assets/autocomplete-9de8c93f.css",
+      "sha256": "b3f3b43b6a0f84d84f8b6f80a6907d664cdf8c956a416463cc430d7177f029c8",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/autocomplete-9de8c93f.css"
+      }
+    },
+    {
+      "output": "public/assets/avatars-279376ab.css",
+      "sha256": "4a49fa34f71bc26d4979bd5e51213c8e84ae56d0b62324d3016ce22266547d38",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/avatars-279376ab.css"
+      }
+    },
+    {
+      "output": "public/assets/ballmer-055893e5.mp3",
+      "sha256": "68907c927ec32cc71b599409376a270722d996fbb999bd6e65eec4d3d4089790",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/ballmer-055893e5.mp3"
+      }
+    },
+    {
+      "output": "public/assets/base-637a0ec8.css",
+      "sha256": "3549c3b35d5eb0caed728465dd5da3e4506a5b88c59160b2932845807be9b5a9",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/base-637a0ec8.css"
+      }
+    },
+    {
+      "output": "public/assets/bell-4dd04376.mp3",
+      "sha256": "7c8550761c6cb873349695ae867ecd83d413e4b8f12e251d2ae2847f2b86a008",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/bell-4dd04376.mp3"
+      }
+    },
+    {
+      "output": "public/assets/bezos-ed56ef09.mp3",
+      "sha256": "097ccaababcd186ff25310dfbf5c0082f763336173a2e3b0daaf4faaaa9e1019",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/bezos-ed56ef09.mp3"
+      }
+    },
+    {
+      "output": "public/assets/bio-567a6005.svg",
+      "sha256": "ca3327ece84be5320f581bcc09beee4a5bc4ab2a48be49f821977c35316f2917",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/bio-567a6005.svg"
+      }
+    },
+    {
+      "output": "public/assets/boost-4a7bab66.svg",
+      "sha256": "b6acc9cbbfc16e25c905d8d9d89908e5d6c14669a20f30372f28d0acb4c3f098",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/boost-4a7bab66.svg"
+      }
+    },
+    {
+      "output": "public/assets/boosts-da4032a8.css",
+      "sha256": "a8b88ce8ea02175740c5e1cbba10af95c16709a92eccb93fadbcfea3e918b271",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/boosts-da4032a8.css"
+      }
+    },
+    {
+      "output": "public/assets/bot-8a69692e.svg",
+      "sha256": "9fa12187fcaf69fea291b809d18e48e9c5f3f9155b4c44804a93fa597ab46dee",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/bot-8a69692e.svg"
+      }
+    },
+    {
+      "output": "public/assets/broom-13d30a95.svg",
+      "sha256": "914bef6ff78cc29967f4da07995839805aee4d9b79047df59a5d8fb54db39cef",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/broom-13d30a95.svg"
+      }
+    },
+    {
+      "output": "public/assets/browsers/android-196a24ef.svg",
+      "sha256": "2bb1a2c9b9ae4d36f62ea53811554636cf3c5b74d9845e1dbacca0ce62dc7880",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/browsers/android-196a24ef.svg"
+      }
+    },
+    {
+      "output": "public/assets/browsers/chrome-196a24ef.svg",
+      "sha256": "2bb1a2c9b9ae4d36f62ea53811554636cf3c5b74d9845e1dbacca0ce62dc7880",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/browsers/chrome-196a24ef.svg"
+      }
+    },
+    {
+      "output": "public/assets/browsers/edge-352f198a.svg",
+      "sha256": "019c61ed30c4c26e44f458af9f2151bae06f7d5432969b4806661c4ea7d37490",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/browsers/edge-352f198a.svg"
+      }
+    },
+    {
+      "output": "public/assets/browsers/firefox-57046321.svg",
+      "sha256": "e0cf83025fcc91475362f6bd3f64b4290cd8f976cb910951e9a69d71a037283b",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/browsers/firefox-57046321.svg"
+      }
+    },
+    {
+      "output": "public/assets/browsers/opera-0f156483.svg",
+      "sha256": "a4c95d23e431c96db544d7acdcf6e25ffd98d1f30f5fe23669ca65f75e054526",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/browsers/opera-0f156483.svg"
+      }
+    },
+    {
+      "output": "public/assets/browsers/safari-0b7b9bbc.svg",
+      "sha256": "23b78b04e9892e64cddc3d47c0c99169382f50ac3d86a1e852d81e9638ddd7f2",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/browsers/safari-0b7b9bbc.svg"
+      }
+    },
+    {
+      "output": "public/assets/bueller-edbffb89.mp3",
+      "sha256": "08f7ba7bba6767ea1d828a75a7c56e3a574a03404828dbba0a24b74849790d23",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/bueller-edbffb89.mp3"
+      }
+    },
+    {
+      "output": "public/assets/buttons-c7d39fd4.css",
+      "sha256": "8011afc67bf4e481b86d5b965c84369d74b553b7f74dfb15ff0b4bf9370a05aa",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/buttons-c7d39fd4.css"
+      }
+    },
+    {
+      "output": "public/assets/butts-6774d8a3.mp3",
+      "sha256": "daed8306dc2518de5a3a5603bc2eb81e0dc79796f744f1fdc6593ba48eaffb29",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/butts-6774d8a3.mp3"
+      }
+    },
+    {
+      "output": "public/assets/camera-927323b8.svg",
+      "sha256": "9c37e8dc9e900ab683d1721705dffac106d110101de63dd98ef3a164ab1bdd74",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/camera-927323b8.svg"
+      }
+    },
+    {
+      "output": "public/assets/campfire-icon-3d9986c5.png",
+      "sha256": "f91df2931f8939035a6448928d43ea04a50d1f75d14dac9329b6ee363dcbbd69",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/campfire-icon-3d9986c5.png"
+      }
+    },
+    {
+      "output": "public/assets/cancel-c6dfeb78.svg",
+      "sha256": "8f798011ab283690f84f945a4ccf90926c805d46f50f81dab10ee3f40d54f141",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/cancel-c6dfeb78.svg"
+      }
+    },
+    {
+      "output": "public/assets/check-7897ff7e.svg",
+      "sha256": "9000e4bb232fcc4fd38f7ea4b3e4cdcee326e62eec98c5374998a9d25f7588d2",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/check-7897ff7e.svg"
+      }
+    },
+    {
+      "output": "public/assets/clowntown-880ab480.mp3",
+      "sha256": "2d84d7c88069002d4d7b433642210be924c47bb5d29959cd35511f1823d2b58a",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/clowntown-880ab480.mp3"
+      }
+    },
+    {
+      "output": "public/assets/code-333ae548.css",
+      "sha256": "60b1f8d2975406a37e36dd487f24bc953d1975128895311788a5da798a6e8025",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/code-333ae548.css"
+      }
+    },
+    {
+      "output": "public/assets/colorize-eb391ca0.css",
+      "sha256": "abc8f4b4c5be0612ba774907bbace4a44893136b1d3de372a69b8943c1c9bf32",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/colorize-eb391ca0.css"
+      }
+    },
+    {
+      "output": "public/assets/colors-aee62523.css",
+      "sha256": "b5372f9e2dc0a214477aa2f73aa4cd41bc4109c7ec85a2c869be47b6aba68988",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/colors-aee62523.css"
+      }
+    },
+    {
+      "output": "public/assets/common-file-text-9043d980.svg",
+      "sha256": "614509095ce703fce92653d7cfe92141c599c8749ec1628ccc4a8ac7412d1274",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/common-file-text-9043d980.svg"
+      }
+    },
+    {
+      "output": "public/assets/composer-e490638a.css",
+      "sha256": "7dff812d84411bae1c6e6372d4ecbefa0870a5914914c1fff95f9bee58ec258c",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/composer-e490638a.css"
+      }
+    },
+    {
+      "output": "public/assets/controllers/application-f004202c.js",
+      "sha256": "57ed3a84b152c7d201dcfd8c76880378d85fd99f8c98962f58a6b2147458c8df",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/application-f004202c.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/auto_submit_controller-ee52d396.js",
+      "sha256": "b0277cd1444e83b4352d452b0bb0bbb00943632749f2b95cb022381c80d10dda",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/auto_submit_controller-ee52d396.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/autocomplete_controller-eaf5b07d.js",
+      "sha256": "545de75fdb2b3322ab68a223d766d0d3449b3cbd16609326335c71327a39ae7b",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/autocomplete_controller-eaf5b07d.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/badge_dot_controller-e0d733c8.js",
+      "sha256": "3213e859423ac2e478fcc709607359a87f13b97019e99fbb46947b0aa784ad44",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/badge_dot_controller-e0d733c8.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/boost_delete_controller-29fd1686.js",
+      "sha256": "e71eee0f4d2f2281ae41f65ebbbb428c38e59e41a2259d780c0e5088cbd6dfb6",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/boost_delete_controller-29fd1686.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/composer_controller-73c33f9f.js",
+      "sha256": "41098cd7821da84dabe37562e01da31d515adf56d68d9d4ad54623f1be8847d0",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/composer_controller-73c33f9f.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/copy_to_clipboard_controller-07e32f4d.js",
+      "sha256": "29a1dec157f4bbca23def3c2eb25a0b9845f64b17e6538c906eab6c72d424aa6",
+      "source": {
+        "local": "assets/overrides/controllers/copy_to_clipboard_controller.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/copy_to_clipboard_controller-a4928c72.js",
+      "sha256": "29a1dec157f4bbca23def3c2eb25a0b9845f64b17e6538c906eab6c72d424aa6",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/copy_to_clipboard_controller-a4928c72.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/drop_target_controller-3a205782.js",
+      "sha256": "751d63181b360392c5b773d6e26e93fa961c0a386b16e39abe592ae031b133ab",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/drop_target_controller-3a205782.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/element_removal_controller-4526910a.js",
+      "sha256": "b19c974c8f58f25945dff55e000a5e6726a1784bd56c366727a6705fea36af22",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/element_removal_controller-4526910a.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/filter_controller-ca9769d5.js",
+      "sha256": "a2d33336d422e167baa2717d89980930c3bc64db3917f3a9d2c7293d2ef614c9",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/filter_controller-ca9769d5.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/form_controller-6f3d64db.js",
+      "sha256": "b07ecdc7da09decffdc75db63d54ad85ff65ebe2bf34284a1e98dacea81f2945",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/form_controller-6f3d64db.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/index-594ba2fb.js",
+      "sha256": "e0fea5ddf6d71e3395bf18d01c1c4d9152c67bd5e094c9c0f969452798e20651",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/index-594ba2fb.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/lightbox_controller-98fc07ca.js",
+      "sha256": "8fead2ec99698c186257870f4de4dbd35afc28f2353144da81fa10a2768de9a6",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/lightbox_controller-98fc07ca.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/local_time_controller-7daf3d0c.js",
+      "sha256": "1659b8fd756f75c4caf17742338e034dc9a14b5b71a8d9e5cd94053b9f3825c6",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/local_time_controller-7daf3d0c.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/maintain_scroll_controller-1debbbfb.js",
+      "sha256": "d020584b23670024db9ff4cc8107f458c5aa539a99c8a00d033d9d29370bf299",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/maintain_scroll_controller-1debbbfb.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/messages_controller-64f31e81.js",
+      "sha256": "64f31e81d7fd0e325b84b725bc910caf70deca190ad2d3c3c9cadaab8a04b64f",
+      "source": {
+        "local": "assets/overrides/controllers/messages_controller.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/notifications_controller-489d8239.js",
+      "sha256": "489d8239ebe950f161ada8d0f92f043e2a43d1a41ff8cc7373a91c00cf772765",
+      "source": {
+        "local": "assets/overrides/controllers/notifications_controller.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/notifications_controller-746d0662.js",
+      "sha256": "b728a31bb6983ca7bef91262e185ed41fb05962f7a721ae6968c00129f2a5fb6",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/notifications_controller-746d0662.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/popup_controller-9f8ea824.js",
+      "sha256": "542fadacf313ef3783c4d97056a54c72d932a46143e126ace53c2b4bd33956a1",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/popup_controller-9f8ea824.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/presence_controller-28f14aad.js",
+      "sha256": "bceeb3d55a1bbb934adb5e1eb1def8354fc0cbb42e231822745d3b580e537712",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/presence_controller-28f14aad.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/pwa_install_controller-3fe3fc5e.js",
+      "sha256": "65a547ba6fc26448aa9a1866110fb4c02c36f2ba7693a824c15681c8b50abfdb",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/pwa_install_controller-3fe3fc5e.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/read_rooms_controller-8245522a.js",
+      "sha256": "81b2ba832f6435b89f94bccce9bbc5b69ccb56245f50b0a1ac8b85f01e96c53b",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/read_rooms_controller-8245522a.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/refresh_room_controller-4e4b6014.js",
+      "sha256": "ad861ff9b4133d59a38800401b87cd6b9fd2dd0b73bc1d3b71f4cb3fbb8e5ce9",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/refresh_room_controller-4e4b6014.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/reply_controller-278bb9cc.js",
+      "sha256": "2f2136e7d97cac0b3bb935825cfa10a0bb1829b0fa372a5e0a1fc91993a01400",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/reply_controller-278bb9cc.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/rooms_list_controller-64840fcd.js",
+      "sha256": "1587abe377e2e7d80a8ee4a780eaf7fb00fe3a50d506b8525ab76fa29c5ea0ac",
+      "source": {
+        "local": "assets/overrides/controllers/rooms_list_controller.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/rooms_list_controller-8fe7485c.js",
+      "sha256": "1587abe377e2e7d80a8ee4a780eaf7fb00fe3a50d506b8525ab76fa29c5ea0ac",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/rooms_list_controller-8fe7485c.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/scroll_into_view_controller-8a0bc733.js",
+      "sha256": "45cb8e9a990c3cf5b7be4c2621fd0e5f11fcdd941b79f5d22e04b3147e067982",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/scroll_into_view_controller-8a0bc733.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/search_results_controller-aab46974.js",
+      "sha256": "c1db92ae9c15ac2faf5db647805aebd7749ee886a6eed9ccfe172ddcdb65319f",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/search_results_controller-aab46974.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/sessions_controller-a9fdfe3d.js",
+      "sha256": "207aed6b599a1a5734205d698914c8f8aa88bb133a6f151beec5f8fb13fa3d8a",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/sessions_controller-a9fdfe3d.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/soft_keyboard_controller-be1da837.js",
+      "sha256": "07e33c240ccc14eff92578985c32d09b300938a79dae14518308590e19ae35ca",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/soft_keyboard_controller-be1da837.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/sorted_list_controller-9f9ae485.js",
+      "sha256": "04977729d5cdd6a154685754276455a0102bceb2082790388a2698a594398220",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/sorted_list_controller-9f9ae485.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/sound_controller-d3e5656e.js",
+      "sha256": "58e6d35dbd938a7104a4f68d8ce85436ef5bf29e52882f327c9d030f8cfbb9f5",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/sound_controller-d3e5656e.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/toggle_class_controller-b67fa681.js",
+      "sha256": "ad3d5e003e885725a611bbd0d86b1ec7a848c59639e6a01e24a963566297cd71",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/toggle_class_controller-b67fa681.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/turbo_frame_controller-9f4f722f.js",
+      "sha256": "420954e8c60e2b981173e2a252ad22f32a76e4f7b04d9c7d42278dbe872456d8",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/turbo_frame_controller-9f4f722f.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/turbo_streaming_controller-04b85a80.js",
+      "sha256": "6f8e9c21d17fb3373ca1e8eedd337484ae749ecafa5ac3bb0544e50807dfe6c8",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/turbo_streaming_controller-04b85a80.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/typing_notifications_controller-86906ab9.js",
+      "sha256": "d68b9a05ac6a8d7fe4826f08e7221031aff03f6d73f7f306541f1bcaa7d4f87d",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/typing_notifications_controller-86906ab9.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/unfurl_controller-4a868f9a.js",
+      "sha256": "935079df4ec1b8adfe3ac5df322f92d9b54118e956ef6c516d9250a871e6dde5",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/unfurl_controller-4a868f9a.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/upload_preview_controller-9b8b26bb.js",
+      "sha256": "1c0a6a33fb87785117b4cbced02ff303f17e01c19f67e78bc373cbb003e085ef",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/upload_preview_controller-9b8b26bb.js"
+      }
+    },
+    {
+      "output": "public/assets/controllers/web_share_controller-f7236b6f.js",
+      "sha256": "4ec2b613b9f548b633273a29653aa3c3b04c19e9c5e4b5992dc4c47f37a170a1",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/controllers/web_share_controller-f7236b6f.js"
+      }
+    },
+    {
+      "output": "public/assets/copy-paste-4c379063.svg",
+      "sha256": "9af55f0262e5eeee0a593fb7d31f28cf646a53c32099842ce9f11eda017daf5d",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/copy-paste-4c379063.svg"
+      }
+    },
+    {
+      "output": "public/assets/cottoneyejoe-39c980e8.mp3",
+      "sha256": "d114b14c535c6832c2eca3e6692a234e673eaa1ceaf291f1a6f2714e60aa0b29",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/cottoneyejoe-39c980e8.mp3"
+      }
+    },
+    {
+      "output": "public/assets/crickets-b50f1da0.mp3",
+      "sha256": "2f379f2ef93dc63cda6c1eecaa98b79b9e42865eb0a4251bccc4169c11060c37",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/crickets-b50f1da0.mp3"
+      }
+    },
+    {
+      "output": "public/assets/crown-00d190cb.svg",
+      "sha256": "849864419bae0da36ba763d5828335c4c314d17cb3b424c3fafe4569aa5eb790",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/crown-00d190cb.svg"
+      }
+    },
+    {
+      "output": "public/assets/curb-f9327cfc.mp3",
+      "sha256": "e34d44e82c04467c5bbcf969303d469594336d3d09966a3c90906b43fc88eb8b",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/curb-f9327cfc.mp3"
+      }
+    },
+    {
+      "output": "public/assets/dadgummit-6c84151f.mp3",
+      "sha256": "f395704d78a4993c663a804b6ef9c78e4617ce50090027b7e6560dd8fa595058",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/dadgummit-6c84151f.mp3"
+      }
+    },
+    {
+      "output": "public/assets/dangerzone-7382b27e.mp3",
+      "sha256": "138e8e4ecd9542bdadf35b991ad17d864bea2ac14ed50652445570f9e61598fe",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/dangerzone-7382b27e.mp3"
+      }
+    },
+    {
+      "output": "public/assets/danielsan-0815085a.mp3",
+      "sha256": "5e4224f7f222dfd4337b9e2082d50e47370c0b004286a2e83fe45707920c5c89",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/danielsan-0815085a.mp3"
+      }
+    },
+    {
+      "output": "public/assets/deeper-c9fe70a0.mp3",
+      "sha256": "8755e725ca06ccc15c46487529cd228efa69442bd46dd34484f355204c63b031",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/deeper-c9fe70a0.mp3"
+      }
+    },
+    {
+      "output": "public/assets/default-avatar-1ee67b00.svg",
+      "sha256": "14d1cd05fe94fe1c87978f97520ca95256247153065dc9503c0fad46019ae374",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/default-avatar-1ee67b00.svg"
+      }
+    },
+    {
+      "output": "public/assets/default-bot-avatar-de1d12f7.svg",
+      "sha256": "aefe43e21cd8423e5b29ee6e3088db788090bc715f52863eaddc0efdb92c9062",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/default-bot-avatar-de1d12f7.svg"
+      }
+    },
+    {
+      "output": "public/assets/disclosure-26d63471.svg",
+      "sha256": "9df71db55e0ff95b9b47f27aa09f9ff3ebc5a686f1052bb31b91ef1265653040",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/disclosure-26d63471.svg"
+      }
+    },
+    {
+      "output": "public/assets/donotwant-fa71a459.mp3",
+      "sha256": "3eebc23941a143a861b850a20904db15bececc2e831e23ca3027930e9b3fab7e",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/donotwant-fa71a459.mp3"
+      }
+    },
+    {
+      "output": "public/assets/download-04029899.svg",
+      "sha256": "be2396eed9103cf486e9290fac6a78abe58841c2a5e4e9d57745e9b32856408c",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/download-04029899.svg"
+      }
+    },
+    {
+      "output": "public/assets/drama-92fb52d2.mp3",
+      "sha256": "5aebe10e318f84fa67c5edd3fc74332bbaa8ed9a7266076f091d51700923578e",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/drama-92fb52d2.mp3"
+      }
+    },
+    {
+      "output": "public/assets/email-6c595bc5.svg",
+      "sha256": "2bc3ffe9645cbd54a8a2672d9a179fd363c337e2ea1162e1475e1c8ecd441fb4",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/email-6c595bc5.svg"
+      }
+    },
+    {
+      "output": "public/assets/embeds-c20d0a3a.css",
+      "sha256": "adf3c6c3025c79c63200d0ebb6c16fb5003f56be597d7a7c06c54352fda3b1f0",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/embeds-c20d0a3a.css"
+      }
+    },
+    {
+      "output": "public/assets/everyone-4ca1d460.svg",
+      "sha256": "12cae105dbcc9e5544a3e9eec90eacb58443a1df338c637dcfc930b73fdbde60",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/everyone-4ca1d460.svg"
+      }
+    },
+    {
+      "output": "public/assets/external/gear-50e77d2b.svg",
+      "sha256": "4623c01aca5f621671d14d8623669d9417284af6debf933f323181a724cb12cc",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/external/gear-50e77d2b.svg"
+      }
+    },
+    {
+      "output": "public/assets/external/install-edge-0b7cd918.svg",
+      "sha256": "08673ca2a7695286a40ab388bc48f09919e830427a7e1c93f5faf1c71cc64040",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/external/install-edge-0b7cd918.svg"
+      }
+    },
+    {
+      "output": "public/assets/external/install-f762b3be.svg",
+      "sha256": "5bff50b526a431f9e0284de550f86a8f4f4c7f59b0ccbd6329c97bb44f743d2f",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/external/install-f762b3be.svg"
+      }
+    },
+    {
+      "output": "public/assets/external/share-f9d3e998.svg",
+      "sha256": "28ae5d5ad16a1981f8595651a083ac18aa964a98014d150d284870abd328d121",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/external/share-f9d3e998.svg"
+      }
+    },
+    {
+      "output": "public/assets/external/sliders-3979a007.svg",
+      "sha256": "db187b689b91625ee664c9339363ee02b455635aa8001b6701ee3f33b7330968",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/external/sliders-3979a007.svg"
+      }
+    },
+    {
+      "output": "public/assets/external/switch-eec22a2d.svg",
+      "sha256": "c301949700b984ca3a6c0835a684ea8e5ce513de71eab983c9cb31d1191596cc",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/external/switch-eec22a2d.svg"
+      }
+    },
+    {
+      "output": "public/assets/external/web-24ffe636.svg",
+      "sha256": "3a527a8c732949c4e6637948fc805eeceef09098b602ae2662d7cc8522e77d07",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/external/web-24ffe636.svg"
+      }
+    },
+    {
+      "output": "public/assets/filters-8a4d63ed.css",
+      "sha256": "fdb39742b0cdd5b0ac0a81068b337b2053953b81f4bde79f774b7f2974fc781a",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/filters-8a4d63ed.css"
+      }
+    },
+    {
+      "output": "public/assets/flash-a561c1e5.css",
+      "sha256": "7f1c5a81ffd7cabad2bf71200a48a3317e6897bab8c755c641656ede62635d23",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/flash-a561c1e5.css"
+      }
+    },
+    {
+      "output": "public/assets/flawless-678d1f3c.mp3",
+      "sha256": "393eb8b87bbf3aaf3a6572473d6fc180d8195300df9edb6ae513830e9226cb41",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/flawless-678d1f3c.mp3"
+      }
+    },
+    {
+      "output": "public/assets/glados-f033ed9e.mp3",
+      "sha256": "637ff4e800496cc3f587ddfc57baf5766c52db1175832cd13cb84f52d2183a3b",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/glados-f033ed9e.mp3"
+      }
+    },
+    {
+      "output": "public/assets/globe-8c54d23b.svg",
+      "sha256": "c21bfd87ef23d495b58edda204cb8b23a2c8be626c26ef4450838804d4e02e0c",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/globe-8c54d23b.svg"
+      }
+    },
+    {
+      "output": "public/assets/gogogo-f091ebbc.mp3",
+      "sha256": "2364d29d3fdc08d5096061c262a6808254ab9554e303126e2971cf538bc8372c",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/gogogo-f091ebbc.mp3"
+      }
+    },
+    {
+      "output": "public/assets/greatjob-7d6aada2.mp3",
+      "sha256": "0f24d85a0f9e9afb134fcc37554f3160ad1709914cf834b1a9c4590c8e45514a",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/greatjob-7d6aada2.mp3"
+      }
+    },
+    {
+      "output": "public/assets/greyjoy-dcb0e786.mp3",
+      "sha256": "293ecfe4d2eaf11071e499c42baeb841ab41238543ceac833b2e694602a964d8",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/greyjoy-dcb0e786.mp3"
+      }
+    },
+    {
+      "output": "public/assets/guarantee-8e639fbb.mp3",
+      "sha256": "463cbe6053bf36f41fc7fc15feee3400270185a9602b5be5efe21820b2b65a4c",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/guarantee-8e639fbb.mp3"
+      }
+    },
+    {
+      "output": "public/assets/help-a18b47fc.svg",
+      "sha256": "2fe519ea3cf5a67402b2e4c50f251edc1e8953eb066cbb3b873f36d34b0fe220",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/help-a18b47fc.svg"
+      }
+    },
+    {
+      "output": "public/assets/help-circle-1bb1a839.svg",
+      "sha256": "9ba094d5a7a4b545551f6d98b4cf2f23ac010fb5b2369e9063cbd12352384a77",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/help-circle-1bb1a839.svg"
+      }
+    },
+    {
+      "output": "public/assets/helpers/dom_helpers-0f234176.js",
+      "sha256": "3fde21e9c7b0063d1fe16797f77ab24444e85ced698cd46258e3f608c4eed0f6",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/helpers/dom_helpers-0f234176.js"
+      }
+    },
+    {
+      "output": "public/assets/helpers/navigator_helpers-3c9f4c31.js",
+      "sha256": "181fb149dbb471b5416925aebe9c7168d3c5bd32be754ecdb8597ca1439fc377",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/helpers/navigator_helpers-3c9f4c31.js"
+      }
+    },
+    {
+      "output": "public/assets/helpers/string_helpers-40941ba8.js",
+      "sha256": "23ebd4974a615d3d98c1f2fca0b5b5098d62494bdbf787038f23d00dfe550823",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/helpers/string_helpers-40941ba8.js"
+      }
+    },
+    {
+      "output": "public/assets/helpers/timing_helpers-94d95529.js",
+      "sha256": "689a3a3091b767a94b16140aa2b5d599b68ea27614f6eaf0d9c6179b1d8c7706",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/helpers/timing_helpers-94d95529.js"
+      }
+    },
+    {
+      "output": "public/assets/helpers/turbo_helpers-a3c01462.js",
+      "sha256": "12e46144a7e3148e864ea02ed254daee88b71ad5734d7d936072c4cb72af9326",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/helpers/turbo_helpers-a3c01462.js"
+      }
+    },
+    {
+      "output": "public/assets/heygirl-b9a85600.mp3",
+      "sha256": "4f3c96e80a64635fd12a928b193d3421b2f599e679549982e1e640503ff1acc4",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/heygirl-b9a85600.mp3"
+      }
+    },
+    {
+      "output": "public/assets/highlight.js/core-4e141f64.js",
+      "sha256": "46137762fe6174bee845577248bddbcd7dd654a1a8cc01c8c53231bd5c2f0375",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/highlight.js/core-4e141f64.js"
+      }
+    },
+    {
+      "output": "public/assets/honk-9c336a89.mp3",
+      "sha256": "be25c915d99b5baebb1cadda978d37faaf2c398034e50d35163abd6be6eb4e89",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/honk-9c336a89.mp3"
+      }
+    },
+    {
+      "output": "public/assets/horn-efb0f714.mp3",
+      "sha256": "f52d01a31b71995ff0f256e028fd9302981d0d894651ac444f5d5740f62e9bf6",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/horn-efb0f714.mp3"
+      }
+    },
+    {
+      "output": "public/assets/horror-5181b7e4.mp3",
+      "sha256": "906da599cc429904fbbaf9808ce6b2dca0e17467326e87b56f5525deb99c32cf",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/horror-5181b7e4.mp3"
+      }
+    },
+    {
+      "output": "public/assets/incoming-0621d199.mp3",
+      "sha256": "dccedadaf8224d590ad042df660539981e9860a026d0ba132410be64edaafbe5",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/incoming-0621d199.mp3"
+      }
+    },
+    {
+      "output": "public/assets/inconceivable-c8811768.mp3",
+      "sha256": "3a804cb5fe4733b8512c010019c5abd64c63061aaf71b5af38662ef2da40ee63",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/inconceivable-c8811768.mp3"
+      }
+    },
+    {
+      "output": "public/assets/initializers/autocomplete-ba9abe45.js",
+      "sha256": "918447494118e771f449a8adcca94a2a78520e8d962bf522e0b3f74e5628f8c4",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/initializers/autocomplete-ba9abe45.js"
+      }
+    },
+    {
+      "output": "public/assets/initializers/current-3a3b90da.js",
+      "sha256": "4d090ecd3f73978bd3e84cead83ec241e62f7922e95fbf10a8f18440b1b3dfbe",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/initializers/current-3a3b90da.js"
+      }
+    },
+    {
+      "output": "public/assets/initializers/highlight-5bd558f1.js",
+      "sha256": "4fd86024e5a333dcc197cfadec46507edbbffb46da2f4abce43d4fa6b7d1e47b",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/initializers/highlight-5bd558f1.js"
+      }
+    },
+    {
+      "output": "public/assets/initializers/index-d2bbfae4.js",
+      "sha256": "9b96c2ae37849092157f3c950ab225ab8b7a5a1ce341f9d47cdeda1bada7e665",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/initializers/index-d2bbfae4.js"
+      }
+    },
+    {
+      "output": "public/assets/initializers/rich_text-f451a05e.js",
+      "sha256": "5e0c975eb65ca3342c5317212b50dd3571ac80c2aac7a646b433123c5c698ae5",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/initializers/rich_text-f451a05e.js"
+      }
+    },
+    {
+      "output": "public/assets/inputs-9e58a07c.css",
+      "sha256": "6e4a0f2b60aa4801d95c515fc2fd40f41d0e70aa81f2d331ec896a26899e43a8",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/inputs-9e58a07c.css"
+      }
+    },
+    {
+      "output": "public/assets/install-edge-0b7cd918.svg",
+      "sha256": "08673ca2a7695286a40ab388bc48f09919e830427a7e1c93f5faf1c71cc64040",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/install-edge-0b7cd918.svg"
+      }
+    },
+    {
+      "output": "public/assets/key-82330955.svg",
+      "sha256": "3f433cb84f94ebada8d7ab2fffa8041d0680aed1565cef6ec97bd51379165913",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/key-82330955.svg"
+      }
+    },
+    {
+      "output": "public/assets/languages/bash-13136668.js",
+      "sha256": "739ffa8f7a39cab4260fbe7f41bff725decc288ccfa16cc8509bd7464b14e8d8",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/languages/bash-13136668.js"
+      }
+    },
+    {
+      "output": "public/assets/languages/css-a7f2e40b.js",
+      "sha256": "e34aadd14ea975118ce21560c356daaaefcd8228a8a75ecd700af9cb38b16da7",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/languages/css-a7f2e40b.js"
+      }
+    },
+    {
+      "output": "public/assets/languages/diff-94a335fe.js",
+      "sha256": "9c54ded7c96a82ca5e2d0f947fae11ff25516620a583b7c1711512092c00c5d3",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/languages/diff-94a335fe.js"
+      }
+    },
+    {
+      "output": "public/assets/languages/go-10465864.js",
+      "sha256": "854c1967ba775130d4c63ab003c53d10493dfbb90e0c7cf7c49be2f109ac4ec8",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/languages/go-10465864.js"
+      }
+    },
+    {
+      "output": "public/assets/languages/java-95f3a30f.js",
+      "sha256": "31f0563f0380f9f185da2ebb5dd58b93d0e57d90d95e8e166778ffffc7759e87",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/languages/java-95f3a30f.js"
+      }
+    },
+    {
+      "output": "public/assets/languages/javascript-18eb0dd8.js",
+      "sha256": "4025b51895250ce2a42cf5824a01b63dcd436e09ebd9f28a1b528b0e771f50f7",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/languages/javascript-18eb0dd8.js"
+      }
+    },
+    {
+      "output": "public/assets/languages/json-60184e1b.js",
+      "sha256": "adfe3d5cd70607aa5116cf78807edfc5f59f7ac82702a4584ac053f7cbbdfc4d",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/languages/json-60184e1b.js"
+      }
+    },
+    {
+      "output": "public/assets/languages/python-8f48fd1a.js",
+      "sha256": "9fc30ccf7dc19e9c02dcb76c29cbcf9f4825f0312c138c7695d9adfb4b5ca39b",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/languages/python-8f48fd1a.js"
+      }
+    },
+    {
+      "output": "public/assets/languages/ruby-287ccd0f.js",
+      "sha256": "8edfc278d68d807c3fe7329039006848111f7d3142e30f367bd27dec0b460b80",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/languages/ruby-287ccd0f.js"
+      }
+    },
+    {
+      "output": "public/assets/languages/rust-d48f93d8.js",
+      "sha256": "4eedb1243de38cdb20f3da8988ac456ad5977528b50818d8a44c16ea192fb460",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/languages/rust-d48f93d8.js"
+      }
+    },
+    {
+      "output": "public/assets/languages/sql-642be05a.js",
+      "sha256": "ca076eb85b8e3ddd1027c3d732d36e4fac8ddc20aaa4cd5695f864f586bc5112",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/languages/sql-642be05a.js"
+      }
+    },
+    {
+      "output": "public/assets/languages/xml-fa7f1eda.js",
+      "sha256": "56e6c18c0234ea4b1cce374cd554e5920137f64e6c5cd870eca505f2c6513732",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/languages/xml-fa7f1eda.js"
+      }
+    },
+    {
+      "output": "public/assets/lanyard-945079e9.svg",
+      "sha256": "7ce2380d09cb01a3b74b0a3530c7835ecde29b5d4bf7726158d430ec1d5c3015",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lanyard-945079e9.svg"
+      }
+    },
+    {
+      "output": "public/assets/laptop-cf35e6d4.svg",
+      "sha256": "72ab5e2f7d8630cc44c07bd82a50d7e4a59cea5b9c422e7af07829b6e9c6d431",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/laptop-cf35e6d4.svg"
+      }
+    },
+    {
+      "output": "public/assets/layout-ff6ddfc6.css",
+      "sha256": "3bf3ffb5c2fca38c2fa7220a04e87526e6cd68be2e507ab61fab6b5452abe30b",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/layout-ff6ddfc6.css"
+      }
+    },
+    {
+      "output": "public/assets/letitgo-bc89591d.mp3",
+      "sha256": "524deb42d6d80d79a30098b572aef65f765a7f48442c77dcaa846ab73f64943f",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/letitgo-bc89591d.mp3"
+      }
+    },
+    {
+      "output": "public/assets/lexxy-2876c58e.css",
+      "sha256": "48f44047a2a3bb24f8314f69598c23ddfe95b046f78cf3f6d1358c6c98906166",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lexxy-2876c58e.css"
+      }
+    },
+    {
+      "output": "public/assets/lexxy-a21f41d4.js",
+      "sha256": "d564df86da68cdb9d7ef1ccc037ea92dcf0f8b333f19c72b1faa9200c981df36",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lexxy-a21f41d4.js"
+      }
+    },
+    {
+      "output": "public/assets/lexxy-cf040c43.js.map",
+      "sha256": "13f7e7317722f5217682688c6f55f4cfd196aacab075076901fe80f89bb122d0",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lexxy-cf040c43.js.map"
+      }
+    },
+    {
+      "output": "public/assets/lexxy-content-0ff2f961.css",
+      "sha256": "ae67439f7da9269ca1d4b919b10afcb164ee6d1923fe3db4c21c016542d62858",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lexxy-content-0ff2f961.css"
+      }
+    },
+    {
+      "output": "public/assets/lexxy-editor-2d5c7ebe.css",
+      "sha256": "09c7b2338026c8ac96202f11f8a087bc7c78e5264d011ff9ad09289b5c8f121c",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lexxy-editor-2d5c7ebe.css"
+      }
+    },
+    {
+      "output": "public/assets/lexxy-variables-3fef4323.css",
+      "sha256": "c36ad5343cb0286bf3c6213804551300898c37fc3e5f284032fd97287387d91c",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lexxy-variables-3fef4323.css"
+      }
+    },
+    {
+      "output": "public/assets/lexxy.js-380cb9c9.br",
+      "sha256": "cab4870ec9e88e25020e4ea831638e3262d1424cb8304beb57f959a794187e7e",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lexxy.js-380cb9c9.br"
+      }
+    },
+    {
+      "output": "public/assets/lexxy.js-9130cdde.gz",
+      "sha256": "5f26b0b88fabb261aba7f787613f8834f9b0150cd915ba31f683a41144fd8d2a",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lexxy.js-9130cdde.gz"
+      }
+    },
+    {
+      "output": "public/assets/lexxy.min-68f38983.js",
+      "sha256": "bf4edd6ad01d08fa56ecf5d4f59bb5b68a7acd76ea02f9f12d055010125948ed",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lexxy.min-68f38983.js"
+      }
+    },
+    {
+      "output": "public/assets/lexxy.min.js-02328003.br",
+      "sha256": "f9a166168d9c3ad36209a62ee6ba0379d39b8fce907334913563afb433c7d8df",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lexxy.min.js-02328003.br"
+      }
+    },
+    {
+      "output": "public/assets/lexxy.min.js-56322c4c.gz",
+      "sha256": "bb8201f6746ae40862ae2e70012dc0ea387db145ba961515493d43043727acfe",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lexxy.min.js-56322c4c.gz"
+      }
+    },
+    {
+      "output": "public/assets/lib/autocomplete/autocomplete_handler-becd1e1a.js",
+      "sha256": "188fb63f451ca6b314aa0e2471e0a4850bee2267cdc8531a683de63c04d21b8f",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lib/autocomplete/autocomplete_handler-becd1e1a.js"
+      }
+    },
+    {
+      "output": "public/assets/lib/autocomplete/base_autocomplete_handler-96e7e419.js",
+      "sha256": "cea202361b483970f4cfbb6891e429364ee1cff450bc9fb22b6b43197443e553",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lib/autocomplete/base_autocomplete_handler-96e7e419.js"
+      }
+    },
+    {
+      "output": "public/assets/lib/autocomplete/base_autocomplete_handler-e29a896e.js",
+      "sha256": "cea202361b483970f4cfbb6891e429364ee1cff450bc9fb22b6b43197443e553",
+      "source": {
+        "local": "assets/overrides/lib/autocomplete/base_autocomplete_handler.js"
+      }
+    },
+    {
+      "output": "public/assets/lib/autocomplete/collection-3e251a0e.js",
+      "sha256": "d4b01558aadfe8fa98c526b18a7152bef6fa50d2cead7cc7cdedcf2bec62bf7a",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lib/autocomplete/collection-3e251a0e.js"
+      }
+    },
+    {
+      "output": "public/assets/lib/autocomplete/constants-17c2858b.js",
+      "sha256": "3e9b08d6e9663161bb09ecf2381d4472707f693fd968aa17f1c7735fed7e74da",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lib/autocomplete/constants-17c2858b.js"
+      }
+    },
+    {
+      "output": "public/assets/lib/autocomplete/custom_elements/suggestion_option-ac7846b3.js",
+      "sha256": "841d6fd05f1f841069a9030c66f250cef4f06fc2bcb55bd102c2c02a35578d05",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lib/autocomplete/custom_elements/suggestion_option-ac7846b3.js"
+      }
+    },
+    {
+      "output": "public/assets/lib/autocomplete/custom_elements/suggestion_select-f0045305.js",
+      "sha256": "9ea588254307e20a0d862dcf684fb829b1a895031bc69146e1be4c2d12d0188e",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lib/autocomplete/custom_elements/suggestion_select-f0045305.js"
+      }
+    },
+    {
+      "output": "public/assets/lib/autocomplete/helpers-651308b9.js",
+      "sha256": "6a1107041f77dc3954891e462198586b908346f8feb51a735e6a342587fb66b8",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lib/autocomplete/helpers-651308b9.js"
+      }
+    },
+    {
+      "output": "public/assets/lib/autocomplete/renderer-5caf6120.js",
+      "sha256": "f9483d27d05236883aae17f6f2904eb87756ac677430abc1aa6eb89c8d458e1c",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lib/autocomplete/renderer-5caf6120.js"
+      }
+    },
+    {
+      "output": "public/assets/lib/autocomplete/selection-862705bf.js",
+      "sha256": "dfa69a6c3cdd2b064001271f7186f647bbdcae177e6b630ce80625e5d704c577",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lib/autocomplete/selection-862705bf.js"
+      }
+    },
+    {
+      "output": "public/assets/lib/autocomplete/suggestion_context-b265ffb4.js",
+      "sha256": "b916f11a26e0286256936abfac619b29d63d6b9ee4a4f06cedd41bd17e555c3b",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lib/autocomplete/suggestion_context-b265ffb4.js"
+      }
+    },
+    {
+      "output": "public/assets/lib/autocomplete/suggestion_controller-10624c40.js",
+      "sha256": "bc1344d6ea78ad85be603080a6b0076a831605a433d293afc023b354b2103e53",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lib/autocomplete/suggestion_controller-10624c40.js"
+      }
+    },
+    {
+      "output": "public/assets/lib/autocomplete/suggestion_results_controller-91405749.js",
+      "sha256": "9cda34fe1fa39e004a1a5de63af3539e441ff9b3c940fb2d88ba4903227571fd",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lib/autocomplete/suggestion_results_controller-91405749.js"
+      }
+    },
+    {
+      "output": "public/assets/lib/autocomplete/utils-296fb278.js",
+      "sha256": "e204ac06cea44f677cfe15271370a4f815e1adb48cef5a7503eccb8ac08265a8",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lib/autocomplete/utils-296fb278.js"
+      }
+    },
+    {
+      "output": "public/assets/lib/cookie-76006835.js",
+      "sha256": "1ad3cfe0203fcc349a491de6b533396fb5088535f1e468d553a5ea52cbf44998",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lib/cookie-76006835.js"
+      }
+    },
+    {
+      "output": "public/assets/lib/rich_text/campfire_extension-f62f017b.js",
+      "sha256": "54614caa3eeeb97bd369641c5a689f9e80698438ae98aa3a26f818eebb0d4faa",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lib/rich_text/campfire_extension-f62f017b.js"
+      }
+    },
+    {
+      "output": "public/assets/lib/rich_text/cite_node-b4d2b89a.js",
+      "sha256": "c3c29c9bce26a8a011cf827e3ef374eceb659b426777fc6e9082ae44fbe5e61a",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lib/rich_text/cite_node-b4d2b89a.js"
+      }
+    },
+    {
+      "output": "public/assets/lifebuoy-f31f26aa.svg",
+      "sha256": "189066e3da784dd6e1d6dc7451602edf2ed9e54bbdc9bee4f5f75652971e84f7",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lifebuoy-f31f26aa.svg"
+      }
+    },
+    {
+      "output": "public/assets/lightbox-af496d39.css",
+      "sha256": "86db07de95cd3659e488d31f7811f2fccff69537dd7e919c3c78ce878bf458a5",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lightbox-af496d39.css"
+      }
+    },
+    {
+      "output": "public/assets/link-e546a5df.svg",
+      "sha256": "ecfe610d727b6feb467388c0b9bd0363b5de3d6eb9adf7c826cc3dae373d8976",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/link-e546a5df.svg"
+      }
+    },
+    {
+      "output": "public/assets/live-550f1f88.mp3",
+      "sha256": "0327b6f155ab3a1cf3f63957d3ddfbcc9c77e8ed1816396381f985819e007943",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/live-550f1f88.mp3"
+      }
+    },
+    {
+      "output": "public/assets/lock-7cdf4b3d.svg",
+      "sha256": "6d7365c22c5ba65fd641a91dc4db0d54f467feaa94c58e721b178713d4d4976b",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/lock-7cdf4b3d.svg"
+      }
+    },
+    {
+      "output": "public/assets/loggins-63aac7af.mp3",
+      "sha256": "e5d32f93cd61c8fac1d8f120739f9c7901d583d983fc57be3506386bd306a01f",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/loggins-63aac7af.mp3"
+      }
+    },
+    {
+      "output": "public/assets/login-keys-df926967.svg",
+      "sha256": "b84bd5c1c64b8ee0ac5bdcda1b1b3c7a5cd6c674f3a6d80e56fd8cb3739e4d68",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/login-keys-df926967.svg"
+      }
+    },
+    {
+      "output": "public/assets/logos/app-icon-192-646b105a.png",
+      "sha256": "a84c80d117bd5a79430c74283e40f6bed6784055287a20a125e620aa710bf85c",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/logos/app-icon-192-646b105a.png"
+      }
+    },
+    {
+      "output": "public/assets/logos/app-icon-a6fa894e.png",
+      "sha256": "f486fb65a608013dd6cbb193d9f8ce0d4fb4516e4806098874751877ab988c4e",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/logos/app-icon-a6fa894e.png"
+      }
+    },
+    {
+      "output": "public/assets/logout-a6131db1.svg",
+      "sha256": "d1ad9c469740e7ec9e603c1ffa6719683e3ad31215273afcb435e3a784eec944",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/logout-a6131db1.svg"
+      }
+    },
+    {
+      "output": "public/assets/makeitso-f6e530b1.mp3",
+      "sha256": "cf19ccb00ba766e995f7898463aae39de3080007c1bf41eb70db55054d945c24",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/makeitso-f6e530b1.mp3"
+      }
+    },
+    {
+      "output": "public/assets/mario_coin-556717d1.mp3",
+      "sha256": "0b262afe097bc5626071d8e0b82724f82f6f8f9ef523299202f0a6c0dafe67ee",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/mario_coin-556717d1.mp3"
+      }
+    },
+    {
+      "output": "public/assets/maybe-4a638e83.mp3",
+      "sha256": "808b84786456750db64fc6dfa5406e964765ad98dbce6f3652825f604ac32afc",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/maybe-4a638e83.mp3"
+      }
+    },
+    {
+      "output": "public/assets/menu-5462dfd3.svg",
+      "sha256": "1cb54b1e95f99e7ce0e39fa28cef70e9763f50ca2f7e0ad1b3450d1f4f845a3a",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/menu-5462dfd3.svg"
+      }
+    },
+    {
+      "output": "public/assets/menu-dots-horizontal-f6a5d793.svg",
+      "sha256": "87517bc026c54f8d9469161f3ccdfb36790af91fb45b68d7fedaab8f2ac99af3",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/menu-dots-horizontal-f6a5d793.svg"
+      }
+    },
+    {
+      "output": "public/assets/menu-dots-vertical-c247e3cc.svg",
+      "sha256": "1f539171d73366d411d08e51e9a72f59acc5e93876ff0d994e9a149679b63065",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/menu-dots-vertical-c247e3cc.svg"
+      }
+    },
+    {
+      "output": "public/assets/messages-9395d503.svg",
+      "sha256": "4233b28ff5463d3bc94e8ee978f43e2e1f9bc4da80a22b4fa101fd05e121ab5a",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/messages-9395d503.svg"
+      }
+    },
+    {
+      "output": "public/assets/messages-add-d229e6c2.svg",
+      "sha256": "4e9af4fcebd39defecec784ce6d0bea65cd5f164f9fa5af06efa33b24ae6dbf0",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/messages-add-d229e6c2.svg"
+      }
+    },
+    {
+      "output": "public/assets/messages-c5485fef.css",
+      "sha256": "6699be7c9c3f6e25902859d76f88492989811a5a135300a241407888f11067b5",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/messages-c5485fef.css"
+      }
+    },
+    {
+      "output": "public/assets/messages-empty-84c8fd41.svg",
+      "sha256": "527451cef62372d5ab8084715056ee8d2b7d36caf5ff1fe99ef12048c93021b2",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/messages-empty-84c8fd41.svg"
+      }
+    },
+    {
+      "output": "public/assets/messages-outlined-87ff0331.svg",
+      "sha256": "3aa35582961c89e8908b35fc416e261c3c0c26245d04e45dc753be6157f43249",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/messages-outlined-87ff0331.svg"
+      }
+    },
+    {
+      "output": "public/assets/minus-b31a1093.svg",
+      "sha256": "d85b074a9e53c06963a4799e74dd4b20b89542a8e7f2c7def5657cca9b199ac4",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/minus-b31a1093.svg"
+      }
+    },
+    {
+      "output": "public/assets/mobile-phone-d0d2301d.svg",
+      "sha256": "7a9c3713ddf155ae5319c5916662123b3e7b5d85bba62284a82d98714b55cb58",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/mobile-phone-d0d2301d.svg"
+      }
+    },
+    {
+      "output": "public/assets/models/client_message-de3c07cf.js",
+      "sha256": "ff4541ef5badb2827388acbe1545636b6cdb287c5d7f7cdfeb63f70a7e2341ee",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/models/client_message-de3c07cf.js"
+      }
+    },
+    {
+      "output": "public/assets/models/file_uploader-09a18428.js",
+      "sha256": "484aad649b9969fbf50728525fd63b2d885f45795d7ab50b245931368ae4eb04",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/models/file_uploader-09a18428.js"
+      }
+    },
+    {
+      "output": "public/assets/models/file_uploader-d3a5c44b.js",
+      "sha256": "484aad649b9969fbf50728525fd63b2d885f45795d7ab50b245931368ae4eb04",
+      "source": {
+        "local": "assets/overrides/models/file_uploader.js"
+      }
+    },
+    {
+      "output": "public/assets/models/message_formatter-f39a0c5d.js",
+      "sha256": "9b6f390fa38ed2b24f026047d4afd36bd2c33b94645f55657ea5eef1a5b2aa78",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/models/message_formatter-f39a0c5d.js"
+      }
+    },
+    {
+      "output": "public/assets/models/message_paginator-b79013e3.js",
+      "sha256": "a7c2340623bb49986d820d42c24b79d9dbcecdd74c92cfdae58b6552cdd45fa7",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/models/message_paginator-b79013e3.js"
+      }
+    },
+    {
+      "output": "public/assets/models/scroll_manager-ed559629.js",
+      "sha256": "2ce305d108413660359a39b563f340abf649106252c6e32db354665eda8130f3",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/models/scroll_manager-ed559629.js"
+      }
+    },
+    {
+      "output": "public/assets/models/typing_tracker-42a444a5.js",
+      "sha256": "463994a9f012a0619b7eadcf360a7e0ba747a58e157fc27b5601e60f0f51e17e",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/models/typing_tracker-42a444a5.js"
+      }
+    },
+    {
+      "output": "public/assets/nav-05e7183a.css",
+      "sha256": "5d873853a0b508590f78eee7570d18070a46a1f3fbc813e1266204261feb4767",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/nav-05e7183a.css"
+      }
+    },
+    {
+      "output": "public/assets/noooo-c68a85f4.mp3",
+      "sha256": "6e1f39fae9f114a833693c4ca834db2798e0a30747de0e39cf13cc2f455f2161",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/noooo-c68a85f4.mp3"
+      }
+    },
+    {
+      "output": "public/assets/notification-bell-alert-b467cde7.svg",
+      "sha256": "90f3c0df58a267bed47226785804b0439d3058c201a1996deca70f2474b4dabc",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/notification-bell-alert-b467cde7.svg"
+      }
+    },
+    {
+      "output": "public/assets/notification-bell-everything-cde41b14.svg",
+      "sha256": "98af59ccafa6d6babf6cba0aaa6d5014167f6a188238c203263895771c57c317",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/notification-bell-everything-cde41b14.svg"
+      }
+    },
+    {
+      "output": "public/assets/notification-bell-invisible-8b495073.svg",
+      "sha256": "4de95bda9740ee13da994138e86116d251ffeb0b989570e1ca4eba113df5f7b0",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/notification-bell-invisible-8b495073.svg"
+      }
+    },
+    {
+      "output": "public/assets/notification-bell-loading-7533ce55.svg",
+      "sha256": "befaa6df6728613345ffbb3c6f6c793fbbf1a0f11cae0d508d2c7518288ce0cd",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/notification-bell-loading-7533ce55.svg"
+      }
+    },
+    {
+      "output": "public/assets/notification-bell-mentions-945d1b91.svg",
+      "sha256": "37befe8b594c0b31fae7c2f96f0ab4272dacca2ff02d76fa88fe521eac6fe9a0",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/notification-bell-mentions-945d1b91.svg"
+      }
+    },
+    {
+      "output": "public/assets/notification-bell-nothing-d8096c76.svg",
+      "sha256": "d4738476a4e6a583c776e6ff0528078ec88c33a4fb51a1210a63579d93dece8f",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/notification-bell-nothing-d8096c76.svg"
+      }
+    },
+    {
+      "output": "public/assets/nyan-1fe5c553.mp3",
+      "sha256": "02d346d5d2cb916d5a079c9373fce801ec66df53a2566a7a4cc9bb77222575ae",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/nyan-1fe5c553.mp3"
+      }
+    },
+    {
+      "output": "public/assets/office-69ba5668.svg",
+      "sha256": "3ae440bb6a9aba1e34f43c4437db7a89f0cf8b780958ae1741f0650d9e5e0b19",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/office-69ba5668.svg"
+      }
+    },
+    {
+      "output": "public/assets/ohmy-189dd829.mp3",
+      "sha256": "b48a4227f83e299d47f23de14ae9dcfab10f3868158ecaae7c2c486c1a22a25d",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/ohmy-189dd829.mp3"
+      }
+    },
+    {
+      "output": "public/assets/ohyeah-48506f41.mp3",
+      "sha256": "e497c03543888b5075d3f0e832acc1d3339549a87634987b21197eac44850f48",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/ohyeah-48506f41.mp3"
+      }
+    },
+    {
+      "output": "public/assets/panels-af44ec6d.css",
+      "sha256": "34e106cb2d657b01d34dff7d4778cd5c6843d66fb50630fd1d6edcc21aa7dff3",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/panels-af44ec6d.css"
+      }
+    },
+    {
+      "output": "public/assets/password-0896da4e.svg",
+      "sha256": "84f6d63a1d2e776f7331273c74ec4f7a347f107b1295cb5071c69bb495d6dc34",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/password-0896da4e.svg"
+      }
+    },
+    {
+      "output": "public/assets/pencil-cf9d28aa.svg",
+      "sha256": "0756aec7b96a26ea432ab8f545cd2a411556b39a0cc829ecb7f4fbd21c1a8eb2",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/pencil-cf9d28aa.svg"
+      }
+    },
+    {
+      "output": "public/assets/person-add-1432b76b.svg",
+      "sha256": "e38b220c0f7629f676920a339506b430ef4971c5c768aad86abbb390f317f307",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/person-add-1432b76b.svg"
+      }
+    },
+    {
+      "output": "public/assets/person-da193438.svg",
+      "sha256": "48ac49f6bc4440a0f8888578e8af68f7b4fa3f7b62484a80888d5a473e02b306",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/person-da193438.svg"
+      }
+    },
+    {
+      "output": "public/assets/pushit-f43f90a7.mp3",
+      "sha256": "1e099a266dbf628eaddd3dad759273299debcee16479d8d7f2560a685abbcc32",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/pushit-f43f90a7.mp3"
+      }
+    },
+    {
+      "output": "public/assets/qr-code-dac3b273.svg",
+      "sha256": "2f594522b4b31538a2555794578b5e97f543a9978115079e3d6cf878504da306",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/qr-code-dac3b273.svg"
+      }
+    },
+    {
+      "output": "public/assets/rails-ujs-20eaf715.js",
+      "sha256": "89f7d2d055b9be3575363cdb34282f5086f09d8de24085c22378baee7499da67",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/rails-ujs-20eaf715.js"
+      }
+    },
+    {
+      "output": "public/assets/rails-ujs.esm-e925103b.js",
+      "sha256": "b8583d8851cb8087e51985f5cd734d176d58b0627bf4c0cd72697e0686a0d985",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/rails-ujs.esm-e925103b.js"
+      }
+    },
+    {
+      "output": "public/assets/refresh-249f0509.svg",
+      "sha256": "475e0ce21b139e73b7fc5e94d3cd1bb521d6171d8b7100e636dfd2719033518a",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/refresh-249f0509.svg"
+      }
+    },
+    {
+      "output": "public/assets/remove-0e7a045d.svg",
+      "sha256": "4f1c47b86ede7ab641dc667e13775fa953bb257ad050f309397aea0f0164f5d5",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/remove-0e7a045d.svg"
+      }
+    },
+    {
+      "output": "public/assets/remove-circle-384c618c.svg",
+      "sha256": "7e343bfb850123f5281f0ac4548282057ada490bb88a0172bfbb032d6d364ba5",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/remove-circle-384c618c.svg"
+      }
+    },
+    {
+      "output": "public/assets/reply-edb77e33.svg",
+      "sha256": "dae8faaf2c6d661fb6e5d670aa00c1ea7ae21ff563b4c1ab4ae3483b69f7be04",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/reply-edb77e33.svg"
+      }
+    },
+    {
+      "output": "public/assets/rimshot-66c3332b.mp3",
+      "sha256": "3dfc708d49dfa2444a61dc178fa1eed482f147b028c67d0d8f94ba10e5ea2bbf",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/rimshot-66c3332b.mp3"
+      }
+    },
+    {
+      "output": "public/assets/rollout-3a826ae4.mp3",
+      "sha256": "3277678e301cac225d382513cc04a8c9075f1d85dbd95e47816b0f39af35357c",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/rollout-3a826ae4.mp3"
+      }
+    },
+    {
+      "output": "public/assets/rumble-7b5d6e4f.mp3",
+      "sha256": "de7b7ba90f6dab34b390f4c45157f1f3c45ba3ae5a9eb82c63f7d35f16d93748",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/rumble-7b5d6e4f.mp3"
+      }
+    },
+    {
+      "output": "public/assets/sax-9e7841a8.mp3",
+      "sha256": "9ee2c08c05d265f608f883ee214b0049ff0ec962c0db95e53f1467737d517765",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sax-9e7841a8.mp3"
+      }
+    },
+    {
+      "output": "public/assets/screenshots/android-chat-f8b923c9.png",
+      "sha256": "cffb170593cacc0c9e924a4af6a06a5c936e2be06e1f9c1c160c6bff9534a688",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/screenshots/android-chat-f8b923c9.png"
+      }
+    },
+    {
+      "output": "public/assets/screenshots/android-dark-mode-e43dcf59.png",
+      "sha256": "b8b6db9e6f4626412983cef3e883de58bba4c693a4a570ad8e0dcdefb154e51b",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/screenshots/android-dark-mode-e43dcf59.png"
+      }
+    },
+    {
+      "output": "public/assets/screenshots/android-sidebar-e9d2b49f.png",
+      "sha256": "a8ae76656d6e91267ae1fd5cafaf05302df4776180819d171d7bd1cc4e07c57b",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/screenshots/android-sidebar-e9d2b49f.png"
+      }
+    },
+    {
+      "output": "public/assets/search-5f29565f.svg",
+      "sha256": "b9d32a32d57bb98052344413080c033f88f916e3e93ddb246c971d8448e92d7a",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/search-5f29565f.svg"
+      }
+    },
+    {
+      "output": "public/assets/secret-9f61e3b5.mp3",
+      "sha256": "c2b31e22f7aac1dca492c18e68ddd4653167409f69246f293c274acc3545a704",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/secret-9f61e3b5.mp3"
+      }
+    },
+    {
+      "output": "public/assets/separators-172b3ab8.css",
+      "sha256": "c8671de9be019d64b5a604063570f7cbc8b688f79bc26cd5e80f4cb7a7d9072d",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/separators-172b3ab8.css"
+      }
+    },
+    {
+      "output": "public/assets/settings-aee56972.svg",
+      "sha256": "97e110330545f2d4408f99e55405bdf54d4da3ad9118efab5dbe18b6e3638b4b",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/settings-aee56972.svg"
+      }
+    },
+    {
+      "output": "public/assets/sexyback-ec0cf66f.mp3",
+      "sha256": "9053f17be9987435b010e51425614d2493bc2e97756872d785e1e84bc0ada70a",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sexyback-ec0cf66f.mp3"
+      }
+    },
+    {
+      "output": "public/assets/share-bf28da4f.svg",
+      "sha256": "2947c481e2deb79d132d2ae66ae4ee65a9e2b30b6e005e719d88ebf788fe245d",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/share-bf28da4f.svg"
+      }
+    },
+    {
+      "output": "public/assets/sidebar-0be58db9.css",
+      "sha256": "224d9873f52937fc481916fdf91f36354e0cfd952f550b4ba98cb0d596925cb3",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sidebar-0be58db9.css"
+      }
+    },
+    {
+      "output": "public/assets/signup-6e02d591.css",
+      "sha256": "a8fac55100dedda50a0212bf0ba30160b2e38edfe3bb46fa4f5a940207e8ee71",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/signup-6e02d591.css"
+      }
+    },
+    {
+      "output": "public/assets/sounds/56k-1567db5b.webp",
+      "sha256": "62ab7ed0b956fb53a360dda72ea0000e1d36a17e1356b37d6930d0d6b507b755",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/56k-1567db5b.webp"
+      }
+    },
+    {
+      "output": "public/assets/sounds/56k-22d60d09.gif",
+      "sha256": "19860097add890e4e446801f1c51873a44bc91a874cae0c2769381ecc1483ac5",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/56k-22d60d09.gif"
+      }
+    },
+    {
+      "output": "public/assets/sounds/clowntown-1670db9e.webp",
+      "sha256": "de7a3314e8c02defdb26fae6f7c00076dbe8f1936fc15719f15a17c386fad0d5",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/clowntown-1670db9e.webp"
+      }
+    },
+    {
+      "output": "public/assets/sounds/clowntown-fa123df7.gif",
+      "sha256": "0ab9f4d44751e1692e7d2bdb29ab9c2294f107e600b8370561d5d716c5528dee",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/clowntown-fa123df7.gif"
+      }
+    },
+    {
+      "output": "public/assets/sounds/curb-0c6f596b.gif",
+      "sha256": "9d7d0528af54d17855bf70d2d4caf0e96937c68ef522e3a16816dc62b73e5da0",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/curb-0c6f596b.gif"
+      }
+    },
+    {
+      "output": "public/assets/sounds/curb-b74cab9f.webp",
+      "sha256": "f63eae06f137eb7926b1c547c496efe810f1e5de8cd45b46c46b9648e69176ce",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/curb-b74cab9f.webp"
+      }
+    },
+    {
+      "output": "public/assets/sounds/dangerzone-0e0f0d09.webp",
+      "sha256": "b30d02c0395076462afef0b7daef9e48bfd61496e219170b8021a141d4bb2b03",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/dangerzone-0e0f0d09.webp"
+      }
+    },
+    {
+      "output": "public/assets/sounds/dangerzone-60067535.png",
+      "sha256": "7a0ea0c1f0ddec52e718836104f747ed4aa1ea44377879f7e6d0284408eb8348",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/dangerzone-60067535.png"
+      }
+    },
+    {
+      "output": "public/assets/sounds/donotwant-c19843b2.gif",
+      "sha256": "6ba2c15748e69670ff119f09302f16bc1c42b0ec9df2fec8a3f87c9a0dcc0ff4",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/donotwant-c19843b2.gif"
+      }
+    },
+    {
+      "output": "public/assets/sounds/donotwant-d29fb6fb.webp",
+      "sha256": "4881703b69fc17c87a4026053a02a3561ebc7f0c42a30b36d86c1110255f6e62",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/donotwant-d29fb6fb.webp"
+      }
+    },
+    {
+      "output": "public/assets/sounds/drama-b398c916.webp",
+      "sha256": "8431b85ddd4cc9b49614a1148b7aa3c0e33d5faed359cb3d33c2949893ac02ab",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/drama-b398c916.webp"
+      }
+    },
+    {
+      "output": "public/assets/sounds/greatjob-99af483c.webp",
+      "sha256": "d65ddebd31f6675c0142886ff4fa16a16ffe759cb24849933af084569b497a72",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/greatjob-99af483c.webp"
+      }
+    },
+    {
+      "output": "public/assets/sounds/greatjob-d65f324c.png",
+      "sha256": "bf4af7b0c43ddd8982d5dc56c0f07307eab80167ca5ef77ebe32b5817db91aeb",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/greatjob-d65f324c.png"
+      }
+    },
+    {
+      "output": "public/assets/sounds/loggins-a40a75e6.webp",
+      "sha256": "c02fa390a55f525a875760b8ac9d100b5d9fac04f8a0f366f94b9d366403e440",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/loggins-a40a75e6.webp"
+      }
+    },
+    {
+      "output": "public/assets/sounds/nyan-8cc577e4.webp",
+      "sha256": "732ecc7e76e6ab01d4c5ed748142b1a15047e47fa0c51dcc09eb0551e6d4e0a2",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/nyan-8cc577e4.webp"
+      }
+    },
+    {
+      "output": "public/assets/sounds/nyan-995f5ada.gif",
+      "sha256": "e20d21627621876e5c3efda1a881e29d229a32c3565738ae00300105a71915ef",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/nyan-995f5ada.gif"
+      }
+    },
+    {
+      "output": "public/assets/sounds/pushit-05915cda.webp",
+      "sha256": "c56fee9519340a196b0f71e6dc1b18bd9974b4cbbcf991c7a82be9b8e5b58782",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/pushit-05915cda.webp"
+      }
+    },
+    {
+      "output": "public/assets/sounds/pushit-599fd1e2.gif",
+      "sha256": "0a9870762efeeb710adb0fc25ef2d517c85693f7fe4f289c7b971ff889ef9cc6",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/pushit-599fd1e2.gif"
+      }
+    },
+    {
+      "output": "public/assets/sounds/rumble-5ddb8536.gif",
+      "sha256": "82211e8461dd597a147e4d2265b68bb4716c31f8ba6302af8a416a704117953d",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/rumble-5ddb8536.gif"
+      }
+    },
+    {
+      "output": "public/assets/sounds/rumble-c4fc52a9.webp",
+      "sha256": "f4671edd83274ce30353a0668e2c9e651dec183ef974da8e168c787fdd0aea22",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/rumble-c4fc52a9.webp"
+      }
+    },
+    {
+      "output": "public/assets/sounds/top-15f70a0c.gif",
+      "sha256": "8330dde187d5f91af6eae76ee790e317ea9e7fd9f4b120734ce78cd453899d25",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/top-15f70a0c.gif"
+      }
+    },
+    {
+      "output": "public/assets/sounds/top-cc086a68.webp",
+      "sha256": "53767892b3513b6da26eae278a48007e1d6dde6ecc7397f88e5cea63e6c5a216",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/top-cc086a68.webp"
+      }
+    },
+    {
+      "output": "public/assets/sounds/what-02690db4.webp",
+      "sha256": "6f39a9aa680750b6a84f4b862a9b20d70285c6b8f729f5144af4fe3d9a6ab3ec",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/what-02690db4.webp"
+      }
+    },
+    {
+      "output": "public/assets/sounds/what-5ff77085.gif",
+      "sha256": "0c53e70e9377393473a3b7d2c36afb675a37075c4cd19d90538e837fc1b98dd9",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/what-5ff77085.gif"
+      }
+    },
+    {
+      "output": "public/assets/sounds/yay-6d9d9620.png",
+      "sha256": "fbd205c769a518cf6d80d6616f09c2f994b384780de40f7201cd9dad3d1a2bae",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/yay-6d9d9620.png"
+      }
+    },
+    {
+      "output": "public/assets/sounds/yay-914d17c4.webp",
+      "sha256": "d1c150d2506442a5501ecd29775ed4817b5f2c7efdde08ab437189d2dde8a0f7",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/yay-914d17c4.webp"
+      }
+    },
+    {
+      "output": "public/assets/sounds/yeah-7b10b5f7.gif",
+      "sha256": "fa25eb29c382731a5ede9822048a699dbfc1047fde0aba7a885d16e3c8673d21",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/yeah-7b10b5f7.gif"
+      }
+    },
+    {
+      "output": "public/assets/sounds/yeah-886795b2.webp",
+      "sha256": "a754c785d295a028fe4b119e384ad9f0929f705baae41a68a8afe1229943fcae",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/sounds/yeah-886795b2.webp"
+      }
+    },
+    {
+      "output": "public/assets/spinner-5a118f25.css",
+      "sha256": "d7b45ae7a885708f72c9323d525acda30866f3f3caafc079d2111a7bd376ec51",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/spinner-5a118f25.css"
+      }
+    },
+    {
+      "output": "public/assets/stimulus-autoloader-9d447422.js",
+      "sha256": "55b50b7e09e5929940c07181b24735fb2c1c1edd87ea311e4db679ae5462169b",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/stimulus-autoloader-9d447422.js"
+      }
+    },
+    {
+      "output": "public/assets/stimulus-d59b3b7f.js",
+      "sha256": "08bb1e36a8e1107f07e9e2d59ed57ec734c25fda501f20a37f71883674348659",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/stimulus-d59b3b7f.js"
+      }
+    },
+    {
+      "output": "public/assets/stimulus-importmap-autoloader-64cc03e1.js",
+      "sha256": "7796430c6a502d3969a405d910de004ed31c2ca80548d801eff1826edfdee1a2",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/stimulus-importmap-autoloader-64cc03e1.js"
+      }
+    },
+    {
+      "output": "public/assets/stimulus-loading-1fc53fe7.js",
+      "sha256": "6480747bf3025ea2ac4780cb4e4dda3c98b5d74911d7a07ce66c211f3247e59c",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/stimulus-loading-1fc53fe7.js"
+      }
+    },
+    {
+      "output": "public/assets/stimulus.min-2395e199.js.map",
+      "sha256": "3d0f7c81c69552e842a7a822e8ba2b65e9f9b1a72f2faf1e29a4a9e351a555c5",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/stimulus.min-2395e199.js.map"
+      }
+    },
+    {
+      "output": "public/assets/stimulus.min-4b1e420e.js",
+      "sha256": "65673dff8b9041eb1d415c9648f261b64e59031f8dab3fb9ed60b820a10058eb",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/stimulus.min-4b1e420e.js"
+      }
+    },
+    {
+      "output": "public/assets/story-0665aaac.mp3",
+      "sha256": "705b0ce43b8d801fb1fd6577a2d7e15b2d03ae2834a70690556a28b89a9d4e73",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/story-0665aaac.mp3"
+      }
+    },
+    {
+      "output": "public/assets/tada-6500487f.mp3",
+      "sha256": "024dfccb5565600d705b71833ebcc2fdc1a7eae16c2f93f025e962bc6fdd5296",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/tada-6500487f.mp3"
+      }
+    },
+    {
+      "output": "public/assets/text-options-055e0d16.svg",
+      "sha256": "c8929694132253ae390509b1b273e6a2efccdee2c5da338a059273642064ef0c",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/text-options-055e0d16.svg"
+      }
+    },
+    {
+      "output": "public/assets/tmyk-035cbb8b.mp3",
+      "sha256": "85cab9b9d9ef6cf98b2b96bef1d41b05b75835ea8e05882a2a5d2beac5eb5e4c",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/tmyk-035cbb8b.mp3"
+      }
+    },
+    {
+      "output": "public/assets/totes-665011c8.mp3",
+      "sha256": "8548005a21f26256c9c0b8cfb30be760f97c1d1fb8e1a9b28d689a14ff52734b",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/totes-665011c8.mp3"
+      }
+    },
+    {
+      "output": "public/assets/transfer-3ec4f61b.svg",
+      "sha256": "f9231f2ed2e7ad3672dd03654f3e3c2bbedc627994dfd99b8e4bf2cef80dca39",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/transfer-3ec4f61b.svg"
+      }
+    },
+    {
+      "output": "public/assets/trash-708c7eb2.svg",
+      "sha256": "95a9bc7f96789903cfdd375846dd5545de7336407b699fcaf8ea234e1a8f3a97",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/trash-708c7eb2.svg"
+      }
+    },
+    {
+      "output": "public/assets/trix-4bf79781.js",
+      "sha256": "676299911f4cbd15d35b0e12904a12ed1d7cff634502b9bff8518aecace5a9a7",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/trix-4bf79781.js"
+      }
+    },
+    {
+      "output": "public/assets/trix-65afdb1d.css",
+      "sha256": "7a35d25d0204a594f9f89a6fef18f74321ee2dae3970da3ac11e22c4305536ac",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/trix-65afdb1d.css"
+      }
+    },
+    {
+      "output": "public/assets/trololo-d7f880d7.mp3",
+      "sha256": "6aec372c8726b15a221290416d8335ce2d96994a8dba22fe5c9d0dfeec18624e",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/trololo-d7f880d7.mp3"
+      }
+    },
+    {
+      "output": "public/assets/trombone-3cbeabc3.mp3",
+      "sha256": "448b61c1cbbe212d6ee74927f976d51cff7e849eadc88cf115c9cb31eb49fc54",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/trombone-3cbeabc3.mp3"
+      }
+    },
+    {
+      "output": "public/assets/turbo-a1e3a50a.js",
+      "sha256": "94351e8f0aadf161b9efd5e60c577d674d25ee99d7b176f74211681b2ac1e708",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/turbo-a1e3a50a.js"
+      }
+    },
+    {
+      "output": "public/assets/turbo.min-3a2e143f.js",
+      "sha256": "48e975e71e0f0e6cfa6c0eafdf32ce2893e6aef545757ea7363bfd4d7bccc303",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/turbo.min-3a2e143f.js"
+      }
+    },
+    {
+      "output": "public/assets/turbo.min-5f3b7fda.js.map",
+      "sha256": "8180599d0823b28066883092c3ff151cd5755cfca170a4bdd79d5120ad6e5b21",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/turbo.min-5f3b7fda.js.map"
+      }
+    },
+    {
+      "output": "public/assets/unix-bb19b65d.mp3",
+      "sha256": "d6a7a853919aacc1df65006f584666f3c0041b27cdde89f23b5e6ec523b22f84",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/unix-bb19b65d.mp3"
+      }
+    },
+    {
+      "output": "public/assets/utilities-e2f32466.css",
+      "sha256": "c7c9bb4c6117b59ced40887bd88c84c3edc8a339a824716eb3786122ce305d81",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/utilities-e2f32466.css"
+      }
+    },
+    {
+      "output": "public/assets/vuvuzela-d177cb0f.mp3",
+      "sha256": "4250e803d192637d77eaafa0995dac8b6f95f5f4577a8f87b08aa02553820b68",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/vuvuzela-d177cb0f.mp3"
+      }
+    },
+    {
+      "output": "public/assets/web-e179f247.svg",
+      "sha256": "43c2ac14c270709f4e504d3a19aa53ad1c1a37806d5d032a112ebbb3b7931aa9",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/web-e179f247.svg"
+      }
+    },
+    {
+      "output": "public/assets/what-880c5f29.mp3",
+      "sha256": "70d0314adcdda431e77438a0a8c37ad499995a189041116a45c40c651d880c77",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/what-880c5f29.mp3"
+      }
+    },
+    {
+      "output": "public/assets/whoomp-f21c3c43.mp3",
+      "sha256": "5443c723ebd42623fbda85ff2a1201e0d39e8a9b2ff07f9a101e12cad641b3e6",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/whoomp-f21c3c43.mp3"
+      }
+    },
+    {
+      "output": "public/assets/wups-fbad935c.mp3",
+      "sha256": "89c0d03e84b245465b5cd9d38795de988736184e102e3a312a07f4f5e870b409",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/wups-fbad935c.mp3"
+      }
+    },
+    {
+      "output": "public/assets/yay-1fae7a37.mp3",
+      "sha256": "e575442d89c9d6d62009ace006e6611c5cba9a15b070150b42403e3a32091dde",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/yay-1fae7a37.mp3"
+      }
+    },
+    {
+      "output": "public/assets/yeah-71e3371e.mp3",
+      "sha256": "8a29c1ed07c7d89e7ca39c3d433e320f05e53d0400225c7e89ac3043e1d32080",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/yeah-71e3371e.mp3"
+      }
+    },
+    {
+      "output": "public/assets/yodel-b14597bb.mp3",
+      "sha256": "c63ffb94b5cdcc22227f42495748a91b646cb2b7bbb508c8e574853263d31184",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/assets/yodel-b14597bb.mp3"
+      }
+    },
+    {
+      "output": "public/robots.txt",
+      "sha256": "2f15987e4606501202b9d337085439339e53a374e3d194847192c12f85ba78f8",
+      "source": {
+        "repository": "basecamp/once-campfire-c",
+        "revision": "873a51f523de5a0cc235884e5725cfb5521d2027",
+        "path": "tests/fixtures/assets/public/robots.txt"
+      }
+    },
+    {
+      "output": "public/service-worker.js",
+      "sha256": "f3c792b5a4412b37a677e97e5bc737f9fd52398a9614dab773e46e99f8916b52",
+      "source": {
+        "local": "assets/overrides/service-worker.js"
+      }
+    }
+  ]
+}

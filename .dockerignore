@@ -6,3 +6,9 @@ bench/results
 __pycache__
 *.pyc
 .venv
+.env
+.env.*
+*.pem
+*.key
+config.env
+release

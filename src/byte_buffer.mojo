@@ -75,17 +75,17 @@ struct Bytes(Copyable, ImplicitlyCopyable, Movable, Sized):
         if len(needle) > len(self):
             return False
         for i in range(len(needle)):
-            if self.data[len(self)-len(needle)+i] != needle.data[i]:
+            if self.data[len(self) - len(needle) + i] != needle.data[i]:
                 return False
         return True
 
     def find(self, needle: Self, start: Int = 0) -> Int:
         if start < 0 or start > len(self):
             return -1
-        for i in range(start, len(self)-len(needle)+1):
+        for i in range(start, len(self) - len(needle) + 1):
             var matches = True
             for j in range(len(needle)):
-                if self.data[i+j] != needle.data[j]:
+                if self.data[i + j] != needle.data[j]:
                     matches = False
                     break
             if matches:

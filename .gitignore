@@ -7,3 +7,10 @@ __pycache__/
 *.pyc
 .DS_Store
 /bench/source-counter/target/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+config.env
+/release/
