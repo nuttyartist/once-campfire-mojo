@@ -18,7 +18,11 @@ LABEL org.opencontainers.image.title="Campfire in Mojo" \
     org.opencontainers.image.revision=${GIT_REVISION} \
     org.opencontainers.image.source=${SOURCE_URL} \
     org.opencontainers.image.licenses="MIT"
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Bootstrap HTTPS trust from the pinned build image before installing packages.
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get -o Acquire::https::CaInfo=/etc/ssl/certs/ca-certificates.crt -o APT::Update::Error-Mode=any update \
+    && apt-get -o Acquire::https::CaInfo=/etc/ssl/certs/ca-certificates.crt install -y --no-install-recommends \
     libcurl4t64 libcrypt1 libmagic1t64 libxml2 libvips42t64 ffmpeg poppler-utils \
     ca-certificates openssl python3 tini caddy && rm -rf /var/lib/apt/lists/* \
     && useradd --system --uid 10001 --create-home campfire

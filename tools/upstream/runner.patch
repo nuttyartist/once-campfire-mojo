@@ -1,0 +1,100 @@
+--- a/bench/compare.rb
++++ b/bench/compare.rb
+@@ -5,11 +5,12 @@
+ require_relative "contracts"
+ require "digest"
+ require "time"
++require_relative "mojo"
+ include BenchmarkSupport
+ 
+ repo = File.expand_path("..", __dir__)
+ workspace = File.dirname(repo)
+-work = File.join(repo, "tmp/bench")
++work = ENV.fetch("MOJO_VERIFICATION_RUNTIME", File.join(repo, "tmp/bench"))
+ options = { apps: "rails,django,laravel,express,elixir,go,rust,c", rounds: 3, duration: 8, concurrencies: "16", port: 25130,
+   workspace: workspace, seed: File.join(repo, "fixtures/default"), preflight: false, keep_runtime: false, mixed_write_rate: 0,
+   loadgen: ENV.fetch("LOADGEN", File.join(repo, "loadgen/target/release/loadgen")),
+@@ -29,7 +30,7 @@
+ end.parse!
+ raise "use at least two rounds" unless options[:rounds] >= 2
+ apps = options[:apps].split(",")
+-allowed = %w[rails django laravel express express-bun elixir go rust c cpp]
++allowed = %w[rails django laravel express express-bun elixir go rust c cpp mojo]
+ raise "apps must be nonempty, unique and supported" unless !apps.empty? && apps.uniq == apps && apps.all? { |app| allowed.include?(app) }
+ selected_routes = options[:routes].split(",")
+ raise "unknown or empty route selection" unless !selected_routes.empty? && (selected_routes - %w[room_show messages_page sidebar search avatar static_css up post_message]).empty?
+@@ -70,6 +71,7 @@
+   value
+ end
+ container = "cf-native-bench-#{Process.pid}"
++container += "-#{ENV.fetch("MOJO_VERIFICATION_RUN")}" if ENV["MOJO_VERIFICATION_RUN"]
+ results = []
+ metadata = { verification_revision: run("git", "-C", repo, "rev-parse", "HEAD").strip, response_validation: "route-contract-v1", started_at: Time.now.utc.iso8601, seed_sha256: original_seed_sha, server_cpus: options[:cpus],
+   client_cpus: options[:client_cpus], network: "host", gzip: true, duration: options[:duration],
+@@ -114,10 +116,13 @@
+       config.merge!(JSON.parse(ENV.fetch("#{env_name.(app)}_BENCH_ENV", "{}")))
+       # Host-network comparisons may coexist with a release verification node.
+       config["RELEASE_NODE"] = container if kind == "elixir"
++      config = MojoVerification.configure(config, options[:port], data) if kind == "mojo"
++      MojoVerification.prepare(data) if kind == "mojo"
+       metadata[:topology] ||= {}
+       metadata[:runtimes] ||= {}
+       metadata[:runtimes][app] = runtimes.fetch(app)
+       metadata[:topology][app] = case kind
++      when "mojo" then MojoVerification.topology(config)
+       when "rails" then {http_workers: config.fetch("WEB_CONCURRENCY"), threads: config.fetch("RAILS_MAX_THREADS"), jobs: "Redis/Resque", cable: "Action Cable"}
+       when "rust" then {processes: 1, readers: config.fetch("RAILS_MAX_THREADS"), job_workers: config.fetch("JOB_CONCURRENCY"), cable: "native tokio", jobs: "in-process"}
+       when "go" then {processes: 1, cable: "native websocket", jobs: "in-process"}
+@@ -133,8 +138,17 @@
+       end
+       command = ["docker", "run", "-d", "--name", container, "--network", "host", "--cpuset-cpus", options[:cpus]]
+       command.concat environment(config)
+-      command.concat mounts(File.join(data, "db") => "/rails/storage/db", File.join(data, "files") => "/rails/storage/files", File.join(data, "logs") => "/rails/storage/logs")
++      if kind == "mojo"
++        command.concat MojoVerification.mounts
++      else
++        command.concat mounts(File.join(data, "db") => "/rails/storage/db", File.join(data, "files") => "/rails/storage/files", File.join(data, "logs") => "/rails/storage/logs")
++      end
++      if kind == "mojo"
++        command.concat ["--entrypoint", "/usr/bin/tini", "--tmpfs", "/data"]
++        command.concat ["--label", "campfire.verification.run=#{ENV.fetch("MOJO_VERIFICATION_RUN")}"] if ENV["MOJO_VERIFICATION_RUN"]
++      end
+       command << image_id
++      command.concat ["--", "/app/campfire"] if kind == "mojo"
+       run(*command)
+       client = BenchmarkHTTPClient.new(base)
+       deadline = clock + 90
+@@ -148,7 +162,7 @@
+         end
+         sleep 0.1
+       end
+-      run("docker", "exec", "--user", "root", container, "chmod", "-R", "a+rwX", "/rails/storage/db")
++      run("docker", "exec", "--user", "root", container, "chmod", "-R", "a+rwX", kind == "mojo" ? File.join(data, "db") : "/rails/storage/db")
+       sleep 3 unless options[:preflight]
+       cookie = lg.call("login", "--base", base, "--email", labels.fetch("emails.david"), "--password", labels.fetch("passwords.all")).fetch("cookie")
+       scrape = lg.call("scrape", "--base", base, "--cookie", cookie, "--room", room.to_s)
+@@ -161,6 +175,7 @@
+       contracts = prepared.fetch(:contracts)
+       preflight = prepared.fetch(:preflight)
+       row = { app: app, round: iteration + 1, preflight: preflight, http: [], mixed_http: [], load_start: File.read("/proc/loadavg").strip }
++      subscriptions = MojoVerification.snapshot(sql, db, write_room, labels.fetch("users.david")) if kind == "mojo"
+       acknowledged_writes = 0
+       write_audits = []
+       unless options[:preflight]
+@@ -218,6 +233,9 @@
+       row[:richtext_http_posts] = richtext_posts
+       row[:persisted_writes] = actual_messages - initial_messages
+       row[:load_end] = File.read("/proc/loadavg").strip
++      if kind == "mojo"
++        row[:completed_jobs] = MojoVerification.finish(sql, db, write_room, initial_max_id, acknowledged_writes, subscriptions, container, File.join(options[:output], "#{app}-#{iteration + 1}-server.log"))
++      end
+       results << row
+       write_json(File.join(options[:output], "#{app}-#{iteration + 1}.json"), row)
+       remove_container(container)
+@@ -239,5 +257,6 @@
+     (mixed ? :mixed_results : :results) => summary)
+   puts JSON.pretty_generate(summary)
+ ensure
++  MojoVerification.capture_failure(container, options[:output]) if $! && apps.include?("mojo")
+   remove_container(container)
+ end

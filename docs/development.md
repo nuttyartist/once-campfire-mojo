@@ -1,7 +1,7 @@
 # Development
 
 Use the pinned Linux toolchain with Mojo 1.1.0. Host prerequisites for the complete
-test bootstrap are Docker, Git, Ruby, Python 3.11 or newer, Node.js and npm. Application
+test bootstrap are Docker, Git, Ruby, Python 3.11 or newer, Node.js 22.18 or newer (CI uses 24) and npm. Application
 compilers/native dependencies live in the toolchain image. The HTTP app builds
 without a Rust or C Campfire checkout.
 
@@ -15,6 +15,7 @@ docker run --rm --init -e CAMPFIRE_TEST_NO_AFFINITY=1 \
 bash tools/build-image.sh campfire-mojo:ci
 bash tools/check-migration.sh
 bash tools/check-browser.sh
+bash tools/check-upstream.sh
 bash tools/check-package.sh
 bash tools/check-compose.sh
 bash tools/check-security.sh
@@ -31,6 +32,8 @@ The main check runs publication/asset/license consistency, the source-safety
 guard, CLI regressions, application/fault/recovery tests, independent Rails and
 crypto vectors, and native adapter ASan/UBSan fuzzing. Browser/package gates use
 disposable containers and volumes. They never use your real Campfire volume.
+The [independent upstream gate](upstream-verification.md) runs the pinned shared
+browser, frontend and HTTP checks directly, with exact durable-job accounting.
 Tests fail when prerequisites are missing; do not replace failures with skips.
 
 ## Editing and formatting

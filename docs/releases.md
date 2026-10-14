@@ -13,7 +13,7 @@ be described as security-cleared.
 
 ## Local candidate
 
-Start from a clean commit and run the standalone, browser, migration and package
+Start from a clean commit and run the standalone, independent upstream, browser, migration and package
 gates in [development](development.md). Build with `tools/build-image.sh` so the
 image records the version, full Git revision and chosen `SOURCE_URL` (default
 `local`). `docker run --rm IMAGE --version` prints the binary's identity without

@@ -13,7 +13,7 @@ bash tools/build-image.sh campfire-mojo:local
 docker compose up -d --no-build
 ```
 
-Open `http://localhost:8080`. The first visit creates the account and administrator. The named `campfire` volume contains the SQLite database, Disk files, signing/VAPID keys, and Caddy data. Do not delete that volume to update the image. Compose binds published ports to loopback, limits the container to four CPUs and 2 GiB, and checks the application health endpoint.
+Open `http://localhost:8080`. The first visit creates the account and administrator. The named `campfire` volume contains the SQLite database, Disk files, signing/VAPID keys, and Caddy data. Do not delete that volume to update the image. Keep live SQLite files on a Linux filesystem or Docker named volume; Docker Desktop macOS host bind mounts are unsupported for the live database because stress tests observed corruption there. Compose binds published ports to loopback, limits the container to four CPUs and 2 GiB, and checks the application health endpoint.
 
 `SECRET_KEY_BASE` and the two VAPID keys are generated once into `/data/config.env` with mode 0600. Back up that file with the database and files. Losing or changing these keys invalidates sessions, signed URLs and existing push registrations. `VAPID_SUBJECT` should be a contact address for an actual deployment.
 

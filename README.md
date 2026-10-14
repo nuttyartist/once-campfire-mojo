@@ -73,7 +73,7 @@ Measured Mojo revision: `3b7440dc3f84`. See [full method, every round and reprod
 ## Contributing and security
 
 [CONTRIBUTING.md](CONTRIBUTING.md) describes code, test and provenance requirements.
-Use the independent Rails fixtures and packaged browser/migration gates before
+Use the [unchanged upstream checks](docs/upstream-verification.md), independent Rails fixtures and packaged browser/migration gates before
 proposing compatibility changes. [SECURITY.md](SECURITY.md) explains the trust
 model and the current reporting/support status.
 

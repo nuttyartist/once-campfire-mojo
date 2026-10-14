@@ -1,6 +1,6 @@
 # Contributing and upstream review
 
-Start with [development](docs/development.md) for prerequisites, build/bootstrap and the standalone, browser, migration, package and security gates. [Architecture](docs/architecture.md) maps the modules and native boundary. The prepared CI targets native Ubuntu ARM64 and amd64; hosted runs and native amd64 acceptance are still deferred. Keep fixture credentials, databases, output logs and binaries out of commits. `tools/test-pins.env` names the immutable external references.
+Start with [development](docs/development.md) for prerequisites, build/bootstrap and the standalone, independent upstream, browser, migration, package and security gates. [Architecture](docs/architecture.md) maps the modules and native boundary. The prepared CI targets native Ubuntu ARM64 and amd64; hosted runs and native amd64 acceptance are still deferred. Keep fixture credentials, databases, output logs and binaries out of commits. `tools/test-pins.env` names the immutable external references.
 
 Run `bash tools/format.sh --write` inside the pinned toolchain before proposing Mojo changes. Generated files are checked by regeneration, not hand formatting. Keep changes focused, explain the user-visible behavior, and record the actual commands and platform results. Include negative regressions for authorization, compatibility, data loss or unsafe-boundary changes. Documentation-only corrections need the publication/link check rather than new application tests.
 

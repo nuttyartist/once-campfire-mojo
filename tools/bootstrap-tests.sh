@@ -21,7 +21,7 @@ checkout once-campfire-verification "$VERIFICATION_REVISION"
 checkout once-campfire "$RAILS_REVISION"
 verification="$workspace/once-campfire-verification"
 if [[ ! -d "$verification/fixtures/default" ]]; then
-    seed_args=()
+    seed_args=("$verification/bin/seed")
     if [[ -n ${SEED_REFERENCE_IMAGE:-} ]]; then seed_args+=(--image "$SEED_REFERENCE_IMAGE"); fi
     # Verify the Linux-produced WAL database with Linux SQLite too. The host's
     # Apple SQLite can reject WAL sidecars created inside Docker Desktop.
@@ -34,7 +34,7 @@ exec docker run --rm -v "$CAMPFIRE_SEED_WORKSPACE:$CAMPFIRE_SEED_WORKSPACE" \
     "${TOOLCHAIN_IMAGE:-campfire-local-tools:verified}" sqlite3 "$@"
 SH
     chmod +x "$seed_tools/sqlite3"
-    CAMPFIRE_SEED_WORKSPACE="$workspace" PATH="$seed_tools:$PATH" "$verification/bin/seed" "${seed_args[@]}"
+    CAMPFIRE_SEED_WORKSPACE="$workspace" PATH="$seed_tools:$PATH" "${seed_args[@]}"
     rm -rf "$seed_tools"
     trap - EXIT
 fi

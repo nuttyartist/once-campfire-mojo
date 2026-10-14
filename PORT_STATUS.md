@@ -9,6 +9,12 @@ candidate for review, not a supported production release.
 
 This port implements the stock Campfire application workflows against the original Rails `b52b244f384456d9ab5892ebb7bebd8cd8c696c9` source and local Active Storage Disk service. It is suitable for upstream review as a functional application port. Passing the documented gates is not a proof of equivalence for every input, deployment or optional Rails extension, nor a substitute for maintainer/security review before a public release.
 
+The [independent upstream gate](docs/upstream-verification.md) now runs the pinned
+public harness through a deployment adapter, with unchanged browser/HTTP oracles
+and exact durable-job completion checks. Its known intermittent browser
+synchronization failure remains visible and fails CI; no retry or test waiver is
+applied. See that document for the precise coverage and limitation.
+
 ## Audit findings closed
 
 | Finding | Change | Regression evidence |

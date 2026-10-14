@@ -50,6 +50,16 @@ jobs:
           bash once-campfire-mojo/tools/check-compose.sh 2>&1 | tee once-campfire-mojo/build/ci-logs/compose.log
           bash once-campfire-mojo/tools/check-migration.sh 2>&1 | tee once-campfire-mojo/build/ci-logs/migration.log
           bash once-campfire-mojo/tools/check-browser.sh 2>&1 | tee once-campfire-mojo/build/ci-logs/browser.log
+      - name: Install Node for unchanged upstream browser checks
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - name: Independent upstream verification with Mojo adapter
+        env:
+          CAMPFIRE_WORKSPACE: ${{ github.workspace }}
+        run: |
+          set -o pipefail
+          bash once-campfire-mojo/tools/check-upstream.sh 2>&1 | tee once-campfire-mojo/build/ci-logs/upstream.log
       - name: Local secret and dependency scans
         run: bash once-campfire-mojo/tools/check-security.sh
       - name: Retain check logs and redacted scanner reports
@@ -60,6 +70,10 @@ jobs:
           path: |
             once-campfire-mojo/build/ci-logs
             once-campfire-mojo/build/security
+            once-campfire-mojo/build/upstream/**/upstream-integrity-*.json
+            once-campfire-mojo/build/upstream/**/*.log
+            once-campfire-mojo/build/upstream/**/routes/*.json
+            once-campfire-mojo/build/upstream/**/mixed/*.json
           if-no-files-found: warn
           retention-days: 30
 
