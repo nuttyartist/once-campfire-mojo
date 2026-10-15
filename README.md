@@ -10,9 +10,11 @@ storage. Existing stock Rails installations at the documented schema can be
 copied into a new Mojo deployment while retaining passwords, sessions, objects
 and signing keys. See [compatibility and differences](PORT_STATUS.md).
 
-This is an independent **0.1.0-dev pre-release**. No repository, release or image
-has been published by this project. Native amd64/hosted CI acceptance and a
-public maintenance/security contact remain deferred; see [release status](docs/releases.md).
+This is an independent **0.1.0-dev pre-release**, published as source for review.
+There is no supported binary release or public registry image. Native ARM64 and
+amd64 checks run in [GitHub Actions](https://github.com/nuttyartist/once-campfire-mojo/actions/workflows/ci.yml);
+consult the actual run results for acceptance status. Public maintenance/security
+arrangements remain deferred; see [release status](docs/releases.md).
 The current container also has an unresolved [dependency security gate](docs/security-review.md).
 
 ## Run locally

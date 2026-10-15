@@ -2,9 +2,10 @@
 
 `VERSION` is the application version; currently `0.1.0-dev` is unreleased.
 There is no official support commitment, public registry image or active private
-security-reporting channel. This local repository is an independent port, not a
-Basecamp release. Setting a maintainer/contact and obtaining native amd64/hosted
-CI results are explicitly deferred.
+security-reporting channel. This repository publishes the source of an independent
+port for review. It is not a Basecamp release. The [hosted workflow](https://github.com/nuttyartist/once-campfire-mojo/actions/workflows/ci.yml)
+runs native ARM64 and amd64 checks; a workflow configuration alone does not establish
+platform acceptance. Setting a public maintenance/security contact remains deferred.
 
 The current binary candidate also has an unresolved [dependency release gate](security-review.md).
 The local package rebuild did not resolve the distribution advisories. Source

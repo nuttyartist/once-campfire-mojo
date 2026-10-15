@@ -3,8 +3,8 @@
 Publication preparation now includes operator/developer documentation, reproducible
 asset verification, packaged notices, version identity, formatting, local release
 exports and security checks. [Release status](docs/releases.md) distinguishes
-functional acceptance from the unresolved dependency scan, deferred native amd64
-acceptance and deferred maintainer/security contact. This is an unreleased source
+functional acceptance from the unresolved dependency scan, platform acceptance
+and deferred maintainer/security contact. This is an unreleased source
 candidate for review, not a supported production release.
 
 This port implements the stock Campfire application workflows against the original Rails `b52b244f384456d9ab5892ebb7bebd8cd8c696c9` source and local Active Storage Disk service. It is suitable for upstream review as a functional application port. Passing the documented gates is not a proof of equivalence for every input, deployment or optional Rails extension, nor a substitute for maintainer/security review before a public release.
@@ -52,4 +52,4 @@ applied. See that document for the precise coverage and limitation.
 7. The earlier actual Chrome/FCM service-worker notification acceptance is retained as prior evidence. The fresh automated network gate verifies real encrypted HTTPS transport, retries and provider acceptance using a controlled TLS receiver. It does not claim a fresh test of every commercial push provider.
 8. Rust and C embed older Rails behavior; they are comparison subjects, not infallible current-original oracles. The local five-workload comparison uses explicit durability patches. Their unchanged video golden-byte mismatch is recorded in `bench/reference-patches/README.md`.
 
-The full workflow mapping is in `tests/ROUTES.md`. Deployment instructions, limitations and recovery commands are in `DEPLOYMENT.md`. CI has been added and its local components validated; remote runner results await an authorized upstream submission. Nothing has been uploaded.
+The full workflow mapping is in `tests/ROUTES.md`. Deployment instructions, limitations and recovery commands are in `DEPLOYMENT.md`. CI runs on native ARM64 and amd64; [hosted results](https://github.com/nuttyartist/once-campfire-mojo/actions/workflows/ci.yml) identify the tested commits and any failures. Source publication does not imply a supported binary release.
