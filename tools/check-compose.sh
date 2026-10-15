@@ -39,10 +39,11 @@ docker compose run --rm --no-deps --entrypoint tar campfire \
   -czf - -C /data/backups before-upgrade > "$work/backup.tar.gz"
 mkdir -m 700 "$work/input" "$work/restore"
 tar -xzf "$work/backup.tar.gz" -C "$work/input"
-docker run --rm --network none --user 0 --entrypoint python3 \
+# Keep bind-mounted test output owned by the caller so cleanup works on Linux.
+docker run --rm --network none --user "$(id -u):$(id -g)" --entrypoint python3 \
   -v "$work/input:/backup:ro" -v "$work/restore:/restore" "$image" \
   /app/tools/manage.py restore --source /backup/before-upgrade --data /restore/site
-docker run --rm --network none --user 0 --entrypoint python3 \
+docker run --rm --network none --user "$(id -u):$(id -g)" --entrypoint python3 \
   -v "$work/restore:/restore" "$image" /app/tools/manage.py check --data /restore/site
 docker compose up -d --no-build --pull never
 for _ in $(seq 1 120); do
