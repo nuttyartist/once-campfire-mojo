@@ -30,4 +30,5 @@ common=(--apps mojo --port "$port" --workspace "$workspace" --seed "$seed" --env
     --rounds 2 --duration 2 --concurrencies 16 --cpus "$server_cpus" --client-cpus "$client_cpus")
 bin/benchmark "${common[@]}" --output "$output/routes"
 bin/benchmark "${common[@]}" --mixed-write-rate 10 --output "$output/mixed"
-python3 "$repo/tools/upstream/prepare.py" --checkout "$verification" --output "$output/upstream-integrity-after.json"
+# The host writes its own after-run report under a different user ID on Linux.
+python3 "$repo/tools/upstream/prepare.py" --checkout "$verification" --output "$output/upstream-integrity-runner.json"
