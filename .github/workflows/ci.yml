@@ -46,6 +46,7 @@ jobs:
             -v "$GITHUB_WORKSPACE:/workspace" -w /workspace/once-campfire-mojo \
             campfire-local-tools:verified bash tools/check.sh 2>&1 | tee once-campfire-mojo/build/ci-logs/application.log
       - name: Build production image
+        id: image
         run: bash once-campfire-mojo/tools/build-image.sh campfire-mojo:ci
       - name: Browser and packaged deployment gates
         run: |
@@ -65,6 +66,7 @@ jobs:
           set -o pipefail
           bash once-campfire-mojo/tools/check-upstream.sh 2>&1 | tee once-campfire-mojo/build/ci-logs/upstream.log
       - name: Local secret and dependency scans
+        if: ${{ !cancelled() && steps.image.outcome == 'success' }}
         run: bash once-campfire-mojo/tools/check-security.sh
       - name: Retain check logs and redacted scanner reports
         if: always()
